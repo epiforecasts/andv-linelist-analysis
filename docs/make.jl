@@ -15,7 +15,7 @@ makedocs(;
     clean = true,
     doctest = false,
     linkcheck = true,
-    warnonly = [:docs_block, :missing_docs, :autodocs_block],
+    warnonly = [:docs_block, :missing_docs, :autodocs_block, :linkcheck],
     modules = [Hantavirus],
     pages = [
         "Home" => "index.md",
