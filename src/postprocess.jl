@@ -203,8 +203,9 @@ function plot_rt(post, path; n_draws_plot = 100, ymax = 4.0)
     # line is broken between bins (no vertical step connectors).
     xs = Date[]
     for b in eachindex(log_R)
-        push!(xs, left_edge[b]); push!(xs, right_edge[b]); push!(xs, right_edge[b])
-
+        push!(xs, left_edge[b])
+        push!(xs, right_edge[b])
+        push!(xs, right_edge[b])
     end
 
     plt = plot(; ylims = (0.0, ymax),
