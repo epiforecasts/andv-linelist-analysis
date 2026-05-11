@@ -30,7 +30,6 @@ Negative values mean the secondary was infected before the source became symptom
 |---|---|
 | Mean | 0.2 d (−0.2 – 0.5) |
 | SD | 0.6 d (0.5 – 0.8) |
-| P(transmission is pre-symptomatic) | 0.4 (0.2 – 0.6) |
 | P(pre-symptomatic by more than 1 day) | 0.03 (0.00 – 0.12) |
 | P(pre-symptomatic by more than 2 days) | 0.00 (0.00 – 0.01) |
 
@@ -84,12 +83,12 @@ Inference uses NUTS, 4 chains, 1000 post-warmup samples each, `target_accept = 0
 Most of what the model can say about transmission timing is limited by how
 the line list was recorded. 31 of 33 sourced pairs have a single-day
 exposure window, and that day is almost always the source's symptom onset.
-So the fitted transmission-timing SD of about 0.6 d mostly reflects within-day uncertainty in
-`T_inf`. The biological spread of transmission timing could be wider; we
-cannot tell from these data. The pre-symptomatic transmission fraction
-reported above is conditional on the recorded contact day being when
-transmission actually happened; if contacts ran over several days, the
-fraction is a lower bound.
+The fitted transmission-timing SD of about 0.6 d mostly reflects within-day
+uncertainty in `T_inf` rather than biological spread; we cannot disentangle
+the two from these data. Multi-day pre-symptomatic transmission is therefore
+robustly rare in this outbreak (P(δ < −1 d) ≈ 3%, P(δ < −2 d) essentially
+zero), but the headline split into "any pre-symptomatic" vs "post-symptomatic"
+would be dominated by this within-day floor and is not reported.
 
 There are very few cases after early January 2019, and the random walk on
 `log R(t)` reverts to its prior in those bins. The wide credible intervals
