@@ -24,6 +24,9 @@ function analyse(;
 
     post = summarise(chn)
     save_posterior(post, joinpath(output, "posterior.csv"))
+    figures = joinpath(output, "figures")
+    plot_rt(post, joinpath(figures, "Rt.png"))
+    plot_delta_sense_check(chn, d, joinpath(figures, "delta_sense_check.png"))
     return chn, post
 end
 

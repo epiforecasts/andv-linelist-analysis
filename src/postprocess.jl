@@ -1,4 +1,5 @@
-## Posterior summaries and CSV output.
+## Posterior summaries, CSV output, and R(t) figure.
+
 
 # ---------------------------------------------------------------------------
 # Diagnostics
@@ -114,6 +115,77 @@ end
 # ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# R(t) figure
+# ---------------------------------------------------------------------------
+
+# Step plot of the median posterior R(t) by bin with a 95% credible-interval
+# ribbon. Bin edges come from `BIN_EDGES` (data.jl); the first and last bins
+# extend one bin-width past the listed edges. Saved as a PNG.
+function plot_rt(post, path)
+    log_R = post.log_R_chain
+    medians = [quantile(exp.(log_R[b]), 0.5)   for b in eachindex(log_R)]
+    los     = [quantile(exp.(log_R[b]), 0.025) for b in eachindex(log_R)]
+    his     = [quantile(exp.(log_R[b]), 0.975) for b in eachindex(log_R)]
+
+    bin_width = BIN_EDGES[2] - BIN_EDGES[1]
+    left_edge  = vcat(BIN_EDGES[1] - bin_width, BIN_EDGES)
+    right_edge = vcat(BIN_EDGES, BIN_EDGES[end] + bin_width)
+    # Build step coordinates: each bin contributes two points at its edges.
+    xs = Date[]; ys_med = Float64[]; ys_lo = Float64[]; ys_hi = Float64[]
+    for b in eachindex(medians)
+        push!(xs, left_edge[b]);  push!(ys_med, medians[b]); push!(ys_lo, los[b]); push!(ys_hi, his[b])
+        push!(xs, right_edge[b]); push!(ys_med, medians[b]); push!(ys_lo, los[b]); push!(ys_hi, his[b])
+    end
+
+    plt = plot(xs, ys_med;
+               ribbon = (ys_med .- ys_lo, ys_hi .- ys_med),
+               fillalpha = 0.2, linewidth = 2,
+               ylims = (0.0, 5.0),
+               xlabel = "Date", ylabel = "R(t)",
+               legend = false,
+               title  = "Time-varying reproduction number (weekly bins)")
+    hline!(plt, [1.0]; linestyle = :dash, color = :grey)
+    mkpath(dirname(path))
+    savefig(plt, path)
+    return path
+end
+
+# Sense-check: compare the per-pair posterior of δ to the fitted population
+# Normal(μ_δ, σ_δ). For each sourced pair, take the posterior of
+# δ_pair = T_inf[secondary] − T_onset[source] and reduce to its median;
+# then plot the histogram of those 33 per-pair medians with the population
+# density overlaid. If the histogram spread tracks σ_δ and the centre tracks
+# μ_δ, the population-level summary is faithful to the per-pair posterior.
+function plot_delta_sense_check(chn, data, path)
+    t_inf   = vector_chain(chn, :T_inf)
+    t_onset = vector_chain(chn, :T_onset)
+    μ_δ     = vec(collect(chn[:μ_δ]))
+    σ_δ     = vec(collect(chn[:σ_δ]))
+
+    medians = Float64[]
+    for i in 1:data.N
+        src = data.source_idx[i]
+        src == 0 && continue
+        push!(medians, quantile(t_inf[i] .- t_onset[src], 0.5))
+    end
+
+    μ_med = quantile(μ_δ, 0.5)
+    σ_med = quantile(σ_δ, 0.5)
+
+    plt = histogram(medians; bins = 15, normalize = :pdf,
+                    label  = "per-pair posterior medians (N = $(length(medians)))",
+                    xlabel = "δ (days from source onset)", ylabel = "density",
+                    title  = "Per-pair δ vs fitted population Normal")
+    xs = range(μ_med - 4σ_med, μ_med + 4σ_med; length = 200)
+    plot!(plt, xs, pdf.(Normal(μ_med, σ_med), xs);
+          linewidth = 2, label = "Normal(μ_δ, σ_δ) fitted")
+    vline!(plt, [0.0]; linestyle = :dash, color = :grey, label = "source onset")
+    mkpath(dirname(path))
+    savefig(plt, path)
+    return path
+end
 
 function save_posterior(post, path)
     df = DataFrame(μ_inc = post.μ_inc, σ_inc = post.σ_inc,

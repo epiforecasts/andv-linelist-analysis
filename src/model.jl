@@ -10,25 +10,25 @@
 ##                                    secondary's infection time and its
 ##                                    source's symptom onset. Identified
 ##                                    per-pair from the line list.
-##   3. Time-varying reproduction   — log R(t) on a monthly random walk, with
+##   3. Time-varying reproduction   — log R(t) on a weekly random walk, with
 ##      number                        Negative-Binomial offspring (dispersion k).
 ##
-## Each case has continuous latents: an infection time T_inf and a within-day
-## onset offset. Daily-resolution onsets and exposure dates are handled by
+## Each case has continuous latents: an infection time T_inf and an onset time
+## T_onset. Interval-censored onsets and exposure dates are handled by
 ## Bayesian data augmentation over these latents.
 ##
 ## The generation interval and serial interval are derived in post-processing
-## from δ and Inc. GI ≥ 0 by definition; the per-pair constraint
-## T_inf[secondary] > T_inf[source] enforces this at the latent level.
+## from δ and Inc. The per-pair constraint T_inf[secondary] > T_inf[source]
+## is enforced via a -Inf reject in the likelihood to ensure GI > 0.
 
 @model function joint_model(d, edges)
     # Population-level parameters
-    μ_inc ~ Normal(3.0, 0.5)                                       # log-mean Inc (≈ log 20 d)
-    σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0.0, upper = 2.0)  # log-SD Inc
-    μ_δ   ~ Normal(0.0, 5.0)                                       # population mean transmission timing (d from source onset)
-    σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0.0, upper = 10.0) # population SD of transmission timing (d)
-    k     ~ truncated(Normal(0.3, 0.5); lower = 0.0, upper = 10.0) # NB offspring dispersion (centred low — known super-spreader pathogen)
-    σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0.0, upper = 2.0)  # log-R RW innovation SD
+    μ_inc ~ Normal(3.0, 0.5)                       # log-mean Inc (≈ log 20 d)
+    σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc
+    μ_δ   ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
+    σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
+    k     ~ truncated(Normal(0.3, 0.5); lower = 0) # NB offspring dispersion (centred low — known super-spreader pathogen)
+    σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD
 
     # Random walk on log R(t) across the time bins
     n_bins = length(edges) + 1
@@ -40,25 +40,25 @@
 
     inc_dist = LogNormal(μ_inc, σ_inc)
 
-    # Latents per case: within-day onset offset and continuous infection time
-    T_inf  = Vector{Real}(undef, d.N)
-    offset = Vector{Real}(undef, d.N)
+    # T_onset is a latent over the recorded onset window (defaults to a
+    # one-day window when only a single onset date was recorded).
+    T_onset = Vector{Real}(undef, d.N)
     for i in 1:d.N
-        offset[i] ~ Uniform(0.0, 1.0)
+        T_onset[i] ~ Uniform(d.onset_lo_day[i], d.onset_hi_day[i])
     end
-    T_onset = d.onset_day .+ offset
 
+    T_inf = Vector{Real}(undef, d.N)
     for i in 1:d.N
         if d.source_idx[i] == 0
             # Zoonotic index: free latent T_inf pre-onset.
-            T_inf[i] ~ Uniform(d.onset_day[i] - 80.0, T_onset[i] - 1e-6)
+            T_inf[i] ~ Uniform(d.onset_lo_day[i] - 80.0, T_onset[i] - 1e-6)
             inc_i = T_onset[i] - T_inf[i]
             Turing.@addlogprob! logpdf(inc_dist, inc_i)
         else
-            # Sourced case: T_inf anchored to listed exposure window;
-            # δ_pair contributes to (μ_δ, σ_δ). The hard constraint
-            # T_inf[secondary] > T_inf[source] enforces GI > 0 per pair.
-            src    = d.source_idx[i]
+            # Sourced case: T_inf anchored to listed exposure window.
+            # GI > 0 enforced by rejecting trajectories where the secondary
+            # was infected before its source.
+            src = d.source_idx[i]
             T_inf[i] ~ Uniform(d.exp_lo_day[i], d.exp_hi_day[i])
             if T_inf[i] <= T_inf[src]
                 Turing.@addlogprob! -Inf
@@ -69,7 +69,7 @@
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
             end
         end
-        # Offspring (per-case Z observed)
+        # Offspring count for case i (observed number of attributed secondaries).
         R_i = exp(log_R[which_bin(T_inf[i], edges)])
         d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
     end
