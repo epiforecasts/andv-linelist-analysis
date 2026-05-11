@@ -30,7 +30,7 @@ function analyse(;
     return chn, post
 end
 
-function main(args = ARGS)
+function (@main)(args)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
     @add_arg_table! s begin
         "--data", "-d"
@@ -56,7 +56,7 @@ function main(args = ARGS)
             default  = 20260508
     end
     p = parse_args(args, s)
-    return analyse(;
+    analyse(;
         data     = p["data"],
         output   = p["output"],
         figures  = p["figures"],
@@ -65,4 +65,5 @@ function main(args = ARGS)
         seed     = p["seed"],
         progress = false,
     )
+    return 0  # exit code expected by `julia -m`
 end
