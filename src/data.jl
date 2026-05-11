@@ -1,10 +1,8 @@
 ## Line-list loading, exposure/onset encoding, and R(t) bin definitions.
 
-using CSV, DataFrames, Dates
-
-const PROJECT_ROOT  = normpath(joinpath(@__DIR__, ".."))
-const LINELIST_PATH = joinpath(PROJECT_ROOT, "data", "linelist.csv")
-const OUTPUT_DIR    = joinpath(PROJECT_ROOT, "output")
+const LINELIST_PATH = joinpath(pkgdir(@__MODULE__), "data", "linelist.csv")
+const OUTPUT_DIR    = joinpath(pkgdir(@__MODULE__), "output")
+const FIGURES_DIR   = joinpath(pkgdir(@__MODULE__), "figures")
 
 # Weekly R(t) bin edges spanning the outbreak.
 const BIN_EDGES = collect(Date("2018-11-12"):Day(7):Date("2019-02-04"))

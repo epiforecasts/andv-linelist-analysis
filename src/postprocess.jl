@@ -1,8 +1,5 @@
 ## Posterior summaries, CSV output, and R(t) figure.
 
-using CSV, DataFrames, Dates, Distributions, MCMCChains, Plots, Statistics, Printf
-import FlexiChains
-
 # ---------------------------------------------------------------------------
 # Diagnostics
 # ---------------------------------------------------------------------------

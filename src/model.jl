@@ -10,18 +10,16 @@
 ##                                    secondary's infection time and its
 ##                                    source's symptom onset. Identified
 ##                                    per-pair from the line list.
-##   3. Time-varying reproduction   — log R(t) on a monthly random walk, with
+##   3. Time-varying reproduction   — log R(t) on a weekly random walk, with
 ##      number                        Negative-Binomial offspring (dispersion k).
 ##
-## Each case has continuous latents: an infection time T_inf and a within-day
-## onset offset. Daily-resolution onsets and exposure dates are handled by
+## Each case has continuous latents: an infection time T_inf and an onset time
+## T_onset. Interval-censored onsets and exposure dates are handled by
 ## Bayesian data augmentation over these latents.
 ##
 ## The generation interval and serial interval are derived in post-processing
 ## from δ and Inc. The per-pair constraint T_inf[secondary] > T_inf[source]
 ## is enforced via a -Inf reject in the likelihood to ensure GI > 0.
-
-using Distributions, Turing
 
 @model function joint_model(d, edges)
     # Population-level parameters
