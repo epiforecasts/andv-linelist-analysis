@@ -4,11 +4,7 @@
 ## Run with:  julia --project=. -t auto scripts/run.jl
 
 using Random, Turing
-
-const SRC_DIR = normpath(joinpath(@__DIR__, "..", "src"))
-include(joinpath(SRC_DIR, "data.jl"))
-include(joinpath(SRC_DIR, "model.jl"))
-include(joinpath(SRC_DIR, "postprocess.jl"))
+using Hantavirus
 
 function main(; n_chains = 4, n_samples = 1000, seed = 20260508)
     Random.seed!(seed)
