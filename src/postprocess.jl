@@ -1,13 +1,5 @@
 ## Posterior summaries and CSV output.
 
-using CSV: CSV
-using DataFrames: DataFrame
-using Distributions: Normal, LogNormal, cdf
-using MCMCChains: MCMCChains
-using Printf: @printf, @sprintf
-using Statistics: quantile
-import FlexiChains
-
 # ---------------------------------------------------------------------------
 # Diagnostics
 # ---------------------------------------------------------------------------
