@@ -8,10 +8,12 @@ its source's symptom onset, plus a time-varying reproduction number with
 offspring dispersion. Double interval censoring is handled by a continuous
 latent infection time for each case.
 
-The generation interval and serial interval are derived in post-processing
-(both equal to transmission timing plus an incubation period draw). A
-per-pair constraint that the secondary's infection time is later than the
-source's keeps the generation interval positive at the latent level.
+The generation interval (transmission timing plus the source's incubation
+period) and the serial interval (transmission timing plus the secondary's
+incubation period) are derived in post-processing from the fitted
+distributions. A per-pair constraint that the secondary's infection time is
+later than the source's keeps the generation interval positive at the
+latent level.
 
 ## Headline results (Epuyén line list)
 
