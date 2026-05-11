@@ -4,7 +4,7 @@ using ArgParse: ArgParseSettings, @add_arg_table!, parse_args
 using CSV: CSV
 using DataFrames: DataFrame, nrow, eachrow, passmissing
 using Dates: Dates, Date, Day
-using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
+using Distributions: Normal, LogNormal, SkewNormal, truncated, NegativeBinomial,
                      Uniform, logpdf, cdf, pdf
 using MCMCChains: MCMCChains
 using Plots: plot, plot!, hline!, histogram, histogram!, vline!, scatter, savefig

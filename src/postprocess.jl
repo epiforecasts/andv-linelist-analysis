@@ -1,5 +1,14 @@
 ## Posterior summaries, CSV output, and R(t) figure.
 
+# Analytic mean and variance of SkewNormal(ξ, ω, α) so we don't pull in
+# Statistics.mean / var (collides with Statistics.quantile we already use).
+function SkewNormal_meanvar(ξ, ω, α)
+    d = α / sqrt(1 + α^2)
+    m = ξ + ω * d * sqrt(2 / π)
+    v = ω^2 * (1 - 2 * d^2 / π)
+    return m, v
+end
+
 # ---------------------------------------------------------------------------
 # Diagnostics
 # ---------------------------------------------------------------------------
@@ -64,6 +73,7 @@ function summarise(chn)
 
     μ_inc = vec(collect(chn[:μ_inc])); σ_inc = vec(collect(chn[:σ_inc]))
     μ_δ   = vec(collect(chn[:μ_δ]));   σ_δ   = vec(collect(chn[:σ_δ]))
+    α_δ   = vec(collect(chn[:α_δ]))
     k_s   = vec(collect(chn[:k]))
 
     mean_inc = exp.(μ_inc .+ σ_inc .^ 2 ./ 2)
@@ -76,21 +86,27 @@ function summarise(chn)
     _print_qci("99th percentile (d)", q99_inc)
     println()
 
-    println("Transmission timing δ (days from source onset to secondary infection)")
-    _print_qci("μ_δ (d)", μ_δ)
-    _print_qci("σ_δ (d)", σ_δ)
+    println("Transmission timing δ (SkewNormal; days from source onset to secondary infection)")
+    _print_qci("μ_δ (location, d)", μ_δ)
+    _print_qci("σ_δ (scale, d)",    σ_δ)
+    _print_qci("α_δ (skewness)",    α_δ)
+    # SkewNormal has no analytic CDF in Distributions.jl; use MC samples
     p_pre = Dict{Float64,Vector{Float64}}()
+    nmc = 5000
+    rng_pp = Random.MersenneTwister(0)
+    sn_samples = [rand(rng_pp, SkewNormal(μ_δ[i], σ_δ[i], α_δ[i]), nmc) for i in eachindex(μ_δ)]
     for τ in (0.0, -1.0, -2.0)
-        p_pre[τ] = [cdf(Normal(μ_δ[i], σ_δ[i]), τ) for i in eachindex(μ_δ)]
+        p_pre[τ] = [sum(s .< τ) / length(s) for s in sn_samples]
         _print_qci(@sprintf("P(δ < %.0f)", τ), p_pre[τ]; fmt = "%.3f")
     end
     println()
 
     # Generation interval and serial interval as derived population marginals
-    # (GI = δ + Inc_source, SI = δ + Inc_secondary). They coincide in mean and
-    # SD because Inc_source and Inc_secondary are exchangeable in this model.
-    mean_gi_si = μ_δ .+ mean_inc
-    sd_gi_si   = sqrt.(σ_δ .^ 2 .+ var_inc)
+    # (GI = δ + Inc_source, SI = δ + Inc_secondary). δ ~ SkewNormal.
+    δ_dist_mean = [SkewNormal_meanvar(μ_δ[i], σ_δ[i], α_δ[i])[1] for i in eachindex(μ_δ)]
+    δ_dist_var  = [SkewNormal_meanvar(μ_δ[i], σ_δ[i], α_δ[i])[2] for i in eachindex(μ_δ)]
+    mean_gi_si  = δ_dist_mean .+ mean_inc
+    sd_gi_si    = sqrt.(δ_dist_var .+ var_inc)
     println("Generation interval / serial interval (derived: δ + Inc)")
     _print_qci("mean (d)", mean_gi_si)
     _print_qci("SD (d)",   sd_gi_si)
@@ -107,7 +123,7 @@ function summarise(chn)
         _print_qci(labels[b], exp.(log_R_chain[b]))
     end
 
-    return (; μ_inc, σ_inc, μ_δ, σ_δ, k = k_s, log_R_chain,
+    return (; μ_inc, σ_inc, μ_δ, σ_δ, α_δ, k = k_s, log_R_chain,
             mean_gi_si, sd_gi_si, p_pre)
 end
 
@@ -169,6 +185,7 @@ function plot_delta_sense_check(chn, data, path)
     t_onset = vector_chain(chn, :T_onset)
     μ_δ     = vec(collect(chn[:μ_δ]))
     σ_δ     = vec(collect(chn[:σ_δ]))
+    α_δ     = vec(collect(chn[:α_δ]))
 
     medians = Float64[]
     for i in 1:data.N
@@ -179,14 +196,15 @@ function plot_delta_sense_check(chn, data, path)
 
     μ_med = quantile(μ_δ, 0.5)
     σ_med = quantile(σ_δ, 0.5)
+    α_med = quantile(α_δ, 0.5)
 
     plt = histogram(medians; bins = 15, normalize = :pdf,
                     label  = "per-pair posterior medians (N = $(length(medians)))",
                     xlabel = "δ (days from source onset)", ylabel = "density",
-                    title  = "Per-pair δ vs fitted population Normal")
+                    title  = "Per-pair δ vs fitted population SkewNormal")
     xs = range(μ_med - 4σ_med, μ_med + 4σ_med; length = 200)
-    plot!(plt, xs, pdf.(Normal(μ_med, σ_med), xs);
-          linewidth = 2, label = "Normal(μ_δ, σ_δ) fitted")
+    plot!(plt, xs, pdf.(SkewNormal(μ_med, σ_med, α_med), xs);
+          linewidth = 2, label = "SkewNormal(μ_δ, σ_δ, α_δ) fitted")
     vline!(plt, [0.0]; linestyle = :dash, color = :grey, label = "source onset")
     mkpath(dirname(path))
     savefig(plt, path)
@@ -277,13 +295,14 @@ function plot_posterior_predictions(chn, data, path;
     σ_inc = vec(collect(chn[:σ_inc]))
     μ_δ   = vec(collect(chn[:μ_δ]))
     σ_δ   = vec(collect(chn[:σ_δ]))
+    α_δ   = vec(collect(chn[:α_δ]))
     n_draws = length(μ_inc)
 
     δ_pred  = Float64[]
     si_pred = Float64[]
     for i in 1:n_draws
         for _ in 1:n_per_draw
-            d = rand(rng, Normal(μ_δ[i], σ_δ[i]))
+            d = rand(rng, SkewNormal(μ_δ[i], σ_δ[i], α_δ[i]))
             c = rand(rng, LogNormal(μ_inc[i], σ_inc[i]))
             push!(δ_pred,  d)
             push!(si_pred, d + c)
@@ -323,7 +342,7 @@ end
 
 function save_posterior(post, path)
     df = DataFrame(μ_inc = post.μ_inc, σ_inc = post.σ_inc,
-                   μ_δ = post.μ_δ,     σ_δ = post.σ_δ,
+                   μ_δ = post.μ_δ,     σ_δ = post.σ_δ, α_δ = post.α_δ,
                    k = post.k,
                    mean_gi_si = post.mean_gi_si, sd_gi_si = post.sd_gi_si,
                    p_pre_0 = post.p_pre[0.0],

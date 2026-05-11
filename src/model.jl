@@ -25,8 +25,9 @@
     # Population-level parameters
     μ_inc ~ Normal(3.0, 0.5)                       # log-mean Inc (≈ log 20 d)
     σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc
-    μ_δ   ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
-    σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
+    μ_δ   ~ Normal(0.0, 5.0)                       # population location of transmission timing (d from source onset)
+    σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0) # population scale of transmission timing (d)
+    α_δ   ~ Normal(0.0, 5.0)                       # skewness of transmission timing
     k     ~ truncated(Normal(0.3, 0.5); lower = 0) # NB offspring dispersion (centred low — known super-spreader pathogen)
     σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD
 
@@ -66,7 +67,7 @@
                 inc_i  = T_onset[i] - T_inf[i]
                 δ_pair = T_inf[i] - T_onset[src]
                 Turing.@addlogprob! logpdf(inc_dist, inc_i)
-                Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
+                Turing.@addlogprob! logpdf(SkewNormal(μ_δ, σ_δ, α_δ), δ_pair)
             end
         end
         # Offspring count for case i (observed number of attributed secondaries).
