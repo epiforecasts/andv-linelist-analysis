@@ -1,5 +1,15 @@
 module Hantavirus
 
+using CSV: CSV
+using DataFrames: DataFrame, nrow, eachrow, passmissing
+using Dates: Dates, Date, Day
+using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
+                     Uniform, logpdf, cdf, quantile
+using MCMCChains: MCMCChains
+using Printf: @printf, @sprintf
+using Turing: Turing, @model
+import FlexiChains
+
 include("data.jl")
 include("model.jl")
 include("postprocess.jl")

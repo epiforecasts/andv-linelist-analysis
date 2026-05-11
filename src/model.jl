@@ -21,8 +21,6 @@
 ## from δ and Inc. GI ≥ 0 by definition; the per-pair constraint
 ## T_inf[secondary] > T_inf[source] enforces this at the latent level.
 
-using Distributions, Turing
-
 @model function joint_model(d, edges)
     # Population-level parameters
     μ_inc ~ Normal(3.0, 0.5)                                       # log-mean Inc (≈ log 20 d)

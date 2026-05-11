@@ -1,7 +1,5 @@
 ## Line-list loading, exposure/onset encoding, and R(t) bin definitions.
 
-using CSV, DataFrames, Dates
-
 const LINELIST_PATH = joinpath(pkgdir(@__MODULE__), "data", "linelist.csv")
 const OUTPUT_DIR    = joinpath(pkgdir(@__MODULE__), "output")
 

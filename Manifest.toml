@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "5e98a8e9f19ac345b8026d1792db81df49dea529"
+project_hash = "f97e02c3f7a207ce7bbc4492f4b375b8d663f96f"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "bbc22a9a08a0ef6460041086d8a7b27940ed4ffd"
@@ -715,6 +715,12 @@ deps = ["Adapt"]
 git-tree-sha1 = "83cf05ab16a73219e5f6bd1bdfa9848fa24ac627"
 uuid = "46192b85-c4d5-4398-a991-12ede77f4527"
 version = "0.2.0"
+
+[[deps.Hantavirus]]
+deps = ["CSV", "DataFrames", "Distributions", "FlexiChains", "MCMCChains", "Turing"]
+path = "."
+uuid = "a3f8c2e1-4b7d-4a9e-8c3f-d5e2f1a0b6c4"
+version = "0.0.0"
 
 [[deps.HypergeometricFunctions]]
 deps = ["LinearAlgebra", "OpenLibm_jll", "SpecialFunctions"]

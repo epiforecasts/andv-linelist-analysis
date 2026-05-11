@@ -1,8 +1,5 @@
 ## Posterior summaries and CSV output.
 
-using CSV, DataFrames, Distributions, MCMCChains, Statistics, Printf
-import FlexiChains
-
 # ---------------------------------------------------------------------------
 # Diagnostics
 # ---------------------------------------------------------------------------

@@ -58,6 +58,7 @@ Negative values mean the secondary was infected before the source became symptom
 
 ```
 src/
+  Hantavirus.jl    — module entry point and explicit imports
   data.jl          — line list loading and bin definitions
   model.jl         — the joint Turing model (incubation, transmission timing, R(t))
   postprocess.jl   — diagnostics, summaries, CSV output
@@ -65,7 +66,8 @@ scripts/
   run.jl           — entry point
 data/
   linelist.csv     — Epuyén outbreak line list (Martínez Table S2)
-Project.toml       — Julia environment
+Project.toml       — Julia package manifest
+Manifest.toml      — locked dependency versions
 LICENSE            — MIT
 ```
 
