@@ -21,6 +21,7 @@ function analyse(;
     chn = sample(
         joint_model(d, edges),
         NUTS(0.95; adtype), MCMCThreads(), samples, chains;
+        initial_params = fill(DynamicPPL.InitFromPrior(), chains),
         progress = progress,
     )
 
