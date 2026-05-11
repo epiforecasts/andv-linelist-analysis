@@ -100,6 +100,14 @@ Example:
 julia --project=. -t auto -m Hantavirus -- -n 500 -c 2 -o results/
 ```
 
+### From the REPL
+
+```julia
+julia> using Hantavirus
+julia> main()                                          # all defaults
+julia> main(["-n", "500", "-c", "2", "-o", "results/"])  # with options
+```
+
 ## Citing
 
 If you use this code or the Epuyén line list encoding, please cite:
