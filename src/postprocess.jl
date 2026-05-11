@@ -112,6 +112,71 @@ function summarise(chn)
 end
 
 # ---------------------------------------------------------------------------
+# Per-pair empirical reconstruction of GI, SI, and incubation
+# ---------------------------------------------------------------------------
+
+# For each sourced pair extracts per-draw GI (T_inf[sec] − T_inf[src]),
+# SI (T_onset[sec] − T_onset[src]), transmission timing δ, and secondary
+# incubation. Also collects incubation for all cases for a posterior
+# predictive check. Returns pooled samples and per-draw mean/SD summaries.
+function reconstruct_pairs(chn, d)
+    t_inf   = vector_chain(chn, :T_inf)
+    t_onset = vector_chain(chn, :T_onset)
+    S       = length(t_inf[1])
+
+    srcs    = [(d.source_idx[i], i) for i in 1:d.N if d.source_idx[i] > 0]
+    n_pairs = length(srcs)
+
+    gi_all = sizehint!(Float64[], n_pairs * S)
+    si_all = sizehint!(Float64[], n_pairs * S)
+    δ_all  = sizehint!(Float64[], n_pairs * S)
+
+    mean_gi = zeros(S); mean_si = zeros(S)
+    sd_gi   = zeros(S); sd_si   = zeros(S)
+
+    for (src, i) in srcs
+        append!(gi_all, t_inf[i]   .- t_inf[src])
+        append!(si_all, t_onset[i] .- t_onset[src])
+        append!(δ_all,  t_inf[i]   .- t_onset[src])
+    end
+    for s in 1:S
+        gi_s = [t_inf[i][s]   - t_inf[src][s]   for (src, i) in srcs]
+        si_s = [t_onset[i][s] - t_onset[src][s] for (src, i) in srcs]
+        mean_gi[s] = mean(gi_s); sd_gi[s] = std(gi_s)
+        mean_si[s] = mean(si_s); sd_si[s] = std(si_s)
+    end
+
+    inc_all = sizehint!(Float64[], d.N * S)
+    for i in 1:d.N
+        append!(inc_all, t_onset[i] .- t_inf[i])
+    end
+
+    return (; gi = gi_all, si = si_all, δ = δ_all, inc = inc_all,
+              mean_gi, mean_si, sd_gi, sd_si, n_pairs)
+end
+
+# Prints a side-by-side comparison of the analytical GI/SI (derived from
+# fitted distribution moments) and the empirical GI/SI (from per-pair
+# latent T_inf and T_onset). GI and SI share the same analytical mean/SD
+# because Inc_source and Inc_secondary are exchangeable in the population
+# model, but can differ empirically across the 33 specific pairs.
+function compare_intervals(post, pairs)
+    println("Analytical vs empirical GI / SI")
+    println()
+    println("  Analytical (δ + Inc from fitted distributions):")
+    _print_qci("mean GI = SI (d)", post.mean_gi_si)
+    _print_qci("SD GI = SI (d)",   post.sd_gi_si)
+    println()
+    println(
+        "  Empirical (per-pair latent T_inf, T_onset pooled across draws):")
+    _print_qci("mean GI (d)", pairs.mean_gi)
+    _print_qci("SD GI (d)",   pairs.sd_gi)
+    _print_qci("mean SI (d)", pairs.mean_si)
+    _print_qci("SD SI (d)",   pairs.sd_si)
+    println()
+end
+
+# ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
 
@@ -321,14 +386,80 @@ function plot_posterior_predictions(chn, data, path;
     return path
 end
 
-function save_posterior(post, path)
-    df = DataFrame(μ_inc = post.μ_inc, σ_inc = post.σ_inc,
-                   μ_δ = post.μ_δ,     σ_δ = post.σ_δ,
-                   k = post.k,
-                   mean_gi_si = post.mean_gi_si, sd_gi_si = post.sd_gi_si,
-                   p_pre_0 = post.p_pre[0.0],
-                   p_pre_1 = post.p_pre[-1.0],
-                   p_pre_2 = post.p_pre[-2.0])
+# GI vs SI: overlaid histograms of empirical generation interval and serial
+# interval, with the analytical distribution (δ + Inc from posterior-median
+# parameters) as a reference. Checks whether GI and SI differ across the
+# specific source–secondary pairs in the data.
+function plot_gi_si_comparison(pairs, post, path)
+    μ_δ_m = quantile(post.μ_δ,   0.5)
+    σ_δ_m = quantile(post.σ_δ,   0.5)
+    μ_i_m = quantile(post.μ_inc, 0.5)
+    σ_i_m = quantile(post.σ_inc, 0.5)
+    n_mc  = 50_000
+    gi_an = (rand(Normal(μ_δ_m, σ_δ_m), n_mc)
+             .+ rand(LogNormal(μ_i_m, σ_i_m), n_mc))
+
+    all_vals = vcat(pairs.gi, pairs.si, gi_an)
+    xlim = (0.0, quantile(all_vals, 0.99))
+
+    plt = histogram(gi_an;
+                    normalize = :pdf, bins = 60, alpha = 0.35,
+                    xlims = xlim,
+                    label  = "Analytical GI/SI (median params)",
+                    xlabel = "Days", ylabel = "Density",
+                    title  = "GI vs SI: empirical vs analytical")
+    histogram!(plt, pairs.gi;
+               normalize = :pdf, bins = 60, alpha = 0.5,
+               label = "Empirical GI (T_inf pairs)")
+    histogram!(plt, pairs.si;
+               normalize = :pdf, bins = 60, alpha = 0.5,
+               label = "Empirical SI (T_onset pairs)")
+    mkpath(dirname(path))
+    savefig(plt, path)
+    return path
+end
+
+# Posterior predictive check for incubation: histogram of all per-case
+# empirical incubations (T_onset − T_inf) from the chain versus the fitted
+# LogNormal(μ̂_inc, σ̂_inc) at the posterior-median parameters.
+function plot_incubation_check(post, pairs, path)
+    μ_m = quantile(post.μ_inc, 0.5)
+    σ_m = quantile(post.σ_inc, 0.5)
+
+    xlim = (0.0, quantile(pairs.inc, 0.995))
+    xs   = range(xlim...; length = 300)
+
+    plt = histogram(pairs.inc;
+                    normalize = :pdf, bins = 80, alpha = 0.6,
+                    xlims = xlim,
+                    label  = "Empirical (T_onset − T_inf)",
+                    xlabel = "Incubation (days)", ylabel = "Density",
+                    title  = "Incubation: empirical vs fitted LogNormal")
+    plot!(plt, xs, pdf.(LogNormal(μ_m, σ_m), xs);
+          linewidth = 2,
+          label = "LogNormal(μ̂, σ̂) at posterior median")
+    mkpath(dirname(path))
+    savefig(plt, path)
+    return path
+end
+
+function save_posterior(post, pairs, path)
+    df = DataFrame(
+        μ_inc             = post.μ_inc,
+        σ_inc             = post.σ_inc,
+        μ_δ               = post.μ_δ,
+        σ_δ               = post.σ_δ,
+        k                 = post.k,
+        mean_gi_si        = post.mean_gi_si,
+        sd_gi_si          = post.sd_gi_si,
+        p_pre_0           = post.p_pre[0.0],
+        p_pre_1           = post.p_pre[-1.0],
+        p_pre_2           = post.p_pre[-2.0],
+        mean_gi_empirical = pairs.mean_gi,
+        sd_gi_empirical   = pairs.sd_gi,
+        mean_si_empirical = pairs.mean_si,
+        sd_si_empirical   = pairs.sd_si,
+    )
     for b in eachindex(post.log_R_chain)
         df[!, Symbol("log_R_$b")] = post.log_R_chain[b]
     end

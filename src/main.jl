@@ -23,14 +23,20 @@ function analyse(;
         progress = progress,
     )
 
-    post = summarise(chn)
-    save_posterior(post, joinpath(output, "posterior.csv"))
+    post  = summarise(chn)
+    pairs = reconstruct_pairs(chn, d)
+    compare_intervals(post, pairs)
+    save_posterior(post, pairs, joinpath(output, "posterior.csv"))
     plot_rt(post, joinpath(figures, "Rt.png"))
     plot_delta_sense_check(chn, d, joinpath(figures, "delta_sense_check.png"))
     plot_pairplot(post, joinpath(figures, "pairplot.png"))
     plot_prior_predictives(joinpath(figures, "prior_predictives.png"))
     plot_posterior_predictions(chn, d, joinpath(figures, "posterior_predictions.png"))
-    return chn, post
+    plot_gi_si_comparison(
+        pairs, post, joinpath(figures, "gi_si_comparison.png"))
+    plot_incubation_check(
+        post, pairs, joinpath(figures, "incubation_check.png"))
+    return chn, post, pairs
 end
 
 function (@main)(args)
