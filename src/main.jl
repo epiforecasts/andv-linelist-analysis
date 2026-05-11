@@ -4,6 +4,7 @@
 function analyse(;
     data     = LINELIST_PATH,
     output   = OUTPUT_DIR,
+    figures  = FIGURES_DIR,
     samples  = 1000,
     chains   = 4,
     seed     = 20260508,
@@ -24,7 +25,6 @@ function analyse(;
 
     post = summarise(chn)
     save_posterior(post, joinpath(output, "posterior.csv"))
-    figures = joinpath(output, "figures")
     plot_rt(post, joinpath(figures, "Rt.png"))
     plot_delta_sense_check(chn, d, joinpath(figures, "delta_sense_check.png"))
     return chn, post
@@ -39,6 +39,9 @@ function main(args = ARGS)
         "--output", "-o"
             help    = "output directory for posterior.csv"
             default = OUTPUT_DIR
+        "--figures", "-f"
+            help    = "directory for figures"
+            default = FIGURES_DIR
         "--samples", "-n"
             help     = "NUTS samples per chain"
             arg_type = Int
@@ -56,6 +59,7 @@ function main(args = ARGS)
     return analyse(;
         data     = p["data"],
         output   = p["output"],
+        figures  = p["figures"],
         samples  = p["samples"],
         chains   = p["chains"],
         seed     = p["seed"],
