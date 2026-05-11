@@ -18,8 +18,8 @@ function load_linelist(path = LINELIST_PATH)
     # the model to support multi-day onset uncertainty when the data has it.
     if !hasproperty(ll, :onset_lower); ll.onset_lower = copy(ll.onset_date); end
     if !hasproperty(ll, :onset_upper); ll.onset_upper = copy(ll.onset_date); end
-    ll.onset_lower = Date.(ll.onset_lower)
-    ll.onset_upper = Date.(ll.onset_upper)
+    ll.onset_lower = passmissing(Date).(ll.onset_lower)
+    ll.onset_upper = passmissing(Date).(ll.onset_upper)
     sort!(ll, :patient_id, by = x -> parse(Int, x))
     return ll
 end

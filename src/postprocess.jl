@@ -143,9 +143,9 @@ function reconstruct_pairs(chn, d)
         gi_s       = [t_inf[i][s]   - t_inf[src][s]   for (src, i) in srcs]
         si_s       = [t_onset[i][s] - t_onset[src][s] for (src, i) in srcs]
         mean_gi[s] = mean(gi_s)
-        sd_gi[s]   = std(gi_s)
+        sd_gi[s]   = length(gi_s) > 1 ? std(gi_s) : 0.0
         mean_si[s] = mean(si_s)
-        sd_si[s]   = std(si_s)
+        sd_si[s]   = length(si_s) > 1 ? std(si_s) : 0.0
     end
 
     inc_all = sizehint!(Float64[], d.N * S)
