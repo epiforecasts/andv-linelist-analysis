@@ -19,9 +19,18 @@ cases, or over an 80-day pre-onset window for the zoonotic index.
 | `log R(t)` over weekly bins | Random walk | first bin ~ Normal(log 1.5, 1); innovation SD ~ half-Normal(0, 0.5) |
 
 A per-pair constraint enforces `T_inf(secondary) > T_inf(source)` so that
-the generation interval is positive. Generation interval = transmission
-timing + source's incubation period; serial interval = transmission timing
-+ secondary's incubation period. Both are computed in post-processing.
+the generation interval is positive.
+Generation interval = δ + Inc_source; serial interval = δ + Inc_secondary.
+The primary estimates are the population marginals derived from the fitted
+(μ_δ, σ_δ, μ_inc, σ_inc) — these are the generalisable, reportable
+quantities.
+As a diagnostic, GI and SI are also reconstructed empirically from the
+per-pair posterior latent times (`T_inf`, `T_onset`) via `reconstruct_pairs`
+and compared to the analytical estimates via `compare_intervals`.
+The two will differ slightly because the exposure windows constrain δ ∈ [0, 1]
+for most pairs (the contact event coincides with the source's onset day),
+whereas the analytical formula integrates over the full Normal(μ_δ, σ_δ)
+including its negative tail.
 
 Inference uses NUTS, 4 chains, 1000 post-warmup samples each, `target_accept = 0.95`. Default seed: 20260508.
 
