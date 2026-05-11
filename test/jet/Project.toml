@@ -4,3 +4,6 @@ JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 
 [sources]
 Hantavirus = {path = "../.."}
+
+[compat]
+JET = "0.9"
