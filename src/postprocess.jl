@@ -130,18 +130,22 @@ function reconstruct_pairs(chn, d)
     gi_all = sizehint!(Float64[], n_pairs * S)
     si_all = sizehint!(Float64[], n_pairs * S)
 
-    mean_gi = zeros(S); mean_si = zeros(S)
-    sd_gi   = zeros(S); sd_si   = zeros(S)
+    mean_gi = zeros(S)
+    mean_si = zeros(S)
+    sd_gi   = zeros(S)
+    sd_si   = zeros(S)
 
     for (src, i) in srcs
         append!(gi_all, t_inf[i]   .- t_inf[src])
         append!(si_all, t_onset[i] .- t_onset[src])
     end
     for s in 1:S
-        gi_s = [t_inf[i][s]   - t_inf[src][s]   for (src, i) in srcs]
-        si_s = [t_onset[i][s] - t_onset[src][s] for (src, i) in srcs]
-        mean_gi[s] = mean(gi_s); sd_gi[s] = std(gi_s)
-        mean_si[s] = mean(si_s); sd_si[s] = std(si_s)
+        gi_s       = [t_inf[i][s]   - t_inf[src][s]   for (src, i) in srcs]
+        si_s       = [t_onset[i][s] - t_onset[src][s] for (src, i) in srcs]
+        mean_gi[s] = mean(gi_s)
+        sd_gi[s]   = std(gi_s)
+        mean_si[s] = mean(si_s)
+        sd_si[s]   = std(si_s)
     end
 
     inc_all = sizehint!(Float64[], d.N * S)
@@ -165,7 +169,7 @@ function compare_intervals(post, pairs)
     _print_qci("mean GI = SI (d)", post.mean_gi_si)
     _print_qci("SD GI = SI (d)",   post.sd_gi_si)
     println()
-    println("  Empirical (posterior of per-draw mean across pairs):")
+    println("  Empirical (posterior of per-draw mean across $(pairs.n_pairs) pairs):")
     _print_qci("mean GI (d)", pairs.mean_gi)
     _print_qci("SD GI (d)",   pairs.sd_gi)
     _print_qci("mean SI (d)", pairs.mean_si)
