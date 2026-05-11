@@ -1,6 +1,6 @@
-## Posterior summaries and CSV output.
+## Posterior summaries, CSV output, and R(t) figure.
 
-using CSV, DataFrames, Distributions, MCMCChains, Statistics, Printf
+using CSV, DataFrames, Dates, Distributions, MCMCChains, Plots, Statistics, Printf
 import FlexiChains
 
 # ---------------------------------------------------------------------------
@@ -117,6 +117,42 @@ end
 # ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# R(t) figure
+# ---------------------------------------------------------------------------
+
+# Step plot of the median posterior R(t) by bin with a 95% credible-interval
+# ribbon. Bin edges come from `BIN_EDGES` (data.jl); the first and last bins
+# extend one bin-width past the listed edges. Saved as a PNG.
+function plot_rt(post, path)
+    log_R = post.log_R_chain
+    medians = [quantile(exp.(log_R[b]), 0.5)   for b in eachindex(log_R)]
+    los     = [quantile(exp.(log_R[b]), 0.025) for b in eachindex(log_R)]
+    his     = [quantile(exp.(log_R[b]), 0.975) for b in eachindex(log_R)]
+
+    bin_width = BIN_EDGES[2] - BIN_EDGES[1]
+    left_edge  = vcat(BIN_EDGES[1] - bin_width, BIN_EDGES)
+    right_edge = vcat(BIN_EDGES, BIN_EDGES[end] + bin_width)
+    # Build step coordinates: each bin contributes two points at its edges.
+    xs = Date[]; ys_med = Float64[]; ys_lo = Float64[]; ys_hi = Float64[]
+    for b in eachindex(medians)
+        push!(xs, left_edge[b]);  push!(ys_med, medians[b]); push!(ys_lo, los[b]); push!(ys_hi, his[b])
+        push!(xs, right_edge[b]); push!(ys_med, medians[b]); push!(ys_lo, los[b]); push!(ys_hi, his[b])
+    end
+
+    plt = plot(xs, ys_med;
+               ribbon = (ys_med .- ys_lo, ys_hi .- ys_med),
+               fillalpha = 0.2, linewidth = 2,
+               ylims = (0.0, 5.0),
+               xlabel = "Date", ylabel = "R(t)",
+               legend = false,
+               title  = "Time-varying reproduction number (weekly bins)")
+    hline!(plt, [1.0]; linestyle = :dash, color = :grey)
+    mkpath(dirname(path))
+    savefig(plt, path)
+    return path
+end
 
 function save_posterior(post, path)
     df = DataFrame(μ_inc = post.μ_inc, σ_inc = post.σ_inc,

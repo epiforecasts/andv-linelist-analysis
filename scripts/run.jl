@@ -23,6 +23,7 @@ function main(; n_chains = 4, n_samples = 1000, seed = 20260508)
 
     post = summarise(chn)
     save_posterior(post, joinpath(OUTPUT_DIR, "posterior.csv"))
+    plot_rt(post, joinpath(PROJECT_ROOT, "figures", "Rt.png"))
     return chn, post
 end
 
