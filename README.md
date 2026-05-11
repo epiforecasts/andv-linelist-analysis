@@ -1,26 +1,20 @@
 # Andes virus — joint estimation of incubation, transmission timing, and R(t)
 
-A Julia + Turing model for the Epuyén 2018–19 Andes hantavirus outbreak
+A Julia + Turing model fitted to the Epuyén 2018–19 Andes hantavirus outbreak
 ([Martínez et al. 2020, NEJM](https://doi.org/10.1056/NEJMoa2009040)).
-From the line list given in the paper it jointly estimates the incubation
-period and the transmission timing of each secondary infection relative to
-its source's symptom onset, plus a time-varying reproduction number with
-offspring dispersion. Double interval censoring of exposure and onset is
-handled by Bayesian data augmentation over continuous latent infection and
-onset times.
 
-The generation interval (transmission timing plus the source's incubation
-period) and the serial interval (transmission timing plus the secondary's
-incubation period) are derived in post-processing from the fitted
-distributions. A per-pair constraint that the secondary's infection time is
-later than the source's keeps the generation interval positive at the
-latent level.
+The model estimates four things from the line list in the paper: the
+incubation period, the transmission timing of each secondary infection
+relative to its source's symptom onset, a weekly time-varying reproduction
+number, and offspring dispersion. Exposure and onset dates are
+interval-censored. The model handles that by giving each case a continuous
+latent infection time and a continuous latent onset time, each sampled
+within its recorded window. Generation interval and serial interval are
+derived from the fitted distributions in post-processing.
 
 ## Headline results (Epuyén line list)
 
-### Incubation period
-
-Distribution: **LogNormal**.
+### Incubation period (LogNormal)
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
@@ -28,9 +22,9 @@ Distribution: **LogNormal**.
 | 95th percentile | 36.2 d (31.3 – 44.5) |
 | 99th percentile | 45.0 d (37.6 – 58.7) |
 
-### Transmission timing relative to source onset
+### Transmission timing relative to source onset (Normal)
 
-Distribution: **Normal**. Negative values mean the secondary was infected before the source became symptomatic.
+Negative values mean the secondary was infected before the source became symptomatic.
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
@@ -42,16 +36,17 @@ Distribution: **Normal**. Negative values mean the secondary was infected before
 
 ### Generation interval / serial interval
 
-Derived from incubation and transmission timing.
+Both are δ plus an incubation period (the source's for GI, the secondary's
+for SI), and share the same marginal distribution.
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
 | Mean | 22.7 d (20.4 – 25.6) |
 | SD | 7.4 d (5.7 – 10.6) |
 
-### Offspring distribution
+### Offspring count (Negative-Binomial)
 
-Distribution: **Negative-Binomial** with mean `R(t)` and dispersion `k`.
+Per case the mean is `R(t)` evaluated at the case's infection time, and `k` is the dispersion.
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
@@ -65,40 +60,42 @@ Weekly bins; shaded band is the 95% credible interval.
 
 ## Model
 
-For each case `i` the model has continuous latents:
-
-- `T_onset[i]` ~ Uniform over the recorded onset window (defaults to a
-  one-day window when only a single onset date was recorded).
-- `T_inf[i]` ~ Uniform over the exposure window (sourced cases) or a
-  wide pre-onset window of 80 days (the zoonotic index case).
-
-The estimated quantities and their distributional choices:
+Each case has two continuous latents. `T_onset[i]` is uniform over the
+recorded onset window, which is one day wide if only a single onset date
+was recorded. `T_inf[i]` is uniform over the exposure window for sourced
+cases, or over an 80-day pre-onset window for the zoonotic index.
 
 | Quantity | Distribution | Parameters |
 |---|---|---|
 | Incubation period `Inc = T_onset − T_inf` | LogNormal(μ_inc, σ_inc) | `μ_inc ~ Normal(3.0, 0.5)`, `σ_inc ~ half-Normal(0, 0.5)` |
 | Transmission timing `δ = T_inf(sec) − T_onset(src)` | Normal(μ_δ, σ_δ) | `μ_δ ~ Normal(0, 5)`, `σ_δ ~ half-Normal(0, 1)` |
-| Offspring count `Z` (per case) | Negative-Binomial(`k`, `k/(k + R(t))`) | `k ~ half-Normal(0.3, 0.5)`, truncated at 0 |
-| Log reproduction number `log R(t)` | random walk with innovation SD `σ_rw` over weekly bins | `log R[1] ~ Normal(log 1.5, 1)`, `σ_rw ~ half-Normal(0, 0.5)` |
+| Offspring count `Z` per case | Negative-Binomial(`k`, `k/(k + R(t))`) | `k ~ half-Normal(0.3, 0.5)` |
+| `log R(t)` over weekly bins | Random walk with innovation SD `σ_rw` | `log R[1] ~ Normal(log 1.5, 1)`, `σ_rw ~ half-Normal(0, 0.5)` |
 
-Generation interval (`GI = δ + Inc(source)`) and serial interval
-(`SI = δ + Inc(secondary)`) are derived from posterior draws.
+A per-pair constraint enforces `T_inf(secondary) > T_inf(source)` so that
+the generation interval is positive. Generation interval = δ + Inc(source);
+serial interval = δ + Inc(secondary). Both are computed in post-processing.
 
-Inference is by NUTS (4 chains × 1000 samples after warmup,
-`target_accept = 0.95`). Reproducibility seed is set in `scripts/run.jl`.
+Inference uses NUTS, 4 chains, 1000 post-warmup samples each, `target_accept = 0.95`. The seed is set in `scripts/run.jl`.
 
 ## Limitations
 
-- Exposure windows in the Martínez line list are mostly single days equal
-  to the source's symptom onset (31 of 33 sourced pairs). σ_δ ≈ 0.6 d
-  therefore largely reflects within-day uncertainty in `T_inf` rather than
-  biological transmission-timing variation. Pre-symptomatic transmission
-  estimates are conditional on the recorded contact event being when
-  transmission occurred.
-- Few cases occur after early January 2019, so the random walk on `log R(t)`
-  falls back toward its prior in the late bins, widening credible intervals.
-- 34 cases is thin for identifying a Negative-Binomial dispersion; the prior
-  on `k` (centred at 0.3) visibly contributes to the posterior centre.
+Most of what the model can say about transmission timing is limited by how
+the line list was recorded. 31 of 33 sourced pairs have a single-day
+exposure window, and that day is almost always the source's symptom onset.
+So the fitted σ_δ ≈ 0.6 d mostly reflects within-day uncertainty in
+`T_inf`. The biological spread of transmission timing could be wider; we
+cannot tell from these data. The pre-symptomatic transmission fraction
+reported above is conditional on the recorded contact day being when
+transmission actually happened; if contacts ran over several days, the
+fraction is a lower bound.
+
+There are very few cases after early January 2019, and the random walk on
+`log R(t)` reverts to its prior in those bins. The wide credible intervals
+on the right of the figure show this.
+
+34 cases is thin for identifying a Negative-Binomial dispersion. The prior
+on `k`, centred at 0.3, has visible influence on the posterior centre.
 
 ## Repository layout
 
@@ -112,17 +109,17 @@ scripts/
 data/
   linelist.csv     — Epuyén outbreak line list (Martínez Table S2)
 figures/
-  Rt.png           — R(t) posterior (generated by scripts/run.jl)
+  Rt.png           — R(t) posterior, generated by scripts/run.jl
 Project.toml       — Julia environment
 LICENSE            — MIT
 ```
 
 ## Data
 
-The Epuyén line list (`data/linelist.csv`) is hand-encoded from Table S2 of
-the supplementary appendix of Martínez et al. 2020. Columns: patient ID, age,
-sex, residence, exposure place, exposure window (lower / upper), onset date,
-attributed source (or `index` for the zoonotic case), relationship to source,
+`data/linelist.csv` is hand-encoded from Table S2 of the supplementary
+appendix of Martínez et al. 2020. Columns: patient ID, age, sex, residence,
+exposure place, exposure window (lower / upper), onset date, attributed
+source (or `index` for the zoonotic case), relationship to source,
 transmission wave, observed offspring count `Z`, and free-text notes.
 
 ## Running
@@ -131,18 +128,18 @@ transmission wave, observed offspring count `Z`, and free-text notes.
 julia --project=. -t auto scripts/run.jl
 ```
 
-NUTS, 4 chains × 1000 samples. Takes a few minutes on a laptop. Posterior
-saved to `output/posterior.csv`, R(t) figure saved to `figures/Rt.png`.
+A few minutes on a laptop. Posterior is saved to `output/posterior.csv` and
+the R(t) figure to `figures/Rt.png`.
 
 ## Citing
 
-If you use this code or the Epuyén line list encoding, please cite:
+If you use this code or the line list encoding, please cite:
 
 > Martínez VP, Di Paola N, Alonso DO, et al. *"Super-spreaders" and
 > person-to-person transmission of Andes virus in Argentina.* N Engl J Med
 > 2020;383:2230–41. [doi:10.1056/NEJMoa2009040](https://doi.org/10.1056/NEJMoa2009040)
 
-We follow the reporting recommendations of:
+The reporting follows the recommendations of:
 
 > Charniga K, et al. *Best practices for estimating and reporting
 > epidemiological delay distributions of infectious diseases.* 2024.
