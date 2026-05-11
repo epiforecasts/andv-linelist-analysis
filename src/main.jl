@@ -33,7 +33,7 @@ function analyse(;
     plot_prior_predictives(joinpath(figures, "prior_predictives.png"))
     plot_posterior_predictions(chn, d, joinpath(figures, "posterior_predictions.png"))
     plot_gi_si_comparison(
-        pairs, post, joinpath(figures, "gi_si_comparison.png"))
+        post, pairs, joinpath(figures, "gi_si_comparison.png"))
     plot_incubation_check(
         post, pairs, joinpath(figures, "incubation_check.png"))
     return chn, post, pairs

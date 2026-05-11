@@ -129,7 +129,6 @@ function reconstruct_pairs(chn, d)
 
     gi_all = sizehint!(Float64[], n_pairs * S)
     si_all = sizehint!(Float64[], n_pairs * S)
-    δ_all  = sizehint!(Float64[], n_pairs * S)
 
     mean_gi = zeros(S); mean_si = zeros(S)
     sd_gi   = zeros(S); sd_si   = zeros(S)
@@ -137,7 +136,6 @@ function reconstruct_pairs(chn, d)
     for (src, i) in srcs
         append!(gi_all, t_inf[i]   .- t_inf[src])
         append!(si_all, t_onset[i] .- t_onset[src])
-        append!(δ_all,  t_inf[i]   .- t_onset[src])
     end
     for s in 1:S
         gi_s = [t_inf[i][s]   - t_inf[src][s]   for (src, i) in srcs]
@@ -151,7 +149,7 @@ function reconstruct_pairs(chn, d)
         append!(inc_all, t_onset[i] .- t_inf[i])
     end
 
-    return (; gi = gi_all, si = si_all, δ = δ_all, inc = inc_all,
+    return (; gi = gi_all, si = si_all, inc = inc_all,
               mean_gi, mean_si, sd_gi, sd_si, n_pairs)
 end
 
@@ -167,8 +165,7 @@ function compare_intervals(post, pairs)
     _print_qci("mean GI = SI (d)", post.mean_gi_si)
     _print_qci("SD GI = SI (d)",   post.sd_gi_si)
     println()
-    println(
-        "  Empirical (per-pair latent T_inf, T_onset pooled across draws):")
+    println("  Empirical (posterior of per-draw mean across pairs):")
     _print_qci("mean GI (d)", pairs.mean_gi)
     _print_qci("SD GI (d)",   pairs.sd_gi)
     _print_qci("mean SI (d)", pairs.mean_si)
@@ -390,7 +387,7 @@ end
 # interval, with the analytical distribution (δ + Inc from posterior-median
 # parameters) as a reference. Checks whether GI and SI differ across the
 # specific source–secondary pairs in the data.
-function plot_gi_si_comparison(pairs, post, path)
+function plot_gi_si_comparison(post, pairs, path)
     μ_δ_m = quantile(post.μ_δ,   0.5)
     σ_δ_m = quantile(post.σ_δ,   0.5)
     μ_i_m = quantile(post.μ_inc, 0.5)

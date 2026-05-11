@@ -39,7 +39,7 @@ Analytical: GI = δ + Inc_source, SI = δ + Inc_secondary.
 Sources and secondaries are exchangeable in the population model so the
 two share the same marginal mean and SD analytically.
 Empirical estimates are recovered directly from per-pair latent event
-times (T_inf, T_onset); `compare_intervals()` prints the comparison.
+times (T_inf, T_onset); `compare_intervals(post, pairs)` prints the comparison.
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
