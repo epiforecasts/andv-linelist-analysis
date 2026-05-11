@@ -101,8 +101,8 @@ function summarise(chn)
     println()
 
     log_R_chain = vector_chain(chn, :log_R)
-    labels = bin_labels()
-    println("R(t) by bin")
+    labels = knot_labels()
+    println("R(t) at knot dates")
     for b in eachindex(log_R_chain)
         _print_qci(labels[b], exp.(log_R_chain[b]))
     end
@@ -119,22 +119,18 @@ end
 # R(t) figure
 # ---------------------------------------------------------------------------
 
-# Spaghetti plot of R(t) over weekly bins: each thinned posterior draw is a
-# horizontal line for each bin, with the line broken between bins so no
-# vertical step connectors are drawn. Bin edges come from `BIN_EDGES`
-# (data.jl); the first and last bins extend one bin-width past the listed
-# edges. Saved as a PNG.
+# Spaghetti plot of R(t) over weekly knots. R(t) is piecewise constant on
+# the knot intervals, so each draw is drawn as broken horizontal segments
+# with a NaN placeholder between them so step connectors are not drawn.
 function plot_rt(post, path; n_draws_plot = 100, ymax = 4.0)
     log_R = post.log_R_chain
     n_draws = length(log_R[1])
     step    = max(1, n_draws ÷ n_draws_plot)
     idx     = 1:step:n_draws
 
-    bin_width  = BIN_EDGES[2] - BIN_EDGES[1]
-    left_edge  = vcat(BIN_EDGES[1] - bin_width, BIN_EDGES)
-    right_edge = vcat(BIN_EDGES, BIN_EDGES[end] + bin_width)
-    # Two points per bin (left, right) then a NaN-on-y placeholder so the
-    # line is broken between bins (no vertical step connectors).
+    knot_width = KNOTS[2] - KNOTS[1]
+    left_edge  = KNOTS
+    right_edge = vcat(KNOTS[2:end], KNOTS[end] + knot_width)
     xs = Date[]
     for b in eachindex(log_R)
         push!(xs, left_edge[b]); push!(xs, right_edge[b]); push!(xs, right_edge[b])
@@ -143,7 +139,7 @@ function plot_rt(post, path; n_draws_plot = 100, ymax = 4.0)
     plt = plot(; ylims = (0.0, ymax),
                  xlabel = "Date", ylabel = "R(t)",
                  legend = false,
-                 title  = "Time-varying reproduction number (weekly bins)")
+                 title  = "Time-varying reproduction number (weekly knots)")
     for d in idx
         ys = Float64[]
         for b in eachindex(log_R)

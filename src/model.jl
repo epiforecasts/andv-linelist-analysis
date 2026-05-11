@@ -10,8 +10,10 @@
 ##                                    secondary's infection time and its
 ##                                    source's symptom onset. Identified
 ##                                    per-pair from the line list.
-##   3. Time-varying reproduction   — log R(t) on a weekly random walk, with
-##      number                        Negative-Binomial offspring (dispersion k).
+##   3. Time-varying reproduction   — log R(t) is a random walk on weekly
+##      number                        knot values, piecewise-constant on the
+##                                    intervals between knots.
+##                                    Negative-Binomial offspring (dispersion k).
 ##
 ## Each case has continuous latents: an infection time T_inf and an onset time
 ## T_onset. Interval-censored onsets and exposure dates are handled by
@@ -21,7 +23,7 @@
 ## from δ and Inc. The per-pair constraint T_inf[secondary] > T_inf[source]
 ## is enforced via a -Inf reject in the likelihood to ensure GI > 0.
 
-@model function joint_model(d, edges)
+@model function joint_model(d, knots)
     # Population-level parameters
     μ_inc ~ Normal(3.0, 0.5)                       # log-mean Inc (≈ log 20 d)
     σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc
@@ -30,11 +32,11 @@
     k     ~ truncated(Normal(0.3, 0.5); lower = 0) # NB offspring dispersion (centred low — known super-spreader pathogen)
     σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD
 
-    # Random walk on log R(t) across the time bins
-    n_bins = length(edges) + 1
-    log_R = Vector{Real}(undef, n_bins)
+    # Random walk on log R(t) at the knot times.
+    n_knots = length(knots)
+    log_R = Vector{Real}(undef, n_knots)
     log_R[1] ~ Normal(log(1.5), 1.0)
-    for b in 2:n_bins
+    for b in 2:n_knots
         log_R[b] ~ Normal(log_R[b - 1], σ_rw)
     end
 
@@ -70,7 +72,7 @@
             end
         end
         # Offspring count for case i (observed number of attributed secondaries).
-        R_i = exp(log_R[which_bin(T_inf[i], edges)])
+        R_i = exp(log_R_at(T_inf[i], knots, log_R))
         d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
     end
 end

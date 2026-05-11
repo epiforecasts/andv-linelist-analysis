@@ -14,11 +14,11 @@ function analyse(;
 
     ll    = load_linelist(data)
     d     = build_data(ll)
-    edges = bin_edges_day(d.t0)
+    knots = knot_days(d.t0)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx)
 
     chn = sample(
-        joint_model(d, edges),
+        joint_model(d, knots),
         NUTS(0.95), MCMCThreads(), samples, chains;
         progress = progress,
     )

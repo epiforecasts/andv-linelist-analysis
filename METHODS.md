@@ -16,7 +16,7 @@ cases, or over an 80-day pre-onset window for the zoonotic index.
 | Incubation period (`T_onset − T_inf`) | LogNormal | log-mean ~ Normal(3.0, 0.5), log-SD ~ half-Normal(0, 0.5) |
 | Transmission timing relative to source onset (`T_inf(sec) − T_onset(src)`) | Normal | mean ~ Normal(0, 5), SD ~ half-Normal(0, 1) |
 | Offspring count `Z` per case | Negative-Binomial with mean `R(t)` and dispersion `k` | `k` ~ half-Normal(0.3, 0.5) |
-| `log R(t)` over weekly bins | Random walk | first bin ~ Normal(log 1.5, 1); innovation SD ~ half-Normal(0, 0.5) |
+| `log R(t)` at weekly knots, piecewise constant between them | Random walk | first knot ~ Normal(log 1.5, 1); innovation SD ~ half-Normal(0, 0.5) |
 
 A per-pair constraint enforces `T_inf(secondary) > T_inf(source)` so that
 the generation interval is positive. Generation interval = transmission
@@ -39,10 +39,10 @@ robustly rare in this outbreak (P(δ < −1 d) ≈ 3%, P(δ < −2 d) essentiall
 zero), but the split into "any pre-symptomatic" vs "post-symptomatic" would
 be dominated by this within-day floor and is not reported.
 
-### Late R(t) bins are prior-driven
+### Late R(t) knots are prior-driven
 
 There are very few cases after early January 2019, and the random walk on
-`log R(t)` reverts to its prior in those bins. The wide credible intervals
+`log R(t)` reverts to its prior at those knots. The wide credible intervals
 on the right of the R(t) figure show this.
 
 ### Offspring dispersion `k` has prior dependence

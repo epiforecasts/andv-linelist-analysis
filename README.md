@@ -53,7 +53,7 @@ Per case the mean is `R(t)` evaluated at the case's infection time, and `k` is t
 
 ### Time-varying reproduction number R(t)
 
-Weekly bins; shaded band is the 95% credible interval.
+Weekly knots, piecewise constant between knots; shaded band is the 95% credible interval.
 
 ![R(t) over the outbreak](figures/Rt.png)
 
@@ -62,7 +62,7 @@ Weekly bins; shaded band is the 95% credible interval.
 The model is described in detail in [METHODS.md](METHODS.md), including
 priors, the data-augmentation handling of double interval censoring, the
 positive-generation-interval constraint, and known limitations
-(within-day exposure encoding pinning σ_δ, late-bin R(t) reverting to its
+(within-day exposure encoding pinning σ_δ, late-knot R(t) reverting to its
 prior, mild prior dependence of `k`, and right-truncation of long
 incubation periods).
 
@@ -71,7 +71,7 @@ incubation periods).
 ```
 src/
   Hantavirus.jl    — module entry point and imports
-  data.jl          — line list loading and bin definitions
+  data.jl          — line list loading and R(t) knot definitions
   model.jl         — the joint Turing model (incubation, transmission timing, R(t))
   postprocess.jl   — diagnostics, summaries, CSV output, R(t) figure
   main.jl          — CLI entry point (argument parsing)
