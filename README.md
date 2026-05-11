@@ -57,45 +57,14 @@ Weekly bins; shaded band is the 95% credible interval.
 
 ![R(t) over the outbreak](figures/Rt.png)
 
-## Methods
+## Methods and limitations
 
-Each case has two continuous latents. `T_onset[i]` is uniform over the
-recorded onset window, which is one day wide if only a single onset date
-was recorded. `T_inf[i]` is uniform over the exposure window for sourced
-cases, or over an 80-day pre-onset window for the zoonotic index.
-
-| Quantity | Distribution | Priors |
-|---|---|---|
-| Incubation period (`T_onset − T_inf`) | LogNormal | log-mean ~ Normal(3.0, 0.5), log-SD ~ half-Normal(0, 0.5) |
-| Transmission timing relative to source onset (`T_inf(sec) − T_onset(src)`) | Normal | mean ~ Normal(0, 5), SD ~ half-Normal(0, 1) |
-| Offspring count `Z` per case | Negative-Binomial with mean `R(t)` and dispersion `k` | `k` ~ half-Normal(0.3, 0.5) |
-| `log R(t)` over weekly bins | Random walk | first bin ~ Normal(log 1.5, 1); innovation SD ~ half-Normal(0, 0.5) |
-
-A per-pair constraint enforces `T_inf(secondary) > T_inf(source)` so that
-the generation interval is positive. Generation interval = transmission
-timing + source's incubation period; serial interval = transmission timing
-+ secondary's incubation period. Both are computed in post-processing.
-
-Inference uses NUTS, 4 chains, 1000 post-warmup samples each, `target_accept = 0.95`. Default seed: 20260508.
-
-## Limitations
-
-Most of what the model can say about transmission timing is limited by how
-the line list was recorded. 31 of 33 sourced pairs have a single-day
-exposure window, and that day is almost always the source's symptom onset.
-The fitted transmission-timing SD of about 0.6 d mostly reflects within-day
-uncertainty in `T_inf` rather than biological spread; we cannot disentangle
-the two from these data. Multi-day pre-symptomatic transmission is therefore
-robustly rare in this outbreak (P(δ < −1 d) ≈ 3%, P(δ < −2 d) essentially
-zero), but the headline split into "any pre-symptomatic" vs "post-symptomatic"
-would be dominated by this within-day floor and is not reported.
-
-There are very few cases after early January 2019, and the random walk on
-`log R(t)` reverts to its prior in those bins. The wide credible intervals
-on the right of the figure show this.
-
-34 cases is thin for identifying a Negative-Binomial dispersion. The prior
-on `k`, centred at 0.3, has visible influence on the posterior centre.
+The model is described in detail in [METHODS.md](METHODS.md), including
+priors, the data-augmentation handling of double interval censoring, the
+positive-generation-interval constraint, and known limitations
+(within-day exposure encoding pinning σ_δ, late-bin R(t) reverting to its
+prior, mild prior dependence of `k`, and right-truncation of long
+incubation periods).
 
 ## Repository layout
 
