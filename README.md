@@ -104,8 +104,8 @@ julia --project=. -t auto -m Hantavirus -- -n 500 -c 2 -o results/
 
 ```julia
 julia> using Hantavirus
-julia> main()                                          # all defaults
-julia> main(["-n", "500", "-c", "2", "-o", "results/"])  # with options
+julia> fit()                                           # all defaults
+julia> fit(chains=2, samples=500, output="results/")  # with options
 ```
 
 ## Citing

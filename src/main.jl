@@ -1,4 +1,30 @@
 ## CLI entry point — called by `julia -m Hantavirus`.
+## For interactive use, call fit() directly with keyword arguments.
+
+function fit(;
+    data    = LINELIST_PATH,
+    output  = OUTPUT_DIR,
+    samples = 1000,
+    chains  = 4,
+    seed    = 20260508,
+)
+    Random.seed!(seed)
+
+    ll    = load_linelist(data)
+    d     = build_data(ll)
+    edges = bin_edges_day(d.t0)
+    @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx)
+
+    chn = sample(
+        joint_model(d, edges),
+        NUTS(0.95), MCMCThreads(), samples, chains;
+        progress = false,
+    )
+
+    post = summarise(chn)
+    save_posterior(post, joinpath(output, "posterior.csv"))
+    return chn, post
+end
 
 function main(args = ARGS)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
@@ -23,21 +49,11 @@ function main(args = ARGS)
             default  = 20260508
     end
     p = parse_args(args, s)
-
-    Random.seed!(p["seed"])
-
-    ll    = load_linelist(p["data"])
-    data  = build_data(ll)
-    edges = bin_edges_day(data.t0)
-    @info "Loaded line list" n_cases=data.N n_sources=sum(>(0), data.source_idx)
-
-    chn = sample(
-        joint_model(data, edges),
-        NUTS(0.95), MCMCThreads(), p["samples"], p["chains"];
-        progress = false,
+    return fit(;
+        data    = p["data"],
+        output  = p["output"],
+        samples = p["samples"],
+        chains  = p["chains"],
+        seed    = p["seed"],
     )
-
-    post = summarise(chn)
-    save_posterior(post, joinpath(p["output"], "posterior.csv"))
-    return chn, post
 end
