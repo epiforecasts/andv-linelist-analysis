@@ -30,9 +30,15 @@
     k     ~ truncated(Normal(0.3, 0.5); lower = 0) # NB offspring dispersion (centred low — known super-spreader pathogen)
     σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD
 
+    # Concrete element type derived from a sampled scalar: stable Float64 on
+    # the forward pass and a stable Dual / tracked type under AD. Helps every
+    # backend (ForwardDiff, ReverseDiff, Mooncake, Enzyme) — replacing
+    # `Vector{Real}` removes a dynamic-dispatch tax inside the inner loop.
+    T = typeof(μ_inc)
+
     # Random walk on log R(t) across the time bins
     n_bins = length(edges) + 1
-    log_R = Vector{Real}(undef, n_bins)
+    log_R = Vector{T}(undef, n_bins)
     log_R[1] ~ Normal(log(1.5), 1.0)
     for b in 2:n_bins
         log_R[b] ~ Normal(log_R[b - 1], σ_rw)
@@ -42,12 +48,12 @@
 
     # T_onset is a latent over the recorded onset window (defaults to a
     # one-day window when only a single onset date was recorded).
-    T_onset = Vector{Real}(undef, d.N)
+    T_onset = Vector{T}(undef, d.N)
     for i in 1:d.N
         T_onset[i] ~ Uniform(d.onset_lo_day[i], d.onset_hi_day[i])
     end
 
-    T_inf = Vector{Real}(undef, d.N)
+    T_inf = Vector{T}(undef, d.N)
     for i in 1:d.N
         if d.source_idx[i] == 0
             # Zoonotic index: free latent T_inf pre-onset.

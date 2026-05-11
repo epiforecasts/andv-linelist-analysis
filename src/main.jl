@@ -17,9 +17,10 @@ function analyse(;
     edges = bin_edges_day(d.t0)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx)
 
+    adtype = AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
     chn = sample(
         joint_model(d, edges),
-        NUTS(0.95), MCMCThreads(), samples, chains;
+        NUTS(0.95; adtype), MCMCThreads(), samples, chains;
         progress = progress,
     )
 
