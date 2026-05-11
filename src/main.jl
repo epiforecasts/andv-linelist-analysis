@@ -1,7 +1,7 @@
 ## CLI entry point — called by `julia -m Hantavirus`.
-## For interactive use, call fit() directly with keyword arguments.
+## For interactive use, call run() directly with keyword arguments.
 
-function fit(;
+function run(;
     data    = LINELIST_PATH,
     output  = OUTPUT_DIR,
     samples = 1000,
@@ -49,7 +49,7 @@ function main(args = ARGS)
             default  = 20260508
     end
     p = parse_args(args, s)
-    return fit(;
+    return run(;
         data    = p["data"],
         output  = p["output"],
         samples = p["samples"],
