@@ -58,12 +58,11 @@ Negative values mean the secondary was infected before the source became symptom
 
 ```
 src/
-  Hantavirus.jl    — module entry point and explicit imports
+  Hantavirus.jl    — module entry point and imports
   data.jl          — line list loading and bin definitions
   model.jl         — the joint Turing model (incubation, transmission timing, R(t))
   postprocess.jl   — diagnostics, summaries, CSV output
-scripts/
-  run.jl           — entry point
+  main.jl          — CLI entry point (argument parsing)
 data/
   linelist.csv     — Epuyén outbreak line list (Martínez Table S2)
 Project.toml       — Julia package manifest
@@ -84,6 +83,22 @@ julia --project=. -t auto -m Hantavirus
 
 NUTS, 4 chains × 1000 samples. Takes a few minutes on a laptop. Posterior
 saved to `output/posterior.csv`.
+
+Options:
+
+```
+-d, --data      path to linelist CSV   (default: data/linelist.csv)
+-o, --output    output directory        (default: output/)
+-n, --samples   NUTS samples per chain  (default: 1000)
+-c, --chains    number of chains        (default: 4)
+-s, --seed      random seed             (default: 20260508)
+```
+
+Example:
+
+```
+julia --project=. -t auto -m Hantavirus -- -n 500 -c 2 -o results/
+```
 
 ## Citing
 
