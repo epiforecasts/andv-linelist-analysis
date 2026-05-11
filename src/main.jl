@@ -1,7 +1,5 @@
 ## CLI entry point — called by `julia -m Hantavirus`.
 
-using ArgParse: ArgParseSettings, @add_arg_table!, parse_args
-
 function main(args = ARGS)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
     @add_arg_table! s begin
