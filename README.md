@@ -79,11 +79,18 @@ the supplementary appendix of Martínez et al. 2020.
 ## Running
 
 ```
+julia --project=. -t auto -e 'using Hantavirus; main()'
+```
+
+Or via the convenience script:
+
+```
 julia --project=. -t auto scripts/run.jl
 ```
 
 NUTS, 4 chains × 1000 samples. Takes a few minutes on a laptop. Posterior
-saved to `output/posterior.csv`.
+saved to `output/posterior.csv`. Pass keyword arguments to `main()` to
+override defaults (`n_chains`, `n_samples`, `seed`).
 
 ## Citing
 
