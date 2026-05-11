@@ -5,3 +5,7 @@ Hantavirus = "a3f8c2e1-4b7d-4a9e-8c3f-d5e2f1a0b6c4"
 
 [sources]
 Hantavirus = {path = ".."}
+
+[compat]
+Documenter = "1"
+DocumenterVitepress = "0.1"
