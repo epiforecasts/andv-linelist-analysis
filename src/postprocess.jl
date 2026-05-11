@@ -53,6 +53,15 @@ end
 
 qci(x; q = (0.025, 0.5, 0.975)) = (quantile(x, q[1]), quantile(x, q[2]), quantile(x, q[3]))
 
+# Kernel density estimate at each point in xs using Silverman's bandwidth.
+# Subsamples large datasets for speed while keeping the full-n bandwidth.
+function _kde(data, xs; bw = nothing)
+    n   = length(data)
+    h   = bw === nothing ? 1.06 * std(data) * n^(-0.2) : bw
+    sub = n > 4000 ? data[1:(n ÷ 4000):end] : data
+    [mean(pdf(Normal(d, h), x) for d in sub) for x in xs]
+end
+
 function _print_qci(label, x; fmt = "%.2f")
     lo, med, hi = qci(x)
     @eval @printf $("  %-30s " * fmt * " (95%% CrI " * fmt * " – " * fmt * ")\n") $label $med $lo $hi
@@ -248,11 +257,12 @@ function plot_delta_sense_check(chn, data, path)
     μ_med = quantile(μ_δ, 0.5)
     σ_med = quantile(σ_δ, 0.5)
 
-    plt = histogram(medians; bins = 15, normalize = :pdf,
-                    label  = "per-pair posterior medians (N = $(length(medians)))",
-                    xlabel = "δ (days from source onset)", ylabel = "density",
-                    title  = "Per-pair δ vs fitted population Normal")
-    xs = range(μ_med - 4σ_med, μ_med + 4σ_med; length = 200)
+    xs  = range(μ_med - 4σ_med, μ_med + 4σ_med; length = 200)
+    plt = plot(xs, _kde(medians, collect(xs));
+               linewidth = 2, fill = (0, 0.3, :steelblue),
+               label  = "per-pair posterior medians (N = $(length(medians)))",
+               xlabel = "δ (days from source onset)", ylabel = "density",
+               title  = "Per-pair δ vs fitted population Normal")
     plot!(plt, xs, pdf.(Normal(μ_med, σ_med), xs);
           linewidth = 2, label = "Normal(μ_δ, σ_δ) fitted")
     vline!(plt, [0.0]; linestyle = :dash, color = :grey, label = "source onset")
@@ -319,15 +329,21 @@ function plot_prior_predictives(path; n = 5000, rng = Random.MersenneTwister(0))
     δ_s   = [rand(rng, Normal(μ_δ[i], σ_δ[i]))       for i in 1:n]
     gi_s  = δ_s .+ inc_s
 
-    p_inc = histogram(inc_s; bins = 100, normalize = :pdf,
-                      title = "Inc (prior)", xlabel = "days",
-                      xlims = (0, 80), legend = false, color = :steelblue)
-    p_del = histogram(δ_s; bins = 100, normalize = :pdf,
-                      title = "δ (prior)", xlabel = "days from source onset",
-                      xlims = (-25, 25), legend = false, color = :steelblue)
-    p_gi  = histogram(gi_s; bins = 100, normalize = :pdf,
-                      title = "GI / SI (prior)", xlabel = "days",
-                      xlims = (-30, 80), legend = false, color = :steelblue)
+    xs_inc = range(0,   80; length = 300)
+    xs_del = range(-25, 25; length = 300)
+    xs_gi  = range(-30, 80; length = 300)
+    p_inc = plot(xs_inc, _kde(inc_s, collect(xs_inc));
+                 linewidth = 2, fill = (0, 0.4, :steelblue),
+                 title = "Inc (prior)", xlabel = "days",
+                 xlims = (0, 80), legend = false)
+    p_del = plot(xs_del, _kde(δ_s, collect(xs_del));
+                 linewidth = 2, fill = (0, 0.4, :steelblue),
+                 title = "δ (prior)", xlabel = "days from source onset",
+                 xlims = (-25, 25), legend = false)
+    p_gi  = plot(xs_gi, _kde(gi_s, collect(xs_gi));
+                 linewidth = 2, fill = (0, 0.4, :steelblue),
+                 title = "GI / SI (prior)", xlabel = "days",
+                 xlims = (-30, 80), legend = false)
     plt = plot(p_inc, p_del, p_gi; layout = (1, 3), size = (1500, 400))
     mkpath(dirname(path))
     savefig(plt, path)
@@ -369,19 +385,25 @@ function plot_posterior_predictions(chn, data, path;
         push!(obs_si, quantile(t_onset[i] .- t_onset[src], 0.5))
     end
 
-    p_δ = histogram(δ_pred; bins = 80, normalize = :pdf,
-                    alpha = 0.5, color = :steelblue, label = "posterior predictive",
-                    title = "δ: predictive vs observed", xlabel = "days")
-    histogram!(p_δ, obs_δ; bins = 15, normalize = :pdf,
-               alpha = 0.5, color = :darkorange,
-               label = "observed per-pair medians (N = $(length(obs_δ)))")
+    xs_δ  = range(quantile(δ_pred, 0.001),  quantile(δ_pred, 0.999);  length = 300)
+    xs_si = range(quantile(si_pred, 0.001), quantile(si_pred, 0.999); length = 300)
+    p_δ = plot(xs_δ, _kde(δ_pred, collect(xs_δ));
+               linewidth = 2, fill = (0, 0.4, :steelblue),
+               label = "posterior predictive",
+               title = "δ: predictive vs observed", xlabel = "days",
+               ylabel = "density")
+    plot!(p_δ, xs_δ, _kde(obs_δ, collect(xs_δ));
+          linewidth = 2, fill = (0, 0.4, :darkorange),
+          label = "observed per-pair medians (N = $(length(obs_δ)))")
 
-    p_si = histogram(si_pred; bins = 80, normalize = :pdf,
-                     alpha = 0.5, color = :steelblue, label = "posterior predictive",
-                     title = "SI: predictive vs observed", xlabel = "days")
-    histogram!(p_si, obs_si; bins = 15, normalize = :pdf,
-               alpha = 0.5, color = :darkorange,
-               label = "observed per-pair medians (N = $(length(obs_si)))")
+    p_si = plot(xs_si, _kde(si_pred, collect(xs_si));
+                linewidth = 2, fill = (0, 0.4, :steelblue),
+                label = "posterior predictive",
+                title = "SI: predictive vs observed", xlabel = "days",
+                ylabel = "density")
+    plot!(p_si, xs_si, _kde(obs_si, collect(xs_si));
+          linewidth = 2, fill = (0, 0.4, :darkorange),
+          label = "observed per-pair medians (N = $(length(obs_si)))")
 
     plt = plot(p_δ, p_si; layout = (1, 2), size = (1400, 450))
     mkpath(dirname(path))
@@ -405,18 +427,19 @@ function plot_gi_si_comparison(post, pairs, path)
     all_vals = vcat(pairs.gi, pairs.si, gi_an)
     xlim = (0.0, quantile(all_vals, 0.99))
 
-    plt = histogram(gi_an;
-                    normalize = :pdf, bins = 60, alpha = 0.35,
-                    xlims = xlim,
-                    label  = "Analytical GI/SI (median params)",
-                    xlabel = "Days", ylabel = "Density",
-                    title  = "GI vs SI: empirical vs analytical")
-    histogram!(plt, pairs.gi;
-               normalize = :pdf, bins = 60, alpha = 0.5,
-               label = "Empirical GI (T_inf pairs)")
-    histogram!(plt, pairs.si;
-               normalize = :pdf, bins = 60, alpha = 0.5,
-               label = "Empirical SI (T_onset pairs)")
+    xs  = range(xlim...; length = 300)
+    plt = plot(xs, _kde(gi_an, collect(xs));
+               linewidth = 2, fill = (0, 0.25, :steelblue),
+               xlims = xlim,
+               label  = "Analytical GI/SI (median params)",
+               xlabel = "Days", ylabel = "Density",
+               title  = "GI vs SI: empirical vs analytical")
+    plot!(plt, xs, _kde(pairs.gi, collect(xs));
+          linewidth = 2, fill = (0, 0.4, :darkorange),
+          label = "Empirical GI (T_inf pairs)")
+    plot!(plt, xs, _kde(pairs.si, collect(xs));
+          linewidth = 2, fill = (0, 0.4, :green),
+          label = "Empirical SI (T_onset pairs)")
     mkpath(dirname(path))
     savefig(plt, path)
     return path
@@ -432,12 +455,12 @@ function plot_incubation_check(post, pairs, path)
     xlim = (0.0, quantile(pairs.inc, 0.995))
     xs   = range(xlim...; length = 300)
 
-    plt = histogram(pairs.inc;
-                    normalize = :pdf, bins = 80, alpha = 0.6,
-                    xlims = xlim,
-                    label  = "Empirical (T_onset − T_inf)",
-                    xlabel = "Incubation (days)", ylabel = "Density",
-                    title  = "Incubation: empirical vs fitted LogNormal")
+    plt = plot(xs, _kde(pairs.inc, collect(xs));
+               linewidth = 2, fill = (0, 0.4, :steelblue),
+               xlims = xlim,
+               label  = "Empirical (T_onset − T_inf)",
+               xlabel = "Incubation (days)", ylabel = "Density",
+               title  = "Incubation: empirical vs fitted LogNormal")
     plot!(plt, xs, pdf.(LogNormal(μ_m, σ_m), xs);
           linewidth = 2,
           label = "LogNormal(μ̂, σ̂) at posterior median")
