@@ -16,7 +16,7 @@ include("data.jl")
 include("model.jl")
 include("postprocess.jl")
 
-function main(; n_chains = 4, n_samples = 1000, seed = 20260508)
+function main(args = ARGS; n_chains = 4, n_samples = 1000, seed = 20260508)
     Random.seed!(seed)
 
     ll    = load_linelist()
