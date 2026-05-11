@@ -104,8 +104,8 @@ julia --project=. -t auto -m Hantavirus -- -n 500 -c 2 -o results/
 
 ```julia
 julia> using Hantavirus
-julia> run()                                           # all defaults
-julia> run(chains=2, samples=500, output="results/")  # with options
+julia> analyse()                                           # all defaults
+julia> analyse(chains=2, samples=500, output="results/")  # with options
 ```
 
 ## Citing
