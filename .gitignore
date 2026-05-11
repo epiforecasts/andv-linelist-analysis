@@ -1,0 +1,12 @@
+# Third-party papers and outbreak reports (PDFs, supplements) — copyrighted;
+# consult sources directly.
+papers/
+docs/
+
+# Model outputs are regenerable from scripts/run.jl.
+output/
+
+# Editor / OS detritus
+.DS_Store
+*.swp
+*~

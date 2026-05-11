@@ -1,0 +1,134 @@
+## Posterior summaries and CSV output.
+
+using CSV, DataFrames, Distributions, MCMCChains, Statistics, Printf
+import FlexiChains
+
+# ---------------------------------------------------------------------------
+# Diagnostics
+# ---------------------------------------------------------------------------
+
+# Flat vector of scalar stat values, one per (scalar) parameter entry.
+function _scalar_stats(summary)
+    out = Float64[]
+    for p in FlexiChains.parameters(summary)
+        v = summary[p]
+        if v isa Number
+            ismissing(v) && continue
+            push!(out, Float64(v))
+        else
+            for x in skipmissing(vec(collect(v)))
+                push!(out, Float64(x))
+            end
+        end
+    end
+    return out
+end
+
+function _num_divergences(chn)
+    for e in FlexiChains.extras(chn)
+        e.name === :numerical_error || continue
+        return Int(sum(skipmissing(vec(chn[e]))))
+    end
+    return 0
+end
+
+function diagnostics(chn)
+    rhats = _scalar_stats(MCMCChains.rhat(chn))
+    esses = _scalar_stats(MCMCChains.ess(chn; kind = :bulk))
+    return (; rhat = maximum(rhats), ess = minimum(esses), ndiv = _num_divergences(chn))
+end
+
+# ---------------------------------------------------------------------------
+# Extracting vector parameters
+# ---------------------------------------------------------------------------
+
+# Returns a vector of pooled samples for each entry of a vector-valued
+# parameter (T_inf, offset, log_R, ...).
+function vector_chain(chn, name::Symbol)
+    arr = chn[name, stack = true]
+    N = size(arr, 3)
+    return [vec(collect(arr[:, :, i])) for i in 1:N]
+end
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+
+qci(x; q = (0.025, 0.5, 0.975)) = (quantile(x, q[1]), quantile(x, q[2]), quantile(x, q[3]))
+
+function _print_qci(label, x; fmt = "%.2f")
+    lo, med, hi = qci(x)
+    @eval @printf $("  %-30s " * fmt * " (95%% CrI " * fmt * " – " * fmt * ")\n") $label $med $lo $hi
+end
+
+function summarise(chn)
+    d = diagnostics(chn)
+    @printf "Diagnostics: max rhat = %.3f, min ess_bulk = %.0f, divergences = %d\n\n" d.rhat d.ess d.ndiv
+
+    μ_inc = vec(collect(chn[:μ_inc])); σ_inc = vec(collect(chn[:σ_inc]))
+    μ_δ   = vec(collect(chn[:μ_δ]));   σ_δ   = vec(collect(chn[:σ_δ]))
+    k_s   = vec(collect(chn[:k]))
+
+    mean_inc = exp.(μ_inc .+ σ_inc .^ 2 ./ 2)
+    var_inc  = exp.(2μ_inc .+ σ_inc .^ 2) .* (exp.(σ_inc .^ 2) .- 1)
+    q95_inc  = [quantile(LogNormal(μ_inc[i], σ_inc[i]), 0.95) for i in eachindex(μ_inc)]
+    q99_inc  = [quantile(LogNormal(μ_inc[i], σ_inc[i]), 0.99) for i in eachindex(μ_inc)]
+    println("Incubation period")
+    _print_qci("mean (d)", mean_inc)
+    _print_qci("95th percentile (d)", q95_inc)
+    _print_qci("99th percentile (d)", q99_inc)
+    println()
+
+    println("Transmission timing δ (days from source onset to secondary infection)")
+    _print_qci("μ_δ (d)", μ_δ)
+    _print_qci("σ_δ (d)", σ_δ)
+    p_pre = Dict{Float64,Vector{Float64}}()
+    for τ in (0.0, -1.0, -2.0)
+        p_pre[τ] = [cdf(Normal(μ_δ[i], σ_δ[i]), τ) for i in eachindex(μ_δ)]
+        _print_qci(@sprintf("P(δ < %.0f)", τ), p_pre[τ]; fmt = "%.3f")
+    end
+    println()
+
+    # Generation interval and serial interval as derived population marginals
+    # (GI = δ + Inc_source, SI = δ + Inc_secondary). They coincide in mean and
+    # SD because Inc_source and Inc_secondary are exchangeable in this model.
+    mean_gi_si = μ_δ .+ mean_inc
+    sd_gi_si   = sqrt.(σ_δ .^ 2 .+ var_inc)
+    println("Generation interval / serial interval (derived: δ + Inc)")
+    _print_qci("mean (d)", mean_gi_si)
+    _print_qci("SD (d)",   sd_gi_si)
+    println()
+
+    println("Offspring distribution")
+    _print_qci("dispersion k", k_s)
+    println()
+
+    log_R_chain = vector_chain(chn, :log_R)
+    labels = bin_labels()
+    println("R(t) by bin")
+    for b in eachindex(log_R_chain)
+        _print_qci(labels[b], exp.(log_R_chain[b]))
+    end
+
+    return (; μ_inc, σ_inc, μ_δ, σ_δ, k = k_s, log_R_chain,
+            mean_gi_si, sd_gi_si, p_pre)
+end
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+
+function save_posterior(post, path)
+    df = DataFrame(μ_inc = post.μ_inc, σ_inc = post.σ_inc,
+                   μ_δ = post.μ_δ,     σ_δ = post.σ_δ,
+                   k = post.k,
+                   mean_gi_si = post.mean_gi_si, sd_gi_si = post.sd_gi_si,
+                   p_pre_0 = post.p_pre[0.0],
+                   p_pre_1 = post.p_pre[-1.0],
+                   p_pre_2 = post.p_pre[-2.0])
+    for b in eachindex(post.log_R_chain)
+        df[!, Symbol("log_R_$b")] = post.log_R_chain[b]
+    end
+    mkpath(dirname(path))
+    CSV.write(path, df)
+end
