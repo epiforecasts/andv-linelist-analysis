@@ -22,8 +22,7 @@ A per-pair constraint enforces `T_inf(secondary) > T_inf(source)` so that
 the generation interval is positive.
 Generation interval = δ + Inc_source; serial interval = δ + Inc_secondary.
 The primary estimates are the population marginals derived from the fitted
-(μ_δ, σ_δ, μ_inc, σ_inc) — these are the generalisable, reportable
-quantities.
+(μ_δ, σ_δ, μ_inc, σ_inc).
 As a diagnostic, GI and SI are also reconstructed empirically from the
 per-pair posterior latent times (`T_inf`, `T_onset`) via `reconstruct_pairs`
 and compared to the analytical estimates via `compare_intervals`.

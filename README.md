@@ -44,8 +44,8 @@ Empirical estimates are recovered directly from per-pair latent event times
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
-| Mean (analytical) | 22.7 d (20.4 – 25.6) |
-| SD (analytical) | 7.4 d (5.7 – 10.6) |
+| Mean | 22.7 d (20.4 – 25.6) |
+| SD | 7.4 d (5.7 – 10.6) |
 
 ### Offspring count (Negative-Binomial)
 
