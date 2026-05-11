@@ -193,49 +193,20 @@ function plot_delta_sense_check(chn, data, path)
     return path
 end
 
-# Pairplot of the population parameters: histograms on the diagonal, scatter
-# in the lower triangle, blank in the upper. Subsampled for speed.
-function plot_pairplot(post, path; n_draws_plot = 1000)
-    params = [
-        ("mu_inc", post.μ_inc),
-        ("sig_inc", post.σ_inc),
-        ("mu_delta", post.μ_δ),
-        ("sig_delta", post.σ_δ),
-        ("k", post.k),
-    ]
-    n = length(params)
-    step = max(1, length(params[1][2]) ÷ n_draws_plot)
-    idx  = 1:step:length(params[1][2])
-
-    panels = []
-    for i in 1:n, j in 1:n
-        if i == j
-            p = histogram(params[i][2]; bins = 30, normalize = :pdf,
-                          legend = false, framestyle = :semi,
-                          color = :steelblue, linecolor = :steelblue,
-                          xlabel = (i == n) ? params[j][1] : "",
-                          ylabel = (j == 1) ? params[i][1] : "",
-                          xguidefontsize = 8, yguidefontsize = 8,
-                          xtickfontsize = 6, ytickfontsize = 6)
-        elseif i > j
-            p = scatter(params[j][2][idx], params[i][2][idx];
-                        markersize = 1.0, markeralpha = 0.10,
-                        markerstrokewidth = 0, color = :steelblue,
-                        legend = false, framestyle = :semi,
-                        xlabel = (i == n) ? params[j][1] : "",
-                        ylabel = (j == 1) ? params[i][1] : "",
-                        xguidefontsize = 8, yguidefontsize = 8,
-                        xtickfontsize = 6, ytickfontsize = 6)
-        else
-            p = plot(; framestyle = :none, legend = false)
-        end
-        push!(panels, p)
-    end
-    plt = plot(panels...; layout = (n, n), size = (1000, 1000),
-                          plot_title = "Posterior pairplot",
-                          plot_titlefontsize = 12)
+# Posterior pairplot of the population parameters using PairPlots.jl
+# (CairoMakie backend). Marginal density on the diagonal, scatter +
+# contours on the off-diagonals.
+function plot_pairplot(post, path)
+    data = (;
+        μ_inc = post.μ_inc,
+        σ_inc = post.σ_inc,
+        μ_δ   = post.μ_δ,
+        σ_δ   = post.σ_δ,
+        k     = post.k,
+    )
+    fig = PairPlots.pairplot(data)
     mkpath(dirname(path))
-    savefig(plt, path)
+    CairoMakie.save(path, fig)
     return path
 end
 

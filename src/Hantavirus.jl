@@ -13,6 +13,8 @@ using Random: Random
 using Statistics: quantile
 using Turing: Turing, @model, NUTS, MCMCThreads, sample
 import FlexiChains
+import PairPlots
+import CairoMakie
 
 include("data.jl")
 include("model.jl")
