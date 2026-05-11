@@ -387,23 +387,27 @@ function plot_posterior_predictions(chn, data, path;
 
     xs_δ  = range(quantile(δ_pred, 0.001),  quantile(δ_pred, 0.999);  length = 300)
     xs_si = range(quantile(si_pred, 0.001), quantile(si_pred, 0.999); length = 300)
+    # Observed values are day-resolution (exposure / onset dates recorded as
+    # whole days), so show as unit-width histogram bins rather than KDE.
+    δ_bins  = (floor(minimum(obs_δ))  - 0.5) : 1.0 : (ceil(maximum(obs_δ))  + 0.5)
+    si_bins = (floor(minimum(obs_si)) - 0.5) : 1.0 : (ceil(maximum(obs_si)) + 0.5)
     p_δ = plot(xs_δ, _kde(δ_pred, collect(xs_δ));
                linewidth = 2, fill = (0, 0.4, :steelblue),
                label = "posterior predictive",
                title = "δ: predictive vs observed", xlabel = "days",
                ylabel = "density")
-    plot!(p_δ, xs_δ, _kde(obs_δ, collect(xs_δ));
-          linewidth = 2, fill = (0, 0.4, :darkorange),
-          label = "observed per-pair medians (N = $(length(obs_δ)))")
+    histogram!(p_δ, obs_δ; bins = δ_bins, normalize = :pdf,
+               alpha = 0.6, color = :darkorange,
+               label = "observed per-pair medians (N = $(length(obs_δ)))")
 
     p_si = plot(xs_si, _kde(si_pred, collect(xs_si));
                 linewidth = 2, fill = (0, 0.4, :steelblue),
                 label = "posterior predictive",
                 title = "SI: predictive vs observed", xlabel = "days",
                 ylabel = "density")
-    plot!(p_si, xs_si, _kde(obs_si, collect(xs_si));
-          linewidth = 2, fill = (0, 0.4, :darkorange),
-          label = "observed per-pair medians (N = $(length(obs_si)))")
+    histogram!(p_si, obs_si; bins = si_bins, normalize = :pdf,
+               alpha = 0.6, color = :darkorange,
+               label = "observed per-pair medians (N = $(length(obs_si)))")
 
     plt = plot(p_δ, p_si; layout = (1, 2), size = (1400, 450))
     mkpath(dirname(path))

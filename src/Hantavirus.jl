@@ -7,7 +7,7 @@ using Dates: Dates, Date, Day
 using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
                      Uniform, logpdf, cdf, pdf
 using MCMCChains: MCMCChains
-using Plots: plot, plot!, hline!, histogram, vline!, scatter, savefig
+using Plots: plot, plot!, hline!, histogram, histogram!, vline!, scatter, savefig
 using Printf: @printf, @sprintf
 using Random: Random
 using Statistics: quantile, mean, std
