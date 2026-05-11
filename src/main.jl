@@ -27,6 +27,9 @@ function analyse(;
     save_posterior(post, joinpath(output, "posterior.csv"))
     plot_rt(post, joinpath(figures, "Rt.png"))
     plot_delta_sense_check(chn, d, joinpath(figures, "delta_sense_check.png"))
+    plot_pairplot(post, joinpath(figures, "pairplot.png"))
+    plot_prior_predictives(joinpath(figures, "prior_predictives.png"))
+    plot_posterior_predictions(chn, d, joinpath(figures, "posterior_predictions.png"))
     return chn, post
 end
 

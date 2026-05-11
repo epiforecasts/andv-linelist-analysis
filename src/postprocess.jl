@@ -193,6 +193,134 @@ function plot_delta_sense_check(chn, data, path)
     return path
 end
 
+# Pairplot of the population parameters: histograms on the diagonal, scatter
+# in the lower triangle, blank in the upper. Subsampled for speed.
+function plot_pairplot(post, path; n_draws_plot = 1000)
+    params = [
+        ("mu_inc", post.μ_inc),
+        ("sig_inc", post.σ_inc),
+        ("mu_delta", post.μ_δ),
+        ("sig_delta", post.σ_δ),
+        ("k", post.k),
+    ]
+    n = length(params)
+    step = max(1, length(params[1][2]) ÷ n_draws_plot)
+    idx  = 1:step:length(params[1][2])
+
+    panels = []
+    for i in 1:n, j in 1:n
+        if i == j
+            p = histogram(params[i][2]; bins = 30, normalize = :pdf,
+                          legend = false, framestyle = :semi,
+                          color = :steelblue, linecolor = :steelblue,
+                          xlabel = (i == n) ? params[j][1] : "",
+                          ylabel = (j == 1) ? params[i][1] : "",
+                          xguidefontsize = 8, yguidefontsize = 8,
+                          xtickfontsize = 6, ytickfontsize = 6)
+        elseif i > j
+            p = scatter(params[j][2][idx], params[i][2][idx];
+                        markersize = 1.0, markeralpha = 0.10,
+                        markerstrokewidth = 0, color = :steelblue,
+                        legend = false, framestyle = :semi,
+                        xlabel = (i == n) ? params[j][1] : "",
+                        ylabel = (j == 1) ? params[i][1] : "",
+                        xguidefontsize = 8, yguidefontsize = 8,
+                        xtickfontsize = 6, ytickfontsize = 6)
+        else
+            p = plot(; framestyle = :none, legend = false)
+        end
+        push!(panels, p)
+    end
+    plt = plot(panels...; layout = (n, n), size = (1000, 1000),
+                          plot_title = "Posterior pairplot",
+                          plot_titlefontsize = 12)
+    mkpath(dirname(path))
+    savefig(plt, path)
+    return path
+end
+
+# Prior predictives. Sample (μ_inc, σ_inc, μ_δ, σ_δ) from their independent
+# priors, then for each draw sample Inc, δ, GI = δ + Inc. Show the implied
+# distributions before seeing any data.
+function plot_prior_predictives(path; n = 5000, rng = Random.MersenneTwister(0))
+    μ_inc = rand(rng, Normal(3.0, 0.5), n)
+    σ_inc = abs.(rand(rng, Normal(0.0, 0.5), n))
+    μ_δ   = rand(rng, Normal(0.0, 5.0), n)
+    σ_δ   = abs.(rand(rng, Normal(0.0, 1.0), n))
+    inc_s = [rand(rng, LogNormal(μ_inc[i], σ_inc[i])) for i in 1:n]
+    δ_s   = [rand(rng, Normal(μ_δ[i], σ_δ[i]))       for i in 1:n]
+    gi_s  = δ_s .+ inc_s
+
+    p_inc = histogram(inc_s; bins = 100, normalize = :pdf,
+                      title = "Inc (prior)", xlabel = "days",
+                      xlims = (0, 80), legend = false, color = :steelblue)
+    p_del = histogram(δ_s; bins = 100, normalize = :pdf,
+                      title = "δ (prior)", xlabel = "days from source onset",
+                      xlims = (-25, 25), legend = false, color = :steelblue)
+    p_gi  = histogram(gi_s; bins = 100, normalize = :pdf,
+                      title = "GI / SI (prior)", xlabel = "days",
+                      xlims = (-30, 80), legend = false, color = :steelblue)
+    plt = plot(p_inc, p_del, p_gi; layout = (1, 3), size = (1500, 400))
+    mkpath(dirname(path))
+    savefig(plt, path)
+    return path
+end
+
+# Posterior predictive: sample new pairs from the fitted (μ_*, σ_*) and
+# overlay with the per-pair posterior medians from the observed pairs.
+# If predicted and observed match in shape, the population summary is
+# consistent with the data; deviations point at residual structure.
+function plot_posterior_predictions(chn, data, path;
+                                    n_per_draw = 50,
+                                    rng = Random.MersenneTwister(123))
+    μ_inc = vec(collect(chn[:μ_inc]))
+    σ_inc = vec(collect(chn[:σ_inc]))
+    μ_δ   = vec(collect(chn[:μ_δ]))
+    σ_δ   = vec(collect(chn[:σ_δ]))
+    n_draws = length(μ_inc)
+
+    δ_pred  = Float64[]
+    si_pred = Float64[]
+    for i in 1:n_draws
+        for _ in 1:n_per_draw
+            d = rand(rng, Normal(μ_δ[i], σ_δ[i]))
+            c = rand(rng, LogNormal(μ_inc[i], σ_inc[i]))
+            push!(δ_pred,  d)
+            push!(si_pred, d + c)
+        end
+    end
+
+    t_inf   = vector_chain(chn, :T_inf)
+    t_onset = vector_chain(chn, :T_onset)
+    obs_δ  = Float64[]
+    obs_si = Float64[]
+    for i in 1:data.N
+        src = data.source_idx[i]
+        src == 0 && continue
+        push!(obs_δ,  quantile(t_inf[i]   .- t_onset[src], 0.5))
+        push!(obs_si, quantile(t_onset[i] .- t_onset[src], 0.5))
+    end
+
+    p_δ = histogram(δ_pred; bins = 80, normalize = :pdf,
+                    alpha = 0.5, color = :steelblue, label = "posterior predictive",
+                    title = "δ: predictive vs observed", xlabel = "days")
+    histogram!(p_δ, obs_δ; bins = 15, normalize = :pdf,
+               alpha = 0.5, color = :darkorange,
+               label = "observed per-pair medians (N = $(length(obs_δ)))")
+
+    p_si = histogram(si_pred; bins = 80, normalize = :pdf,
+                     alpha = 0.5, color = :steelblue, label = "posterior predictive",
+                     title = "SI: predictive vs observed", xlabel = "days")
+    histogram!(p_si, obs_si; bins = 15, normalize = :pdf,
+               alpha = 0.5, color = :darkorange,
+               label = "observed per-pair medians (N = $(length(obs_si)))")
+
+    plt = plot(p_δ, p_si; layout = (1, 2), size = (1400, 450))
+    mkpath(dirname(path))
+    savefig(plt, path)
+    return path
+end
+
 function save_posterior(post, path)
     df = DataFrame(μ_inc = post.μ_inc, σ_inc = post.σ_inc,
                    μ_δ = post.μ_δ,     σ_δ = post.σ_δ,
