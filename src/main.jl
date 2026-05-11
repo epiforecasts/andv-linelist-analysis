@@ -2,11 +2,12 @@
 ## For interactive use, call analyse() directly with keyword arguments.
 
 function analyse(;
-    data    = LINELIST_PATH,
-    output  = OUTPUT_DIR,
-    samples = 1000,
-    chains  = 4,
-    seed    = 20260508,
+    data     = LINELIST_PATH,
+    output   = OUTPUT_DIR,
+    samples  = 1000,
+    chains   = 4,
+    seed     = 20260508,
+    progress = true,
 )
     Random.seed!(seed)
 
@@ -18,7 +19,7 @@ function analyse(;
     chn = sample(
         joint_model(d, edges),
         NUTS(0.95), MCMCThreads(), samples, chains;
-        progress = false,
+        progress = progress,
     )
 
     post = summarise(chn)
@@ -50,10 +51,11 @@ function main(args = ARGS)
     end
     p = parse_args(args, s)
     return analyse(;
-        data    = p["data"],
-        output  = p["output"],
-        samples = p["samples"],
-        chains  = p["chains"],
-        seed    = p["seed"],
+        data     = p["data"],
+        output   = p["output"],
+        samples  = p["samples"],
+        chains   = p["chains"],
+        seed     = p["seed"],
+        progress = false,
     )
 end
