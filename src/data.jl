@@ -2,9 +2,8 @@
 
 using CSV, DataFrames, Dates
 
-const PROJECT_ROOT  = normpath(joinpath(@__DIR__, ".."))
-const LINELIST_PATH = joinpath(PROJECT_ROOT, "data", "linelist.csv")
-const OUTPUT_DIR    = joinpath(PROJECT_ROOT, "output")
+const LINELIST_PATH = joinpath(pkgdir(@__MODULE__), "data", "linelist.csv")
+const OUTPUT_DIR    = joinpath(pkgdir(@__MODULE__), "output")
 
 # Monthly R(t) bin edges spanning the outbreak.
 const BIN_EDGES = [Date("2018-12-01"), Date("2019-01-01"), Date("2019-02-01")]
