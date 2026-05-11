@@ -36,8 +36,8 @@ Negative values mean the secondary was infected before the source became symptom
 
 ### Generation interval / serial interval
 
-Both are δ plus an incubation period (the source's for GI, the secondary's
-for SI), and share the same marginal distribution.
+Both are the transmission timing plus an incubation period (the source's
+for GI, the secondary's for SI), and share the same marginal distribution.
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
@@ -58,23 +58,24 @@ Weekly bins; shaded band is the 95% credible interval.
 
 ![R(t) over the outbreak](figures/Rt.png)
 
-## Model
+## Methods
 
 Each case has two continuous latents. `T_onset[i]` is uniform over the
 recorded onset window, which is one day wide if only a single onset date
 was recorded. `T_inf[i]` is uniform over the exposure window for sourced
 cases, or over an 80-day pre-onset window for the zoonotic index.
 
-| Quantity | Distribution | Parameters |
+| Quantity | Distribution | Priors |
 |---|---|---|
-| Incubation period `Inc = T_onset − T_inf` | LogNormal(μ_inc, σ_inc) | `μ_inc ~ Normal(3.0, 0.5)`, `σ_inc ~ half-Normal(0, 0.5)` |
-| Transmission timing `δ = T_inf(sec) − T_onset(src)` | Normal(μ_δ, σ_δ) | `μ_δ ~ Normal(0, 5)`, `σ_δ ~ half-Normal(0, 1)` |
-| Offspring count `Z` per case | Negative-Binomial(`k`, `k/(k + R(t))`) | `k ~ half-Normal(0.3, 0.5)` |
-| `log R(t)` over weekly bins | Random walk with innovation SD `σ_rw` | `log R[1] ~ Normal(log 1.5, 1)`, `σ_rw ~ half-Normal(0, 0.5)` |
+| Incubation period (`T_onset − T_inf`) | LogNormal | log-mean ~ Normal(3.0, 0.5), log-SD ~ half-Normal(0, 0.5) |
+| Transmission timing relative to source onset (`T_inf(sec) − T_onset(src)`) | Normal | mean ~ Normal(0, 5), SD ~ half-Normal(0, 1) |
+| Offspring count `Z` per case | Negative-Binomial with mean `R(t)` and dispersion `k` | `k` ~ half-Normal(0.3, 0.5) |
+| `log R(t)` over weekly bins | Random walk | first bin ~ Normal(log 1.5, 1); innovation SD ~ half-Normal(0, 0.5) |
 
 A per-pair constraint enforces `T_inf(secondary) > T_inf(source)` so that
-the generation interval is positive. Generation interval = δ + Inc(source);
-serial interval = δ + Inc(secondary). Both are computed in post-processing.
+the generation interval is positive. Generation interval = transmission
+timing + source's incubation period; serial interval = transmission timing
++ secondary's incubation period. Both are computed in post-processing.
 
 Inference uses NUTS, 4 chains, 1000 post-warmup samples each, `target_accept = 0.95`. The seed is set in `scripts/run.jl`.
 
@@ -83,7 +84,7 @@ Inference uses NUTS, 4 chains, 1000 post-warmup samples each, `target_accept = 0
 Most of what the model can say about transmission timing is limited by how
 the line list was recorded. 31 of 33 sourced pairs have a single-day
 exposure window, and that day is almost always the source's symptom onset.
-So the fitted σ_δ ≈ 0.6 d mostly reflects within-day uncertainty in
+So the fitted transmission-timing SD of about 0.6 d mostly reflects within-day uncertainty in
 `T_inf`. The biological spread of transmission timing could be wider; we
 cannot tell from these data. The pre-symptomatic transmission fraction
 reported above is conditional on the recorded contact day being when
