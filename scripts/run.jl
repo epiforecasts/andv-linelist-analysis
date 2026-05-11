@@ -24,6 +24,7 @@ function main(; n_chains = 4, n_samples = 1000, seed = 20260508)
     post = summarise(chn)
     save_posterior(post, joinpath(OUTPUT_DIR, "posterior.csv"))
     plot_rt(post, joinpath(PROJECT_ROOT, "figures", "Rt.png"))
+    plot_delta_sense_check(chn, data, joinpath(PROJECT_ROOT, "figures", "delta_sense_check.png"))
     return chn, post
 end
 
