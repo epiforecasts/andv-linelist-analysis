@@ -1,0 +1,21 @@
+name: JET
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  jet:
+    name: JET static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.11"
+      - uses: julia-actions/cache@v2
+      - name: Instantiate JET environment
+        run: julia --project=test/jet -e 'import Pkg; Pkg.instantiate()'
+      - name: Run JET checks
+        run: julia --project=test/jet test/jet/runtests.jl
