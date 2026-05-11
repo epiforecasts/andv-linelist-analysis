@@ -1,6 +1,7 @@
 using Pkg: Pkg
 Pkg.instantiate()
 
+using DocumenterVitepress
 using Documenter
 using Hantavirus
 
@@ -19,19 +20,20 @@ makedocs(;
     modules = [Hantavirus],
     pages = [
         "Home" => "index.md",
-        "Getting Started" => "getting-started.md",
         "Methods" => "methods.md",
         "API Reference" => "api.md",
     ],
-    format = Documenter.HTML(;
-        prettyurls = get(ENV, "CI", "false") == "true",
-        canonical = "https://sbfnk.github.io/hantavirus",
-        repolink = "https://github.com/sbfnk/hantavirus",
+    format = DocumenterVitepress.MarkdownVitepress(;
+        repo = "github.com/sbfnk/hantavirus",
+        devbranch = "main",
+        devurl = "dev",
     ),
 )
 
-deploydocs(;
+DocumenterVitepress.deploydocs(;
     repo = "github.com/sbfnk/hantavirus",
+    target = "build",
+    branch = "gh-pages",
     devbranch = "main",
     push_preview = true,
 )
