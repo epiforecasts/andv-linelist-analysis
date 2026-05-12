@@ -27,12 +27,34 @@ function analyse(;
 
     post = summarise(chn)
     save_posterior(post, joinpath(output, "posterior.csv"))
-    plot_rt(post, joinpath(figures, "Rt.png"))
-    plot_delta_sense_check(chn, d, joinpath(figures, "delta_sense_check.png"))
-    plot_pairplot(post, joinpath(figures, "pairplot.png"))
-    plot_prior_predictives(joinpath(figures, "prior_predictives.png"))
-    plot_posterior_predictions(chn, d, joinpath(figures, "posterior_predictions.png"))
+
+    mkpath(figures)
+    savefig(plot_rt(chn),                     joinpath(figures, "Rt.png"))
+    savefig(plot_delta_sense_check(chn, d),   joinpath(figures, "delta_sense_check.png"))
+    savefig(plot_prior_predictives(),         joinpath(figures, "prior_predictives.png"))
+    savefig(plot_posterior_predictive(chn),   joinpath(figures, "posterior_predictions.png"))
+    _save_makie_figure(plot_pair(chn),        joinpath(figures, "pairplot.png"))
+
     return chn, post
+end
+
+# `plot_pair` returns a Makie `Figure`; saving a Makie figure needs a Makie
+# backend (e.g. CairoMakie) loaded at the call site. Look the `save` method
+# up dynamically so the package itself doesn't depend on Makie.
+function _save_makie_figure(fig, path)
+    backend = nothing
+    for name in (:CairoMakie, :GLMakie, :WGLMakie, :Makie)
+        if isdefined(Main, name)
+            backend = getfield(Main, name)
+            break
+        end
+    end
+    if backend === nothing
+        @warn "No Makie backend loaded in Main; skipping pairplot save" path
+        return path
+    end
+    Base.invokelatest(backend.save, path, fig)
+    return path
 end
 
 function (@main)(args)
