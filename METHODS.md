@@ -16,7 +16,7 @@ cases, or over an 80-day pre-onset window for the zoonotic index.
 | Incubation period (`T_onset − T_inf`) | LogNormal | log-mean ~ Normal(3.0, 0.5), log-SD ~ half-Normal(0, 0.5) |
 | Transmission timing relative to source onset (`T_inf(sec) − T_onset(src)`) | Normal | mean ~ Normal(0, 5), SD ~ half-Normal(0, 1) |
 | Offspring count `Z` per case | Negative-Binomial with mean `R(t)` and dispersion `k` | `k` ~ half-Normal(0.3, 0.5) |
-| `log R(t)` over weekly bins | Random walk | first bin ~ Normal(log 1.5, 1); innovation SD ~ half-Normal(0, 0.5) |
+| `log R(t)` over weekly bins | Non-centred random walk | first bin ~ Normal(log 1.5, 1); innovation SD ~ half-Normal(0, 0.2) (≈ 5%/day typical, ≈ 15%/day at the prior 95th percentile) |
 
 A per-pair constraint enforces `T_inf(secondary) > T_inf(source)` so that
 the generation interval is positive. Generation interval = transmission
