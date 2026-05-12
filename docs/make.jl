@@ -27,8 +27,9 @@ end
 const LITERATE_SRC = joinpath(@__DIR__, "examples", "analysis.jl")
 const LITERATE_OUT = joinpath(@__DIR__, "src")
 Literate.markdown(LITERATE_SRC, LITERATE_OUT;
-                  name = "analysis", execute = true,
-                  flavor = Literate.DocumenterFlavor())
+                  name = "analysis",
+                  flavor = Literate.DocumenterFlavor(),
+                  mdstrings = true, credit = false)
 
 makedocs(;
     sitename = "Hantavirus.jl",
