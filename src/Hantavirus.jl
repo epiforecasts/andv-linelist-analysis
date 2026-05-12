@@ -12,6 +12,8 @@ using Printf: @printf, @sprintf
 using Random: Random
 using Statistics: quantile
 using Turing: Turing, @model, NUTS, MCMCThreads, sample
+using ADTypes: AutoEnzyme
+using Enzyme: Enzyme
 import FlexiChains
 
 include("data.jl")
