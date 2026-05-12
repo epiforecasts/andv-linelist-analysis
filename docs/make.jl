@@ -21,6 +21,7 @@ makedocs(;
     pages = [
         "Home" => "index.md",
         "Methods" => "methods.md",
+        "Real-time monitoring" => "realtime.md",
         "API Reference" => "api.md",
     ],
     format = DocumenterVitepress.MarkdownVitepress(;
