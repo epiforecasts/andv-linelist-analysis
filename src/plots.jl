@@ -1,6 +1,6 @@
-## Package-level plotting and summary-table helpers used by the analysis
-## walkthrough and the CLI. Heavier plotting (R(t) spaghetti, δ sense check,
-## pairplot legacy) lives in `postprocess.jl`.
+## Package-level plotting and summary-table helpers shared by the analysis
+## walkthrough and the CLI. Every function returns a figure object so the
+## caller decides whether to render inline or write to disk.
 
 """
     plot_data(ll)
@@ -208,4 +208,108 @@ function plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
                       gisi_dists, samples.si, "days")
 
     return plot(p_inc, p_δ, p_gi, p_si; layout = (2, 2), size = (1000, 700))
+end
+
+"""
+    plot_rt(chn; n_draws_plot = 100, ymax = 4.0)
+
+Spaghetti plot of R(t) over weekly bins. Each thinned posterior draw is a
+horizontal segment per bin with the line broken between bins so no vertical
+step connectors are drawn. Bin edges come from `BIN_EDGES` (data.jl); the
+first and last bins extend one bin-width past the listed edges. Returns a
+Plots.jl `Plot`.
+"""
+function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
+    log_R = vector_chain(chn, :log_R)
+    n_draws = length(log_R[1])
+    step    = max(1, n_draws ÷ n_draws_plot)
+    idx     = 1:step:n_draws
+
+    bin_width  = BIN_EDGES[2] - BIN_EDGES[1]
+    left_edge  = vcat(BIN_EDGES[1] - bin_width, BIN_EDGES)
+    right_edge = vcat(BIN_EDGES, BIN_EDGES[end] + bin_width)
+    xs = Date[]
+    for b in eachindex(log_R)
+        push!(xs, left_edge[b]); push!(xs, right_edge[b]); push!(xs, right_edge[b])
+    end
+
+    plt = plot(; ylims = (0.0, ymax),
+                 xlabel = "Date", ylabel = "R(t)",
+                 legend = false,
+                 title  = "Time-varying reproduction number (weekly bins)")
+    for d in idx
+        ys = Float64[]
+        for b in eachindex(log_R)
+            r = exp(log_R[b][d])
+            push!(ys, r); push!(ys, r); push!(ys, NaN)
+        end
+        plot!(plt, xs, ys; linecolor = :steelblue, linewidth = 1.6, alpha = 0.25)
+    end
+    hline!(plt, [1.0]; linestyle = :dash, color = :grey)
+    return plt
+end
+
+"""
+    plot_delta_sense_check(chn, data)
+
+Sense-check the per-pair posterior of δ against the fitted population
+`Normal(μ_δ, σ_δ)`. For each sourced pair, take the posterior of
+`δ_pair = T_inf[secondary] − T_onset[source]` and reduce to its median; then
+plot the histogram of those per-pair medians with the population density
+overlaid. Returns a Plots.jl `Plot`.
+"""
+function plot_delta_sense_check(chn, data)
+    t_inf   = vector_chain(chn, :T_inf)
+    t_onset = vector_chain(chn, :T_onset)
+    μ_δ     = _draws(chn, :μ_δ)
+    σ_δ     = _draws(chn, :σ_δ)
+
+    medians = Float64[]
+    for i in 1:data.N
+        src = data.source_idx[i]
+        src == 0 && continue
+        push!(medians, quantile(t_inf[i] .- t_onset[src], 0.5))
+    end
+
+    μ_med = quantile(μ_δ, 0.5)
+    σ_med = quantile(σ_δ, 0.5)
+
+    plt = histogram(medians; bins = 15, normalize = :pdf,
+                    label  = "per-pair posterior medians (N = $(length(medians)))",
+                    xlabel = "δ (days from source onset)", ylabel = "density",
+                    title  = "Per-pair δ vs fitted population Normal")
+    xs = range(μ_med - 4σ_med, μ_med + 4σ_med; length = 200)
+    plot!(plt, xs, pdf.(Normal(μ_med, σ_med), xs);
+          linewidth = 2, label = "Normal(μ_δ, σ_δ) fitted")
+    vline!(plt, [0.0]; linestyle = :dash, color = :grey, label = "source onset")
+    return plt
+end
+
+"""
+    plot_prior_predictives(; n = 5000, rng = Random.MersenneTwister(0))
+
+Prior-predictive panel: histograms of Inc, δ, and GI/SI drawn from the
+package's independent priors on `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`. Returns a
+Plots.jl `Plot`.
+"""
+function plot_prior_predictives(; n::Int = 5000,
+                                  rng = Random.MersenneTwister(0))
+    μ_inc = rand(rng, Normal(3.0, 0.5), n)
+    σ_inc = abs.(rand(rng, Normal(0.0, 0.5), n))
+    μ_δ   = rand(rng, Normal(0.0, 5.0), n)
+    σ_δ   = abs.(rand(rng, Normal(0.0, 1.0), n))
+    inc_s = [rand(rng, LogNormal(μ_inc[i], σ_inc[i])) for i in 1:n]
+    δ_s   = [rand(rng, Normal(μ_δ[i], σ_δ[i]))       for i in 1:n]
+    gi_s  = δ_s .+ inc_s
+
+    p_inc = histogram(inc_s; bins = 100, normalize = :pdf,
+                      title = "Inc (prior)", xlabel = "days",
+                      xlims = (0, 80), legend = false, color = :steelblue)
+    p_del = histogram(δ_s; bins = 100, normalize = :pdf,
+                      title = "δ (prior)", xlabel = "days from source onset",
+                      xlims = (-25, 25), legend = false, color = :steelblue)
+    p_gi  = histogram(gi_s; bins = 100, normalize = :pdf,
+                      title = "GI / SI (prior)", xlabel = "days",
+                      xlims = (-30, 80), legend = false, color = :steelblue)
+    return plot(p_inc, p_del, p_gi; layout = (1, 3), size = (1500, 400))
 end

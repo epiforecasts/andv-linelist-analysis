@@ -91,15 +91,7 @@ summary_table(chn)
 #
 # Spaghetti of thinned posterior draws over the weekly bins; reverts to the prior in late-January bins where cases are thin (see Limitations).
 
-post = mktemp() do _path, io
-    redirect_stdout(io) do
-        summarise(chn)
-    end
-end
-plot_rt(post, "rt_spaghetti.png"; n_draws_plot = 100)
-nothing #hide
-
-# ![R(t) spaghetti](rt_spaghetti.png)
+plot_rt(chn)
 
 # ## Pair plot of population parameters
 #
@@ -115,3 +107,15 @@ plot_pair(chn)
 # GI / SI use a moment-matched Normal for the ribbon and exact `δ + Inc` samples for the histogram.
 
 plot_posterior_predictive(chn)
+
+# ## δ sense check
+#
+# Compare the per-pair posterior medians of δ to the fitted population `Normal(μ_δ, σ_δ)`.
+
+plot_delta_sense_check(chn, d)
+
+# ## Prior predictives
+#
+# Implied prior distributions for the incubation period, transmission timing δ, and the derived generation / serial interval before any data are seen.
+
+plot_prior_predictives()
