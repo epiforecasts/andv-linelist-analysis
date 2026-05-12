@@ -1,7 +1,7 @@
 # Real-time vs retrospective monitoring
 
-The base `joint_model` fits a closed-out outbreak with complete observation.
-In real time, three biases need correcting:
+The base `joint_model` fits a closed-out outbreak with complete
+observation. In real time, three biases need correcting:
 
 1. Long-incubation cases infected before the cut-off may not yet have
    developed symptoms — observed incubation periods are enriched for
@@ -13,149 +13,142 @@ In real time, three biases need correcting:
    the observed offspring count is a downward-biased estimate of R(t)
    near the cut-off.
 
-This page walks through fitting the same outbreak retrospectively and
-again at a mid-outbreak cut-off and compares the resulting R(t)
-trajectories.
+The real-time machinery in `joint_model` corrects for these via per-case
+right-truncation on Inc and δ and a cluster-completeness adjustment on
+the NB offspring count (the [`F_cluster`](@ref) integral).
 
-## Setting up the two analyses
+This page checks whether those corrections do their job by overlaying
+three fits at the same outbreak cut-off date.
 
-The whole real-time machinery is gated on `obs_time` in the data object.
-Pass nothing and the model is identical to the retrospective form; pass a
-date and the per-case truncation terms and the cluster-completeness
-adjustment switch on.
-
-`filter_realtime` simulates the analyst's view at a cut-off: cases with
-onset after the cut-off are dropped and the offspring count column is
-re-derived so the line list is internally consistent.
+## The three fits
 
 ```@example realtime
 using Hantavirus
 using Dates: Date
-using Random: Random
 
 obs_date = Date("2018-12-31")
+ll       = load_linelist()
 
-ll      = load_linelist()
-ll_rt   = filter_realtime(ll, obs_date)
+ll_truth = filter_by_exposure(ll, obs_date)   # cases known infected by obs_date
+ll_naive = filter_realtime(ll, obs_date)      # cases known observed by obs_date
 
-(retrospective = nrow(ll), realtime = nrow(ll_rt))
+(retained_truth = nrow(ll_truth), retained_naive = nrow(ll_naive))
 ```
 
-## The cluster-completeness integral
-
-`F_cluster(Δ, μ_inc, σ_inc, μ_δ, σ_δ)` is the probability that the full
-`Inc(src) + δ + Inc(sec)` chain fits in `Δ`. It thins the NB offspring
-mean for each source case so that the observed count is calibrated
-against the fraction of its true offspring already detectable at the
-cut-off.
+| Fit | Linelist | `obs_time` | Interpretation |
+|---|---|---|---|
+| **Counterfactual retro** | `ll_truth` (exposure-filtered) | `nothing` | What an analyst would estimate at obs_date if they had a time machine — full Inc/δ info for every case infected by then. Not realisable in real time. |
+| **Corrected real-time** | `ll_naive` (onset-filtered) | `obs_date` | What `joint_model` offers in real time, with truncation and cluster-completeness corrections active. |
+| **Naive real-time** | `ll_naive` (onset-filtered) | `nothing` | What you'd get if you just filtered the linelist and fit without corrections — the bias the corrections are supposed to fix. |
 
 ```@example realtime
-using Plots: plot, plot!, hline!, savefig
+samples = 300
+chains  = 2
+seed    = 20260512
+tmp     = (output = mktempdir(), figures = mktempdir())
 
-Δs = 0.0:1.0:120.0
-F  = F_cluster.(Δs, 3.0, 0.5, 0.0, 1.0)
-plt = plot(Δs, F;
-           xlabel = "Δ = obs_time − T_inf(src)  (days)",
-           ylabel = "F_cluster",
-           legend = false, linewidth = 2,
-           title  = "Probability the full chain has completed by Δ")
-plt
-```
-
-`F_cluster` is computed by 2-D quadrature in standardised normal
-coordinates over `Integrals.jl`. The default algorithm is
-`HCubatureJL()` — pure-Julia adaptive `h`-cubature, no native binary
-deps, the standard SciML default for multi-D smooth integrands. The
-algorithm is configurable via the `alg` keyword:
-
-```julia
-using Integrals: HCubatureJL, QuadratureRule
-
-F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ)                          # HCubatureJL, adaptive
-F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ; reltol = 1e-4)            # looser tol
-F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ; alg = QuadratureRule(...)) # fixed-node, for diagnostics
-```
-
-The same switch threads through `joint_model` and `analyse` as the
-`fcluster_alg` argument, so a model fit can be re-run against an
-alternative integral for sensitivity checks. `joint_model` differentiates
-through `F_cluster` under **Mooncake reverse mode** via
-`DifferentiationInterface.jl`, which consumes the
-`ChainRulesCore.rrule` that `Integrals.jl` defines for its solve
-machinery.
-
-## Fitting both views
-
-The two fits use identical priors; the only difference is whether
-`obs_time` is supplied. Small sample budgets are used here so the page
-builds quickly; for a publication-quality run, scale up `samples` and
-`chains`.
-
-```@example realtime
-tmp_out = mktempdir()
-tmp_fig = mktempdir()
-
-chn_retro, post_retro = analyse(;
-    data    = ll,
-    samples = 300, chains = 2, seed = 20260512,
-    output  = tmp_out, figures = tmp_fig,
-)
+chn_truth, post_truth = analyse(; data = ll_truth,
+                                  samples, chains, seed, tmp...,)
+chn_rt,    post_rt    = analyse(; data = ll_naive, obs_time = obs_date,
+                                  samples, chains, seed, tmp...,)
+chn_naive, post_naive = analyse(; data = ll_naive,
+                                  samples, chains, seed, tmp...,)
 nothing # hide
 ```
 
-```@example realtime
-chn_rt, post_rt = analyse(;
-    data     = ll,
-    obs_time = obs_date,
-    samples  = 300, chains = 2, seed = 20260512,
-    output   = tmp_out, figures = tmp_fig,
-)
-nothing # hide
-```
+## Population posteriors
 
-## R(t) comparison
-
-The two posteriors should agree on R(t) early in the outbreak (before
-the cut-off) but the retrospective fit will recover R(t) for the full
-window, while the real-time fit only resolves bins covered by retained
-cases. The cluster-completeness correction should pull the real-time
-estimate up in the bins immediately before the cut-off, where
-retrospective offspring counts are biased downward by clusters whose
-chains had not yet completed.
+For each of `(μ_inc, σ_inc, μ_δ, σ_δ, k)`, the three posteriors are
+overlaid on the same panel. The corrected real-time fit should track
+the counterfactual retro; the naive fit should diverge from it in the
+direction of the right-truncation bias (shorter Inc, more negative δ).
 
 ```@example realtime
+using Plots: plot, histogram!, vline!, savefig
 using Statistics: median
 
-rt_q = post -> (lo  = [quantile(exp.(post.log_R_chain[b]), 0.10) for b in eachindex(post.log_R_chain)],
-                med = [quantile(exp.(post.log_R_chain[b]), 0.50) for b in eachindex(post.log_R_chain)],
-                hi  = [quantile(exp.(post.log_R_chain[b]), 0.90) for b in eachindex(post.log_R_chain)])
+function overlay_marginals(fits)
+    params = [(:μ_inc, "μ_inc"), (:σ_inc, "σ_inc"),
+              (:μ_δ, "μ_δ"),     (:σ_δ, "σ_δ"),
+              (:k,   "k")]
+    panels = Any[]
+    colours = [:steelblue, :darkorange, :crimson]
+    for (key, label) in params
+        p = plot(; xlabel = label, ylabel = "density",
+                   legend = (key == :μ_inc ? :topright : false))
+        for (i, (name, post)) in enumerate(fits)
+            histogram!(p, getproperty(post, key);
+                       bins = 30, normalize = :pdf,
+                       linecolor = colours[i], fillcolor = colours[i],
+                       fillalpha = 0.30, linealpha = 0.9, label = name)
+        end
+        push!(panels, p)
+    end
+    return plot(panels...; layout = (2, 3), size = (1200, 700),
+                plot_title = "Posterior marginals at $(obs_date)")
+end
 
-retro = rt_q(post_retro)
-rt    = rt_q(post_rt)
-bins  = 1:length(retro.med)
+fits = [
+    ("counterfactual retro", post_truth),
+    ("corrected real-time",  post_rt),
+    ("naive real-time",      post_naive),
+]
+overlay_marginals(fits)
+```
 
+## R(t) overlay
+
+Posterior medians with 80% CrI ribbons for each bin, the three fits
+overlaid on a single axis.
+
+```@example realtime
+function rt_quantiles(post)
+    return (lo  = [quantile(exp.(post.log_R_chain[b]), 0.10) for b in eachindex(post.log_R_chain)],
+            med = [quantile(exp.(post.log_R_chain[b]), 0.50) for b in eachindex(post.log_R_chain)],
+            hi  = [quantile(exp.(post.log_R_chain[b]), 0.90) for b in eachindex(post.log_R_chain)])
+end
+
+using Plots: hline!, plot!
 plt = plot(; xlabel = "Bin index", ylabel = "R(t) (80% CrI)",
-             title  = "Retrospective vs real-time R(t)",
+             title  = "R(t) at $(obs_date)",
              legend = :topright, ylims = (0.0, 4.0))
-plot!(plt, bins, retro.med; ribbon = (retro.med .- retro.lo, retro.hi .- retro.med),
-      label = "retrospective", linewidth = 2, marker = :circle, color = :steelblue)
-plot!(plt, bins, rt.med;    ribbon = (rt.med    .- rt.lo,    rt.hi    .- rt.med),
-      label = "real-time ($(obs_date))", linewidth = 2, marker = :diamond, color = :darkorange)
+colours = [:steelblue, :darkorange, :crimson]
+for (i, (name, post)) in enumerate(fits)
+    q = rt_quantiles(post)
+    b = 1:length(q.med)
+    plot!(plt, b, q.med;
+          ribbon = (q.med .- q.lo, q.hi .- q.med),
+          linewidth = 2, color = colours[i], fillalpha = 0.20,
+          label = name)
+end
 hline!(plt, [1.0]; linestyle = :dash, color = :grey, label = "")
 plt
 ```
 
+## Reading the figures
+
+- **Counterfactual retro vs corrected real-time:** these should agree
+  closely if the corrections are doing their job. Any systematic
+  difference is residual bias from approximations (e.g. the
+  cluster-completeness assumes onset-to-report is zero, that source
+  attribution is correct, etc.).
+- **Corrected vs naive real-time:** the gap is the bias the model
+  fixes. The naive fit will tend to underestimate Inc (long incubators
+  not yet observed), pull μ_δ negative (only short / pre-symptomatic δ
+  observed), and underestimate R(t) in the bins closest to the cut-off.
+
 ## Caveats
 
-The real-time corrections handle three specific biases — long-incubation
-cases, late transmissions, and incomplete clusters. The following are
-explicitly **not** corrected:
+The real-time corrections handle three specific biases —
+long-incubation cases, late transmissions, and incomplete clusters.
+Not corrected:
 
-- geographic or severity surveillance biases,
+- geographic / severity / surveillance reporting biases,
 - the onset-to-report delay (only chain completion is modelled),
 - general under-ascertainment,
-- incomplete source attribution among the cases that are observed.
+- incomplete source attribution.
 
-In settings where reporting delays dominate, the cluster-completeness
-adjustment will under-correct: the model assumes that any onset by the
-cut-off is reported by the cut-off.
+The counterfactual retrospective fit on this page also uses the
+eventual exposure attribution to filter cases, which assumes perfect
+retrospective attribution — in practice some attribution work happens
+after the cut-off too.

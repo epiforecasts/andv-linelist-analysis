@@ -17,8 +17,37 @@ The returned line list is suitable for feeding back into
 [`build_data`](@ref) with `obs_time = obs_date`.
 """
 function filter_realtime(ll, obs_date::Date)
-    keep = ll.onset_date .<= obs_date
-    sub  = ll[keep, :]
+    return _filter_linelist(ll, ll.onset_date .<= obs_date)
+end
+
+"""
+    filter_by_exposure(ll, obs_date)
+
+Return a copy of the line-list trimmed to cases known to have been
+infected by `obs_date`. This is a **counterfactual retrospective** view:
+for sourced cases we keep those whose exposure upper bound is on or
+before `obs_date`; for index cases (no recorded exposure window) we
+keep those whose onset is on or before `obs_date`. Source attributions
+that point outside the retained set are dropped and `Z` is rebuilt.
+
+This filter relies on information not available in real time —
+specifically, the eventual exposure attribution for cases still in
+incubation at `obs_date`. It is intended as a comparator for the
+corrected real-time fit, not as a real analysis path.
+"""
+function filter_by_exposure(ll, obs_date::Date)
+    mask = map(eachrow(ll)) do r
+        if ismissing(r.exposure_upper)
+            r.onset_date <= obs_date
+        else
+            r.exposure_upper <= obs_date
+        end
+    end
+    return _filter_linelist(ll, mask)
+end
+
+function _filter_linelist(ll, mask::AbstractVector{Bool})
+    sub      = ll[mask, :]
     kept_ids = Set(sub.patient_id)
     src_raw  = passmissing(_parse_source).(sub.source_case)
     sub.source_case = [ismissing(s) || !(string(s) in kept_ids) ?
