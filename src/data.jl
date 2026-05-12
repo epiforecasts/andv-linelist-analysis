@@ -31,7 +31,7 @@ function _parse_source(s)
     return parse(Int, occursin("/", s) ? split(s, "/")[1] : s)
 end
 
-function build_data(ll)
+function build_data(ll; obs_time::Union{Nothing,Date,AbstractVector} = nothing)
     t0 = minimum(ll.onset_date) - Day(60)
 
     onset_lo_day = Float64.(Dates.value.(ll.onset_lower .- t0))
@@ -43,11 +43,37 @@ function build_data(ll)
     id_to_idx  = Dict(r.patient_id => i for (i, r) in enumerate(eachrow(ll)))
     source_idx = [ismissing(s) ? 0 : id_to_idx[string(s)] for s in source_id]
 
+    obs_time_day = _encode_obs_time(obs_time, t0, nrow(ll), exp_hi_day)
+
     # Zobs[i] is the observed offspring count of case i — the number of
     # secondaries in the line list attributed to i as their source. Read
     # directly from the Z column of the line list.
     return (; t0, onset_lo_day, onset_hi_day, exp_lo_day, exp_hi_day,
-            source_idx, Zobs = Int.(ll.Z), N = nrow(ll))
+            source_idx, Zobs = Int.(ll.Z), N = nrow(ll),
+            obs_time = obs_time_day)
+end
+
+# Encode the optional per-case observation cut-off into days since `t0`.
+# Returns nothing for a missing obs_time so the model collapses to the
+# retrospective form. A scalar Date broadcasts to all cases.
+function _encode_obs_time(::Nothing, t0, N, exp_hi_day)
+    return nothing
+end
+function _encode_obs_time(d::Date, t0, N, exp_hi_day)
+    return _encode_obs_time(fill(d, N), t0, N, exp_hi_day)
+end
+function _encode_obs_time(dates::AbstractVector, t0, N, exp_hi_day)
+    length(dates) == N || error("obs_time length $(length(dates)) ≠ N=$N")
+    out = Vector{Float64}(undef, N)
+    for i in 1:N
+        d = dates[i]
+        ismissing(d) && error("obs_time[$i] is missing; supply a Date for every case")
+        out[i] = Float64(Dates.value(d - t0))
+        if !ismissing(exp_hi_day[i]) && out[i] < exp_hi_day[i]
+            error("obs_time[$i] ($(d)) precedes the upper exposure bound for that case")
+        end
+    end
+    return out
 end
 
 bin_edges_day(t0) = Float64[Dates.value(d - t0) for d in BIN_EDGES]

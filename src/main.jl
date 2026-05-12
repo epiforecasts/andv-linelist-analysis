@@ -3,6 +3,7 @@
 
 function analyse(;
     data     = LINELIST_PATH,
+    obs_time::Union{Nothing,Date} = nothing,
     output   = OUTPUT_DIR,
     figures  = FIGURES_DIR,
     samples  = 1000,
@@ -12,10 +13,13 @@ function analyse(;
 )
     Random.seed!(seed)
 
-    ll    = load_linelist(data)
-    d     = build_data(ll)
+    ll = data isa DataFrame ? data : load_linelist(data)
+    if obs_time !== nothing
+        ll = filter_realtime(ll, obs_time)
+    end
+    d     = build_data(ll; obs_time = obs_time)
     edges = bin_edges_day(d.t0)
-    @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx)
+    @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time
 
     adtype = AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
     chn = sample(
@@ -59,10 +63,16 @@ function (@main)(args)
             help     = "random seed"
             arg_type = Int
             default  = 20260508
+        "--obs-time"
+            help    = "real-time cut-off date (ISO format, e.g. 2018-12-31); " *
+                      "omit for a retrospective fit"
+            default = nothing
     end
     p = parse_args(args, s)
+    obs_time = p["obs-time"] === nothing ? nothing : Date(p["obs-time"])
     analyse(;
         data     = p["data"],
+        obs_time = obs_time,
         output   = p["output"],
         figures  = p["figures"],
         samples  = p["samples"],

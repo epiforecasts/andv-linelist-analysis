@@ -20,6 +20,15 @@
 ## The generation interval and serial interval are derived in post-processing
 ## from δ and Inc. The per-pair constraint T_inf[secondary] > T_inf[source]
 ## is enforced via a -Inf reject in the likelihood to ensure GI > 0.
+##
+## Real-time mode (gated on `d.obs_time !== nothing`):
+##   - Inc and δ contributions are right-truncated at the per-case cut-off
+##     via `-logcdf` terms.
+##   - The NB mean for source `src` is thinned by `F_cluster(obs_time[src] -
+##     T_inf[src])` to account for offspring whose total chain has not yet
+##     completed by the cut-off. When `obs_time === nothing` the whole
+##     correction collapses out and the model is identical to the
+##     retrospective form.
 
 @model function joint_model(d, edges)
     # Population-level parameters
@@ -50,6 +59,8 @@
         T_onset[i] ~ Uniform(d.onset_lo_day[i], d.onset_hi_day[i])
     end
 
+    realtime = d.obs_time !== nothing
+
     T_inf = Vector{T}(undef, d.N)
     for i in 1:d.N
         if d.source_idx[i] == 0
@@ -57,6 +68,9 @@
             T_inf[i] ~ Uniform(d.onset_lo_day[i] - 80.0, T_onset[i] - 1e-6)
             inc_i = T_onset[i] - T_inf[i]
             Turing.@addlogprob! logpdf(inc_dist, inc_i)
+            if realtime
+                Turing.@addlogprob! -logcdf(inc_dist, d.obs_time[i] - T_inf[i])
+            end
         else
             # Sourced case: T_inf anchored to listed exposure window.
             # GI > 0 enforced by rejecting trajectories where the secondary
@@ -70,9 +84,22 @@
                 δ_pair = T_inf[i] - T_onset[src]
                 Turing.@addlogprob! logpdf(inc_dist, inc_i)
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
+                if realtime
+                    Δ_inc = d.obs_time[i]   - T_inf[i]
+                    Δ_δ   = d.obs_time[i]   - T_onset[src]
+                    Turing.@addlogprob! -logcdf(inc_dist, Δ_inc)
+                    Turing.@addlogprob! -logcdf(Normal(μ_δ, σ_δ), Δ_δ)
+                end
             end
         end
         R_i = exp(log_R[which_bin(T_inf[i], edges)])
-        d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
+        if realtime
+            Δ_src = d.obs_time[i] - T_inf[i]
+            thin  = F_cluster(Δ_src, μ_inc, σ_inc, μ_δ, σ_δ)
+            R_eff = R_i * thin
+            d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_eff))
+        else
+            d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
+        end
     end
 end
