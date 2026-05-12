@@ -31,15 +31,15 @@
 ##     retrospective form.
 ##
 ## Structure: the three population-level components are written as Turing
-## submodels, each parameterised by the priors it samples from. Swapping a
-## prior — or, by writing a parallel submodel with the same return contract,
+## models, each parameterised by the priors it samples from. Swapping a
+## prior — or, by writing a parallel model with the same return contract,
 ## swapping the distributional family or the R(t) time-series model — does
 ## not require touching `joint_model`.
 
 """
-    incubation_submodel(μ_prior, σ_prior)
+    incubation_model(μ_prior, σ_prior)
 
-Submodel sampling the log-mean `μ_inc` and log-SD `σ_inc` of a LogNormal
+Model sampling the log-mean `μ_inc` and log-SD `σ_inc` of a LogNormal
 incubation period. Returns a `NamedTuple` `(dist, μ, σ)` where `dist`
 is `LogNormal(μ_inc, σ_inc)`. The parent model uses `dist` to score
 per-case incubation contributions and the raw parameters to evaluate
@@ -47,31 +47,31 @@ downstream quantities such as `F_cluster`.
 
 The priors are arguments so they can be changed without editing this
 file. To swap the *family* (Gamma, Weibull, …) write a parallel
-submodel that returns a NamedTuple with the same fields.
+model that returns a NamedTuple with the same fields.
 """
-@model function incubation_submodel(μ_prior, σ_prior)
+@model function incubation_model(μ_prior, σ_prior)
     μ_inc ~ μ_prior
     σ_inc ~ σ_prior
     return (; dist = LogNormal(μ_inc, σ_inc), μ = μ_inc, σ = σ_inc)
 end
 
 """
-    transmission_delta_submodel(μ_prior, σ_prior)
+    transmission_delta_model(μ_prior, σ_prior)
 
-Submodel for the population mean `μ_δ` and SD `σ_δ` of the per-pair
+Model for the population mean `μ_δ` and SD `σ_δ` of the per-pair
 transmission timing (gap between a secondary's infection and its
 source's onset). Returns `(dist = Normal(μ_δ, σ_δ), μ, σ)`. As with
-[`incubation_submodel`](@ref) the priors are arguments and the return
+[`incubation_model`](@ref) the priors are arguments and the return
 contract is the swap point for alternative families.
 """
-@model function transmission_delta_submodel(μ_prior, σ_prior)
+@model function transmission_delta_model(μ_prior, σ_prior)
     μ_δ ~ μ_prior
     σ_δ ~ σ_prior
     return (; dist = Normal(μ_δ, σ_δ), μ = μ_δ, σ = σ_δ)
 end
 
 """
-    random_walk_rt_submodel(n_bins;
+    random_walk_rt_model(n_bins;
                             init_prior  = Normal(log(1.5), 1.0),
                             sigma_prior = truncated(Normal(0.0, 0.5); lower = 0))
 
@@ -80,12 +80,12 @@ the length-`n_bins` `log_R` vector. The non-centred parameterisation
 decouples `σ_rw` from the walk to avoid the funnel that diverges NUTS
 under the centred form.
 
-`joint_model` accepts any submodel that returns a length-`n_bins`
+`joint_model` accepts any model that returns a length-`n_bins`
 real-valued vector for log R(t), so alternative time-series structures
-(AR1, GP, piecewise constant) drop in by writing a parallel submodel
-with the same return contract.
+(AR1, GP, piecewise constant) drop in by writing a parallel model with
+the same return contract.
 """
-@model function random_walk_rt_submodel(n_bins::Integer;
+@model function random_walk_rt_model(n_bins::Integer;
                                         init_prior  = Normal(log(1.5), 1.0),
                                         sigma_prior = truncated(Normal(0.0, 0.5); lower = 0))
     σ_rw       ~ sigma_prior
@@ -97,19 +97,19 @@ end
 
 """
     joint_model(d, edges, fcluster_alg = _F_CLUSTER_ALG;
-                incubation   = incubation_submodel(Normal(3.0, 0.5),
+                incubation   = incubation_model(Normal(3.0, 0.5),
                                                    truncated(Normal(0.0, 0.5); lower = 0)),
-                transmission = transmission_delta_submodel(Normal(0.0, 5.0),
+                transmission = transmission_delta_model(Normal(0.0, 5.0),
                                                            truncated(Normal(0.0, 1.0); lower = 0)),
-                rt           = random_walk_rt_submodel(length(edges) + 1),
+                rt           = random_walk_rt_model(length(edges) + 1),
                 k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
 
 Joint Bayesian model over incubation, transmission timing and the
 weekly random walk on log R(t). The three population-level components
 are passed in as Turing submodels so priors and structural choices can
 be swapped without editing this function. See
-[`incubation_submodel`](@ref), [`transmission_delta_submodel`](@ref)
-and [`random_walk_rt_submodel`](@ref) for the default contracts.
+[`incubation_model`](@ref), [`transmission_delta_model`](@ref)
+and [`random_walk_rt_model`](@ref) for the default contracts.
 
 The per-case incubation / δ / NB contributions are kept inline because
 factoring them into submodels would shuffle complexity rather than
@@ -117,13 +117,13 @@ remove it: the two source-vs-index branches share the population
 distributions, the GI > 0 reject and the cluster-completeness thinning.
 """
 @model function joint_model(d, edges, fcluster_alg = _F_CLUSTER_ALG;
-                            incubation   = incubation_submodel(
+                            incubation   = incubation_model(
                                 Normal(3.0, 0.5),
                                 truncated(Normal(0.0, 0.5); lower = 0)),
-                            transmission = transmission_delta_submodel(
+                            transmission = transmission_delta_model(
                                 Normal(0.0, 5.0),
                                 truncated(Normal(0.0, 1.0); lower = 0)),
-                            rt           = random_walk_rt_submodel(length(edges) + 1),
+                            rt           = random_walk_rt_model(length(edges) + 1),
                             k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
     inc    ~ to_submodel(incubation, false)
     delta  ~ to_submodel(transmission, false)
