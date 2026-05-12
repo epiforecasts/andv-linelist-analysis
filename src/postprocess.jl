@@ -30,8 +30,8 @@ function _num_divergences(chn)
 end
 
 function diagnostics(chn)
-    rhats = _scalar_stats(MCMCChains.rhat(chn))
-    esses = _scalar_stats(MCMCChains.ess(chn; kind = :bulk))
+    rhats = _scalar_stats(FlexiChains.rhat(chn))
+    esses = _scalar_stats(FlexiChains.ess(chn; kind = :bulk))
     return (; rhat = maximum(rhats), ess = minimum(esses), ndiv = _num_divergences(chn))
 end
 

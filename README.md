@@ -61,12 +61,8 @@ Weekly bins; shaded band is the 95% credible interval.
 
 ## Methods and limitations
 
-The model is described in detail in [METHODS.md](METHODS.md), including
-priors, the data-augmentation handling of double interval censoring, the
-positive-generation-interval constraint, and known limitations
-(within-day exposure encoding pinning σ_δ, late-bin R(t) reverting to its
-prior, the data-thin posterior on `k`, and right-truncation of long
-incubation periods).
+Model description, priors, and the data-augmentation handling of double interval censoring are in [MODEL.md](MODEL.md).
+Known caveats — within-day exposure encoding pinning σ_δ, late-bin R(t) reverting to its prior, mild prior dependence of `k`, and right-truncation of long incubation periods — are in [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Repository layout
 
