@@ -6,6 +6,7 @@
 
 using FastGaussQuadrature: gausshermite
 using Integrals: QuadratureRule
+using SpecialFunctions: erfc
 
 """
     filter_realtime(ll, obs_date)
@@ -96,7 +97,7 @@ end
 # Returning const arrays from the quadrature `q(n)` callback avoids
 # pulling `FastGaussQuadrature.gausshermite` (and its BLAS eigensolver)
 # into the differentiated path.
-const _GH_N = 20
+const _GH_N = 16
 const _GH_NODES, _GH_WEIGHTS = let
     nodes_1d, weights_1d = gausshermite(_GH_N)
     n = sqrt(2) .* nodes_1d
@@ -113,6 +114,11 @@ _gh_tensor_q(::Int) = (_GH_NODES, _GH_WEIGHTS)
 const _F_CLUSTER_DOMAIN = ([-1.0, -1.0], [1.0, 1.0])
 const _F_CLUSTER_ALG    = QuadratureRule(_gh_tensor_q; n = _GH_N)
 
+# Closed-form LogNormal CDF, avoids constructing a `LogNormal` per node.
+# cdf(LogNormal(μ, σ), x) = 0.5 * erfc(-(log(x) - μ) / (σ * √2))
+@inline _lognormal_cdf(x, μ, σ) =
+    x > 0 ? oftype(x, 0.5) * erfc(-(log(x) - μ) / (σ * sqrt(oftype(x, 2)))) : zero(x)
+
 # Out-of-place vector-output integrand. At one (z₁, z₂) point evaluate
 # the LogNormal CDF of the secondary's incubation at every t in p.ts,
 # return a fresh length-N vector.
@@ -121,9 +127,7 @@ function _f_cluster_integrand(z::AbstractVector, p)
     inc_src = exp(p.μ_inc + p.σ_inc * z1)
     δ       = p.μ_δ + p.σ_δ * z2
     # ϕ(z) factors are already absorbed into the Gauss-Hermite weights.
-    return [let s = p.ts[i] - inc_src - δ
-                s > 0 ? cdf(LogNormal(p.μ_inc, p.σ_inc), s) : zero(s)
-            end
+    return [_lognormal_cdf(p.ts[i] - inc_src - δ, p.μ_inc, p.σ_inc)
             for i in eachindex(p.ts)]
 end
 
