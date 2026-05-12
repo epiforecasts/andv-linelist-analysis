@@ -31,8 +31,9 @@ function _parse_source(s)
     return parse(Int, occursin("/", s) ? split(s, "/")[1] : s)
 end
 
-function build_data(ll; obs_time::Union{Nothing,Date,AbstractVector} = nothing)
-    t0 = minimum(ll.onset_date) - Day(60)
+function build_data(ll; obs_time::Union{Nothing,Date,AbstractVector} = nothing,
+                    t0::Union{Nothing,Date} = nothing)
+    t0 = t0 === nothing ? minimum(ll.onset_date) - Day(60) : t0
 
     onset_lo_day = Float64.(Dates.value.(ll.onset_lower .- t0))
     onset_hi_day = Float64.(Dates.value.(ll.onset_upper .- t0)) .+ 1.0

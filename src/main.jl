@@ -41,6 +41,7 @@ end
 function analyse(;
     data     = LINELIST_PATH,
     obs_time::Union{Nothing,Date} = nothing,
+    t0::Union{Nothing,Date} = nothing,
     output   = OUTPUT_DIR,
     figures  = FIGURES_DIR,
     samples  = 1000,
@@ -53,7 +54,7 @@ function analyse(;
     if obs_time !== nothing
         ll = filter_realtime(ll, obs_time)
     end
-    d     = build_data(ll; obs_time = obs_time)
+    d     = build_data(ll; obs_time = obs_time, t0 = t0)
     edges = bin_edges_day(d.t0)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time
 
