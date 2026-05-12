@@ -52,6 +52,20 @@ end
 
 bin_edges_day(t0) = Float64[Dates.value(d - t0) for d in BIN_EDGES]
 
+"""
+    prepare_model(ll) -> (model, d, edges)
+
+Build the joint model from a line-list `ll` (output of `load_linelist`).
+Returns the Turing model, the augmented data struct, and the weekly knot
+edges so the caller can plot R(t) against them.
+"""
+function prepare_model(ll)
+    d     = build_data(ll)
+    edges = bin_edges_day(d.t0)
+    model = joint_model(d, edges)
+    return (model, d, edges)
+end
+
 # Piecewise-linear interpolation: log_R[b] is the value at knot b, with
 # linear interpolation inside the knot range and clamping outside.
 function log_R_at(t::Real, knots::AbstractVector{<:Real}, log_R)

@@ -65,12 +65,14 @@ function plot_data(ll)
                    [r.idx, r.idx];
                    color = :steelblue, linewidth = 3)
         end
+        # Most exposure windows are a single day, so the line segment is
+        # invisible; render a point at the window so 1-day cases show up.
+        scatter!(ax2, Dates.value.(sourced.exposure_lower), sourced.idx;
+                 color = :steelblue, markersize = 5,
+                 label = "Exposure window / point")
         scatter!(ax2, Dates.value.(sourced.onset_date), sourced.idx;
                  color = :darkorange, markersize = 6, label = "Onset")
-        # Empty proxy for the exposure window legend entry.
-        lines!(ax2, Float64[], Float64[];
-               color = :steelblue, linewidth = 3, label = "Exposure window")
-        axislegend(ax2; position = :rt)
+        axislegend(ax2; position = :rt, merge = true)
         let dts = sort(unique(vcat(sourced.exposure_lower,
                                    sourced.exposure_upper,
                                    sourced.onset_date)))
@@ -212,16 +214,23 @@ function _pp_panel!(ax, xs, dists, samples; bins = 50)
     return inferred, pred
 end
 
+# Predictive-sample histogram only; used for GI / SI where no closed-form
+# parametric density is available without further approximation.
+function _pp_panel_hist_only!(ax, samples; bins = 50)
+    return hist!(ax, samples; bins = bins, normalization = :pdf,
+                 color = (:darkorange, 0.45),
+                 strokecolor = :darkorange, strokewidth = 0.5)
+end
+
 """
     plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
 
 Two-by-two panel of posterior-predictive distributions for incubation
 period, transmission timing δ, generation interval, and serial interval.
-Each panel overlays the posterior over the parametric density (median PDF
-with a 95% pointwise ribbon across draws) and a histogram of one
-predictive sample per draw. GI / SI use a Normal moment-match of
-`Normal(μ_δ, σ_δ) + LogNormal(μ_inc, σ_inc)` for the inferred ribbon and
-exact `δ + Inc` draws for the histogram. Returns a `Makie.Figure`.
+Inc and δ panels overlay the posterior over the parametric density
+(median PDF with a 95% pointwise ribbon across draws) and a histogram of
+one predictive sample per draw. GI and SI show the predictive-sample
+histogram only. Returns a `Makie.Figure`.
 """
 function plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
     samples = _ppc_frame(chn; rng)
@@ -229,36 +238,37 @@ function plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
     inc_dists = LogNormal.(samples.μ_inc, samples.σ_inc)
     δ_dists   = Normal.(samples.μ_δ, samples.σ_δ)
 
-    # Moment-matched Normal for GI / SI inferred ribbon — keeps the doc
-    # build cheap while still showing the posterior over the marginal.
-    mean_inc = exp.(samples.μ_inc .+ samples.σ_inc .^ 2 ./ 2)
-    var_inc  = (exp.(samples.σ_inc .^ 2) .- 1) .*
-               exp.(2 .* samples.μ_inc .+ samples.σ_inc .^ 2)
-    gisi_dists = Normal.(samples.μ_δ .+ mean_inc,
-                         sqrt.(samples.σ_δ .^ 2 .+ var_inc))
-
     return _with_theme() do
         fig = Figure(; size = (1000, 700))
 
-        panels = [
+        # GI/SI density not plotted: moment-matched Normal is a poor fit;
+        # revisit with a proper KDE later.
+        parametric_panels = [
             ("Incubation period",     range(0.5, 70.0; length = 200),
              inc_dists, vcat(samples.inc_src, samples.inc_sec), "days"),
             ("Transmission timing δ", range(-5.0, 5.0; length = 200),
              δ_dists, samples.δ, "days from source onset"),
-            ("Generation interval",   range(0.5, 80.0; length = 200),
-             gisi_dists, samples.gi, "days"),
-            ("Serial interval",       range(0.5, 80.0; length = 200),
-             gisi_dists, samples.si, "days"),
+        ]
+        hist_only_panels = [
+            ("Generation interval", samples.gi, "days"),
+            ("Serial interval",     samples.si, "days"),
         ]
 
         local last_inferred = nothing
         local last_pred = nothing
-        for (k, (title, xs, dists, samps, xlabel)) in enumerate(panels)
+        for (k, (title, xs, dists, samps, xlabel)) in enumerate(parametric_panels)
             row, col = fldmod1(k, 2)
             ax = Axis(fig[row, col]; title = title, xlabel = xlabel,
                       ylabel = "density",
                       titlesize = 11)
             last_inferred, last_pred = _pp_panel!(ax, xs, dists, samps)
+        end
+        for (k, (title, samps, xlabel)) in enumerate(hist_only_panels)
+            row, col = fldmod1(k + length(parametric_panels), 2)
+            ax = Axis(fig[row, col]; title = title, xlabel = xlabel,
+                      ylabel = "density",
+                      titlesize = 11)
+            last_pred = _pp_panel_hist_only!(ax, samps)
         end
 
         Legend(fig[3, 1:2],

@@ -5,7 +5,11 @@ using DocumenterVitepress
 using Documenter
 using Literate
 using CodeTracking
+using CairoMakie
 using Hantavirus
+
+# Retina-quality figures in the rendered docs.
+CairoMakie.activate!(; px_per_unit = 2.0)
 
 DocMeta.setdocmeta!(
     Hantavirus, :DocTestSetup,

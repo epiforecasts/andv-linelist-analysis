@@ -19,9 +19,6 @@ using DataFrames
 using DataFramesMeta
 using Printf
 using Random
-using Turing
-using ADTypes
-using Enzyme
 using CairoMakie
 using AlgebraOfGraphics
 using PairPlots
@@ -31,10 +28,10 @@ Random.seed!(20260508)
 # ## Load the line list
 #
 # `load_linelist` parses the bundled CSV and drops the `_alt` sensitivity rows.
-# `build_data` re-encodes exposure / onset windows as day offsets from `t0`, 60 days before the first onset.
+# `prepare_model` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset), builds the weekly R(t) bin edges, and returns the Turing model alongside the augmented data struct.
 
 ll = load_linelist()
-d  = build_data(ll)
+model, d, edges = prepare_model(ll)
 
 @chain ll begin
     @select(:patient_id, :exposure_lower, :exposure_upper,
@@ -47,15 +44,6 @@ end
 plot_data(ll)
 
 # ## Model
-#
-# The model is `joint_model(d, edges)`.
-# Priors are at the top, the random walk on `log R(t)` is non-centred, and the per-pair constraint `T_inf[secondary] > T_inf[source]` rejects trajectories with a non-positive generation interval.
-
-edges = bin_edges_day(d.t0)
-model = joint_model(d, edges)
-
-# Source rendered inline so the page never drifts from the implementation.
-# The fenced block below is generated from `src/model.jl` at doc-build time via `CodeTracking.@code_string`.
 
 #md # ```@eval
 #md # using Markdown
@@ -63,23 +51,17 @@ model = joint_model(d, edges)
 #md #     read(joinpath(@__DIR__, "..", "examples", "joint_model_source.jl"), String)))
 #md # ```
 
+# ## Prior predictives
+#
+# Implied prior distributions for the incubation period, transmission timing δ, and the derived generation / serial interval before any data are seen.
+
+plot_prior_predictives()
+
 # ## Fitting
 #
-# Gradients via Enzyme reverse-mode AD — fastest backend for this model under Turing 0.45.
-# Chains are initialised from the prior because the non-centred random walk is sensitive to default zero-initialisation.
-# Budget matches the package default: 1000 post-warmup draws across 4 chains, `target_accept = 0.95`.
+# `sample_fit` wraps the package's default NUTS configuration: Enzyme reverse-mode AD, chains initialised from the prior, 1000 post-warmup draws across 4 chains, `target_accept = 0.95`.
 
-adtype = AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
-
-chn = sample(
-    model,
-    NUTS(0.95; adtype),
-    MCMCThreads(),
-    1000,
-    4;
-    initial_params = fill(Turing.DynamicPPL.InitFromPrior(), 4),
-    progress = false,
-)
+chn = sample_fit(model)
 
 diagnostics_table(chn)
 
@@ -101,10 +83,8 @@ plot_pair(chn)
 
 # ## Posterior-predictive delay distributions
 #
-# Each panel shows two things.
-# The blue band is the posterior over the parametric density: median PDF with a 95% pointwise ribbon across draws.
-# The orange histogram is one predictive realisation per draw, pooled.
-# GI / SI use a moment-matched Normal for the ribbon and exact `δ + Inc` samples for the histogram.
+# Inc and δ panels show the posterior over the parametric density (median PDF with a 95% pointwise ribbon across draws) overlaid with one predictive realisation per draw.
+# GI and SI show the predictive-sample histogram only.
 
 plot_posterior_predictive(chn)
 
@@ -113,9 +93,3 @@ plot_posterior_predictive(chn)
 # Compare the per-pair posterior medians of δ to the fitted population `Normal(μ_δ, σ_δ)`.
 
 plot_delta_sense_check(chn, d)
-
-# ## Prior predictives
-#
-# Implied prior distributions for the incubation period, transmission timing δ, and the derived generation / serial interval before any data are seen.
-
-plot_prior_predictives()
