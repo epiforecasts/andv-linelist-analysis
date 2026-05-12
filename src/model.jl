@@ -29,28 +29,119 @@
 ##     completed by the cut-off. When `obs_time === nothing` the whole
 ##     correction collapses out and the model is identical to the
 ##     retrospective form.
+##
+## Structure: the three population-level components are written as Turing
+## submodels, each parameterised by the priors it samples from. Swapping a
+## prior — or, by writing a parallel submodel with the same return contract,
+## swapping the distributional family or the R(t) time-series model — does
+## not require touching `joint_model`.
 
-@model function joint_model(d, edges, fcluster_alg = DEFAULT_FCLUSTER_ALG)
-    # Population-level parameters
-    μ_inc ~ Normal(3.0, 0.5)                       # log-mean Inc (≈ log 20 d)
-    σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc
-    μ_δ   ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
-    σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
-    k     ~ truncated(Normal(0.3, 0.5); lower = 0) # NB offspring dispersion (centred low — known super-spreader pathogen)
-    σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD
+"""
+    incubation_submodel(μ_prior, σ_prior)
+
+Submodel sampling the log-mean `μ_inc` and log-SD `σ_inc` of a LogNormal
+incubation period. Returns a `NamedTuple` `(dist, μ, σ)` where `dist`
+is `LogNormal(μ_inc, σ_inc)`. The parent model uses `dist` to score
+per-case incubation contributions and the raw parameters to evaluate
+downstream quantities such as `F_cluster`.
+
+The priors are arguments so they can be changed without editing this
+file. To swap the *family* (Gamma, Weibull, …) write a parallel
+submodel that returns a NamedTuple with the same fields.
+"""
+@model function incubation_submodel(μ_prior, σ_prior)
+    μ_inc ~ μ_prior
+    σ_inc ~ σ_prior
+    return (; dist = LogNormal(μ_inc, σ_inc), μ = μ_inc, σ = σ_inc)
+end
+
+"""
+    transmission_delta_submodel(μ_prior, σ_prior)
+
+Submodel for the population mean `μ_δ` and SD `σ_δ` of the per-pair
+transmission timing (gap between a secondary's infection and its
+source's onset). Returns `(dist = Normal(μ_δ, σ_δ), μ, σ)`. As with
+[`incubation_submodel`](@ref) the priors are arguments and the return
+contract is the swap point for alternative families.
+"""
+@model function transmission_delta_submodel(μ_prior, σ_prior)
+    μ_δ ~ μ_prior
+    σ_δ ~ σ_prior
+    return (; dist = Normal(μ_δ, σ_δ), μ = μ_δ, σ = σ_δ)
+end
+
+"""
+    random_walk_rt_submodel(n_bins;
+                            init_prior  = Normal(log(1.5), 1.0),
+                            sigma_prior = truncated(Normal(0.0, 0.5); lower = 0))
+
+Non-centred weekly random walk on log R(t) over `n_bins` bins. Returns
+the length-`n_bins` `log_R` vector. The non-centred parameterisation
+decouples `σ_rw` from the walk to avoid the funnel that diverges NUTS
+under the centred form.
+
+`joint_model` accepts any submodel that returns a length-`n_bins`
+real-valued vector for log R(t), so alternative time-series structures
+(AR1, GP, piecewise constant) drop in by writing a parallel submodel
+with the same return contract.
+"""
+@model function random_walk_rt_submodel(n_bins::Integer;
+                                        init_prior  = Normal(log(1.5), 1.0),
+                                        sigma_prior = truncated(Normal(0.0, 0.5); lower = 0))
+    σ_rw       ~ sigma_prior
+    log_R_init ~ init_prior
+    T = typeof(log_R_init)
+    ε ~ Turing.filldist(Normal(zero(T), one(T)), n_bins - 1)
+    return vcat(log_R_init, log_R_init .+ accumulate(+, σ_rw .* ε))
+end
+
+"""
+    joint_model(d, edges, fcluster_alg = _F_CLUSTER_ALG;
+                incubation   = incubation_submodel(Normal(3.0, 0.5),
+                                                   truncated(Normal(0.0, 0.5); lower = 0)),
+                transmission = transmission_delta_submodel(Normal(0.0, 5.0),
+                                                           truncated(Normal(0.0, 1.0); lower = 0)),
+                rt           = random_walk_rt_submodel(length(edges) + 1),
+                k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
+
+Joint Bayesian model over incubation, transmission timing and the
+weekly random walk on log R(t). The three population-level components
+are passed in as Turing submodels so priors and structural choices can
+be swapped without editing this function. See
+[`incubation_submodel`](@ref), [`transmission_delta_submodel`](@ref)
+and [`random_walk_rt_submodel`](@ref) for the default contracts.
+
+The per-case incubation / δ / NB contributions are kept inline because
+factoring them into submodels would shuffle complexity rather than
+remove it: the two source-vs-index branches share the population
+distributions, the GI > 0 reject and the cluster-completeness thinning.
+"""
+@model function joint_model(d, edges, fcluster_alg = _F_CLUSTER_ALG;
+                            incubation   = incubation_submodel(
+                                Normal(3.0, 0.5),
+                                truncated(Normal(0.0, 0.5); lower = 0)),
+                            transmission = transmission_delta_submodel(
+                                Normal(0.0, 5.0),
+                                truncated(Normal(0.0, 1.0); lower = 0)),
+                            rt           = random_walk_rt_submodel(length(edges) + 1),
+                            k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
+    inc    ~ to_submodel(incubation, false)
+    delta  ~ to_submodel(transmission, false)
+    _log_R ~ to_submodel(rt, false)
+    k      ~ k_prior
+
+    # Track log_R as a deterministic so MCMCChains sees the same `log_R`
+    # vector the pre-refactor model exposed.
+    log_R := _log_R
+
+    inc_dist     = inc.dist
+    δ_dist       = delta.dist
+    μ_inc, σ_inc = inc.μ, inc.σ
+    μ_δ,   σ_δ   = delta.μ, delta.σ
 
     # Concrete element type derived from a sampled scalar — avoids the
     # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
     T = typeof(μ_inc)
-
-    # Non-centred random walk on log R(t): decouples σ_rw from log_R to
-    # avoid the funnel that diverges NUTS under the centred form.
-    n_bins = length(edges) + 1
-    log_R_init ~ Normal(log(1.5), 1.0)
-    ε ~ Turing.filldist(Normal(zero(T), one(T)), n_bins - 1)
-    log_R := vcat(log_R_init, log_R_init .+ accumulate(+, σ_rw .* ε))
-
-    inc_dist = LogNormal(μ_inc, σ_inc)
 
     # T_onset is a latent over the recorded onset window (defaults to a
     # one-day window when only a single onset date was recorded).
@@ -83,12 +174,12 @@
                 inc_i  = T_onset[i] - T_inf[i]
                 δ_pair = T_inf[i] - T_onset[src]
                 Turing.@addlogprob! logpdf(inc_dist, inc_i)
-                Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
+                Turing.@addlogprob! logpdf(δ_dist, δ_pair)
                 if realtime
                     Δ_inc = d.obs_time[i]   - T_inf[i]
                     Δ_δ   = d.obs_time[i]   - T_onset[src]
                     Turing.@addlogprob! -logcdf(inc_dist, Δ_inc)
-                    Turing.@addlogprob! -logcdf(Normal(μ_δ, σ_δ), Δ_δ)
+                    Turing.@addlogprob! -logcdf(δ_dist, Δ_δ)
                 end
             end
         end
