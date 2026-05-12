@@ -3,12 +3,32 @@ Pkg.instantiate()
 
 using DocumenterVitepress
 using Documenter
+using Literate
+using CodeTracking
 using Hantavirus
 
 DocMeta.setdocmeta!(
     Hantavirus, :DocTestSetup,
     :(using Hantavirus); recursive = true
 )
+
+# Write the joint_model source out as a stand-alone fenced code block so the
+# Literate page can pull it in via Documenter @example / explicit include
+# without going through Vue's MDX parser, which trips on bare `{T}` in the
+# Julia code.
+let ll = load_linelist()
+    d   = build_data(ll)
+    src = @code_string joint_model(d, bin_edges_day(d.t0))
+    write(joinpath(@__DIR__, "examples", "joint_model_source.jl"), src)
+end
+
+# Render the executable walkthrough through Literate so figures and tables are
+# generated at build time from a single source script.
+const LITERATE_SRC = joinpath(@__DIR__, "examples", "analysis.jl")
+const LITERATE_OUT = joinpath(@__DIR__, "src")
+Literate.markdown(LITERATE_SRC, LITERATE_OUT;
+                  name = "analysis", execute = true,
+                  flavor = Literate.DocumenterFlavor())
 
 makedocs(;
     sitename = "Hantavirus.jl",
@@ -20,7 +40,9 @@ makedocs(;
     modules = [Hantavirus],
     pages = [
         "Home" => "index.md",
-        "Methods" => "methods.md",
+        "Model" => "model.md",
+        "Limitations" => "limitations.md",
+        "Analysis walkthrough" => "analysis.md",
         "API Reference" => "api.md",
     ],
     format = DocumenterVitepress.MarkdownVitepress(;
@@ -30,7 +52,7 @@ makedocs(;
     ),
 )
 
-DocumenterVitepress.deploydocs(;
+deploydocs(;
     repo = "github.com/sbfnk/hantavirus",
     target = "build",
     branch = "gh-pages",
