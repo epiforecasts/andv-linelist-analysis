@@ -1,6 +1,30 @@
 ## CLI entry point — called by `julia -m Hantavirus`.
 ## For interactive use, call analyse() directly with keyword arguments.
 
+"""
+    sample_fit(model; samples=1000, chains=4, target_accept=0.95,
+               seed=20260508, progress=false)
+
+Run NUTS on `model` using the package's default Enzyme AD backend and
+`InitFromPrior()` chain initialisation. Returns the FlexiChain.
+"""
+function sample_fit(model;
+    samples       = 1000,
+    chains        = 4,
+    target_accept = 0.95,
+    seed          = 20260508,
+    progress      = false,
+)
+    Random.seed!(seed)
+    adtype = AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
+    return sample(
+        model,
+        NUTS(target_accept; adtype), MCMCThreads(), samples, chains;
+        initial_params = fill(DynamicPPL.InitFromPrior(), chains),
+        progress = progress,
+    )
+end
+
 function analyse(;
     data     = LINELIST_PATH,
     output   = OUTPUT_DIR,
@@ -10,18 +34,14 @@ function analyse(;
     seed     = 20260508,
     progress = true,
 )
-    Random.seed!(seed)
-
-    ll    = load_linelist(data)
-    d     = build_data(ll)
-    edges = bin_edges_day(d.t0)
+    ll = load_linelist(data)
+    model, d, _ = prepare_model(ll)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx)
 
-    adtype = AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
-    chn = sample(
-        joint_model(d, edges),
-        NUTS(0.95; adtype), MCMCThreads(), samples, chains;
-        initial_params = fill(DynamicPPL.InitFromPrior(), chains),
+    chn = sample_fit(model;
+        samples  = samples,
+        chains   = chains,
+        seed     = seed,
         progress = progress,
     )
 
@@ -53,7 +73,7 @@ function _save_makie_figure(fig, path)
         @warn "No Makie backend loaded in Main; skipping figure save" path
         return path
     end
-    Base.invokelatest(backend.save, path, fig)
+    Base.invokelatest(backend.save, path, fig; px_per_unit = 2.0)
     return path
 end
 
