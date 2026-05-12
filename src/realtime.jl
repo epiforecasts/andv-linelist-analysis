@@ -128,15 +128,14 @@ function _f_cluster_integrand(z::AbstractVector, p)
 end
 
 """
-    F_cluster(ts, μ_inc, σ_inc, μ_δ, σ_δ; alg = _F_CLUSTER_ALG)
+    F_cluster(ts, inc_dist::LogNormal, δ_dist::Normal; alg = _F_CLUSTER_ALG)
 
 Probability that the full source-to-secondary chain
 `Inc(src) + δ + Inc(sec)` is no greater than `t`, evaluated at every
-element of `ts` against the same population parameters via a single
+element of `ts` against the same population distributions via a single
 2-D quadrature.
 
-`Inc(src), Inc(sec) ~ LogNormal(μ_inc, σ_inc)` i.i.d., and
-`δ ~ Normal(μ_δ, σ_δ)`.
+`Inc(src), Inc(sec) ~ inc_dist` i.i.d., and `δ ~ δ_dist`.
 Returns a vector of length `length(ts)`.
 
 `alg` is any `Integrals.AbstractIntegralAlgorithm`.
@@ -147,8 +146,10 @@ diagnostics (note: HCubatureJL is not compatible with Mooncake
 reverse-mode AD).
 """
 function F_cluster(ts::AbstractVector,
-                   μ_inc::Real, σ_inc::Real, μ_δ::Real, σ_δ::Real;
+                   inc_dist::LogNormal, δ_dist::Normal;
                    alg = _F_CLUSTER_ALG)
+    μ_inc, σ_inc = inc_dist.μ, inc_dist.σ
+    μ_δ,   σ_δ   = δ_dist.μ,   δ_dist.σ
     p    = (; ts, μ_inc, σ_inc, μ_δ, σ_δ)
     prob = IntegralProblem(_f_cluster_integrand, _F_CLUSTER_DOMAIN, p)
     sol  = solve(prob, alg)
@@ -156,19 +157,21 @@ function F_cluster(ts::AbstractVector,
 end
 
 """
-    F_cluster(t::Real, μ_inc, σ_inc, μ_δ, σ_δ; kw...)
+    F_cluster(t::Real, inc_dist, δ_dist; kw...)
 
 Scalar convenience: a single-`t` query that returns the value rather
 than a length-1 vector.
 """
-F_cluster(t::Real, μ_inc::Real, σ_inc::Real, μ_δ::Real, σ_δ::Real; kw...) =
-    F_cluster([float(t)], μ_inc, σ_inc, μ_δ, σ_δ; kw...)[1]
+F_cluster(t::Real, inc_dist::LogNormal, δ_dist::Normal; kw...) =
+    F_cluster([float(t)], inc_dist, δ_dist; kw...)[1]
 
 """
     F_cluster_vec(θ; alg = _F_CLUSTER_ALG)
 
 Vector-input wrapper of scalar [`F_cluster`](@ref) for AD testing.
-`θ = [t, μ_inc, σ_inc, μ_δ, σ_δ]`.
+`θ = [t, μ_inc, σ_inc, μ_δ, σ_δ]`; the distributions are reconstructed
+internally so callers (e.g. DifferentiationInterface.jl) keep working
+with a flat real-valued input.
 """
 F_cluster_vec(θ; alg = _F_CLUSTER_ALG) =
-    F_cluster(θ[1], θ[2], θ[3], θ[4], θ[5]; alg = alg)
+    F_cluster(θ[1], LogNormal(θ[2], θ[3]), Normal(θ[4], θ[5]); alg = alg)
