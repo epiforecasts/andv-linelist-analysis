@@ -97,7 +97,7 @@ end
 # Returning const arrays from the quadrature `q(n)` callback avoids
 # pulling `FastGaussQuadrature.gausshermite` (and its BLAS eigensolver)
 # into the differentiated path.
-const _GH_N = 16
+const _GH_N = 14
 const _GH_NODES, _GH_WEIGHTS = let
     nodes_1d, weights_1d = gausshermite(_GH_N)
     n = sqrt(2) .* nodes_1d

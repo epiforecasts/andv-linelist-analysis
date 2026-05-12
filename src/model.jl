@@ -150,15 +150,22 @@ distributions, the GI > 0 reject and the cluster-completeness thinning.
     # Pass 1: sample T_inf and accrue the incubation / δ logprobs.
     # F_cluster is deferred to a single vectorised call so the 2-D
     # Gauss-Hermite tensor runs once across all cases instead of N times.
+    # Per-case logprob contributions are accumulated locally into `lp`
+    # and added in a single `@addlogprob!` at the loop end. Each
+    # `@addlogprob!` goes through the DynamicPPL accumulator machinery
+    # (and Mooncake records each as a separate tape entry); collapsing
+    # the 1-to-4 addlogprob calls per case into one removes most of
+    # that overhead.
     T_inf = Vector{T}(undef, d.N)
+    lp = zero(T)
     for i in 1:d.N
         if d.source_idx[i] == 0
             # Zoonotic index: free latent T_inf pre-onset.
             T_inf[i] ~ Uniform(d.onset_lo_day[i] - 80.0, T_onset[i] - 1e-6)
             inc_i = T_onset[i] - T_inf[i]
-            Turing.@addlogprob! logpdf(inc.dist, inc_i)
+            lp += logpdf(inc.dist, inc_i)
             if realtime
-                Turing.@addlogprob! -logcdf(inc.dist, d.obs_time[i] - T_inf[i])
+                lp -= logcdf(inc.dist, d.obs_time[i] - T_inf[i])
             end
         else
             # Sourced case: T_inf anchored to listed exposure window.
@@ -167,21 +174,22 @@ distributions, the GI > 0 reject and the cluster-completeness thinning.
             src = d.source_idx[i]
             T_inf[i] ~ Uniform(d.exp_lo_day[i], d.exp_hi_day[i])
             if T_inf[i] <= T_inf[src]
-                Turing.@addlogprob! -Inf
+                lp += oftype(lp, -Inf)
             else
                 inc_i  = T_onset[i] - T_inf[i]
                 δ_pair = T_inf[i] - T_onset[src]
-                Turing.@addlogprob! logpdf(inc.dist, inc_i)
-                Turing.@addlogprob! logpdf(delta.dist, δ_pair)
+                lp += logpdf(inc.dist, inc_i)
+                lp += logpdf(delta.dist, δ_pair)
                 if realtime
                     Δ_inc = d.obs_time[i]   - T_inf[i]
                     Δ_δ   = d.obs_time[i]   - T_onset[src]
-                    Turing.@addlogprob! -logcdf(inc.dist, Δ_inc)
-                    Turing.@addlogprob! -logcdf(delta.dist, Δ_δ)
+                    lp -= logcdf(inc.dist, Δ_inc)
+                    lp -= logcdf(delta.dist, Δ_δ)
                 end
             end
         end
     end
+    Turing.@addlogprob! lp
 
     # Pass 2: NB offspring likelihood. In realtime mode all N
     # cluster-completeness probabilities share the same population
