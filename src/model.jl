@@ -28,7 +28,7 @@
     μ_δ   ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
     σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
     k     ~ truncated(Normal(0.3, 0.5); lower = 0) # NB offspring dispersion (centred low — known super-spreader pathogen)
-    σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD
+    σ_rw  ~ truncated(Normal(0.0, 0.2); lower = 0) # log-R RW innovation SD (~5%/day typical, ~15%/day at prior 95th pct)
 
     # Concrete element type derived from a sampled scalar — avoids the
     # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
@@ -72,7 +72,10 @@
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
             end
         end
-        R_i = exp(log_R[which_bin(T_inf[i], edges)])
+        # `clamp` is a numerical guard against transient leapfrog overshoots
+        # producing `exp(log_R) = Inf` → `p = 0` and a NegativeBinomial domain
+        # error. Bounds are well outside the posterior support.
+        R_i = exp(clamp(log_R[which_bin(T_inf[i], edges)], -50.0, 50.0))
         d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
     end
 end
