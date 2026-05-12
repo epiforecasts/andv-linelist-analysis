@@ -17,8 +17,6 @@ using Hantavirus
 using Chain
 using DataFrames
 using DataFramesMeta
-using Distributions
-using FlexiChains
 using Plots
 using Printf
 using Random
@@ -98,7 +96,7 @@ post = mktemp() do _path, io
         summarise(chn)
     end
 end
-Hantavirus.plot_rt(post, "rt_spaghetti.png"; n_draws_plot = 100)
+plot_rt(post, "rt_spaghetti.png"; n_draws_plot = 100)
 nothing #hide
 
 # ![R(t) spaghetti](rt_spaghetti.png)
