@@ -134,14 +134,9 @@ distributions, the GI > 0 reject and the cluster-completeness thinning.
     # vector the pre-refactor model exposed.
     log_R := _log_R
 
-    inc_dist     = inc.dist
-    δ_dist       = delta.dist
-    μ_inc, σ_inc = inc.μ, inc.σ
-    μ_δ,   σ_δ   = delta.μ, delta.σ
-
     # Concrete element type derived from a sampled scalar — avoids the
     # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
-    T = typeof(μ_inc)
+    T = typeof(inc.μ)
 
     # T_onset is a latent over the recorded onset window (defaults to a
     # one-day window when only a single onset date was recorded).
@@ -161,9 +156,9 @@ distributions, the GI > 0 reject and the cluster-completeness thinning.
             # Zoonotic index: free latent T_inf pre-onset.
             T_inf[i] ~ Uniform(d.onset_lo_day[i] - 80.0, T_onset[i] - 1e-6)
             inc_i = T_onset[i] - T_inf[i]
-            Turing.@addlogprob! logpdf(inc_dist, inc_i)
+            Turing.@addlogprob! logpdf(inc.dist, inc_i)
             if realtime
-                Turing.@addlogprob! -logcdf(inc_dist, d.obs_time[i] - T_inf[i])
+                Turing.@addlogprob! -logcdf(inc.dist, d.obs_time[i] - T_inf[i])
             end
         else
             # Sourced case: T_inf anchored to listed exposure window.
@@ -176,26 +171,26 @@ distributions, the GI > 0 reject and the cluster-completeness thinning.
             else
                 inc_i  = T_onset[i] - T_inf[i]
                 δ_pair = T_inf[i] - T_onset[src]
-                Turing.@addlogprob! logpdf(inc_dist, inc_i)
-                Turing.@addlogprob! logpdf(δ_dist, δ_pair)
+                Turing.@addlogprob! logpdf(inc.dist, inc_i)
+                Turing.@addlogprob! logpdf(delta.dist, δ_pair)
                 if realtime
                     Δ_inc = d.obs_time[i]   - T_inf[i]
                     Δ_δ   = d.obs_time[i]   - T_onset[src]
-                    Turing.@addlogprob! -logcdf(inc_dist, Δ_inc)
-                    Turing.@addlogprob! -logcdf(δ_dist, Δ_δ)
+                    Turing.@addlogprob! -logcdf(inc.dist, Δ_inc)
+                    Turing.@addlogprob! -logcdf(delta.dist, Δ_δ)
                 end
             end
         end
     end
 
     # Pass 2: NB offspring likelihood. In realtime mode all N
-    # cluster-completeness probabilities share (μ_inc, σ_inc, μ_δ, σ_δ),
-    # so a single vector-valued F_cluster amortises the quadrature across
-    # cases. Profiling showed F_cluster dominates the per-eval cost; this
-    # collapses N quadrature solves into one.
+    # cluster-completeness probabilities share the same population
+    # distributions, so a single vector-valued F_cluster amortises the
+    # quadrature across cases. Profiling showed F_cluster dominates the
+    # per-eval cost; this collapses N quadrature solves into one.
     if realtime
         Δ_srcs = d.obs_time .- T_inf
-        thins  = F_cluster(Δ_srcs, μ_inc, σ_inc, μ_δ, σ_δ; alg = fcluster_alg)
+        thins  = F_cluster(Δ_srcs, inc.dist, delta.dist; alg = fcluster_alg)
         for i in 1:d.N
             R_i   = exp(log_R[which_bin(T_inf[i], edges)])
             R_eff = R_i * thins[i]
