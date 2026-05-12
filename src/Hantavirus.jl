@@ -27,7 +27,7 @@ include("main.jl")
 
 export load_linelist, build_data, bin_edges_day, which_bin, bin_labels
 export joint_model
-export F_cluster, F_cluster_quadrature, F_cluster_vec, F_cluster_quadrature_vec
+export F_cluster, F_cluster_vec, GaussHermite, HCubature
 export filter_realtime
 export diagnostics, vector_chain, summarise, save_posterior
 export plot_rt, plot_delta_sense_check, plot_pairplot

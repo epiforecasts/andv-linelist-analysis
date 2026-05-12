@@ -62,12 +62,22 @@ plt = plot(Δs, F;
 plt
 ```
 
-`F_cluster` is a 40-by-40 tensor Gauss-Hermite quadrature in standardised
-normal coordinates. It is smooth and statically loopy, which lets Enzyme
-differentiate it cleanly through `DifferentiationInterface.jl` — the
-gradient evaluation NUTS needs on every step. An `Integrals.jl` /
-`HCubatureJL` adaptive reference (`F_cluster_quadrature`) is also
-available for unit-testing.
+`F_cluster` dispatches on an algorithm switch:
+
+- `GaussHermite(n)` (default `n = 40`) — tensor Gauss-Hermite quadrature
+  in standardised normal coordinates. Statically sized loop with only
+  `+, -, *, /, exp, log, erf`; Enzyme reverse mode differentiates
+  through it cleanly via `DifferentiationInterface.jl`.
+- `HCubature()` — `Integrals.jl` adaptive 2D cubature, used as a
+  higher-accuracy reference. It is **not** Enzyme-reverse-safe and so
+  cannot replace the default on the NUTS gradient path; it lives in the
+  package for value-only comparison tests.
+
+```julia
+F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ)                              # GaussHermite, default
+F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ; alg = GaussHermite(80))      # tighter GH
+F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ; alg = HCubature())           # adaptive reference
+```
 
 ## Fitting both views
 
