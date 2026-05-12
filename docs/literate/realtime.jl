@@ -8,54 +8,45 @@
 # 3. Recent source cases have not had time to seed all their offspring — the observed offspring count is a downward-biased estimate of R(t) near the cut-off.
 #
 # The real-time machinery in `joint_model` corrects for these via per-case right-truncation on Inc and δ and a cluster-completeness adjustment on the NB offspring count (the [`F_cluster`](@ref) integral).
-# This page checks whether those corrections do their job by overlaying three fits at the same outbreak cut-off date.
-
-# ## The three fits
+# This page validates the corrections by fitting the full outbreak retrospectively and the same outbreak at a mid-outbreak cut-off in real-time mode, then overlaying the posteriors.
+# If the corrections work, the real-time posteriors at the cut-off should be consistent with the full retrospective posteriors (broader, since the real-time fit sees less data, but centred in the same place).
 
 using Hantavirus
+using DataFrames: nrow
 using Dates: Date
+using Plots: plot, plot!, histogram!, hline!, vline!, savefig
+using Statistics: median, quantile
+
+# ## The two fits
 
 obs_date = Date("2018-12-31")
 ll       = load_linelist()
+ll_rt    = filter_realtime(ll, obs_date)
 
-ll_truth = filter_by_exposure(ll, obs_date)   # cases known infected by obs_date
-ll_naive = filter_realtime(ll, obs_date)      # cases known observed by obs_date
-
-(retained_truth = nrow(ll_truth), retained_naive = nrow(ll_naive))
+(retrospective_n = nrow(ll), realtime_n = nrow(ll_rt))
 
 # | Fit | Linelist | `obs_time` | Interpretation |
 # |---|---|---|---|
-# | **Counterfactual retro** | `ll_truth` (exposure-filtered) | `nothing` | What an analyst would estimate at obs_date if they had a time machine — full Inc/δ info for every case infected by then. Not realisable in real time. |
-# | **Corrected real-time** | `ll_naive` (onset-filtered) | `obs_date` | What `joint_model` offers in real time, with truncation and cluster-completeness corrections active. |
-# | **Naive real-time** | `ll_naive` (onset-filtered) | `nothing` | What you'd get if you just filtered the linelist and fit without corrections — the bias the corrections are supposed to fix. |
+# | **Full retrospective** | `ll` (the whole outbreak) | `nothing` | Gold standard — complete observation, no truncation correction needed. |
+# | **Corrected real-time** | `ll_rt` (onset ≤ obs_date) | `obs_date` | What `joint_model` offers at the cut-off, with truncation and cluster-completeness corrections active. |
 
-samples = 300
-chains  = 2
-seed    = 20260512
-tmp     = (output = mktempdir(), figures = mktempdir())
+seed = 20260512
+tmp  = (output = mktempdir(), figures = mktempdir())
 
-chn_truth, post_truth = analyse(; data = ll_truth,
-                                  samples, chains, seed, tmp...,)
-chn_rt,    post_rt    = analyse(; data = ll_naive, obs_time = obs_date,
-                                  samples, chains, seed, tmp...,)
-chn_naive, post_naive = analyse(; data = ll_naive,
-                                  samples, chains, seed, tmp...,)
-nothing #hide
+chn_retro, post_retro = analyse(; data = ll,    seed, tmp...,)
+chn_rt,    post_rt    = analyse(; data = ll_rt, obs_time = obs_date, seed, tmp...,);
 
 # ## Population posteriors
 #
-# For each of `(μ_inc, σ_inc, μ_δ, σ_δ, k)`, the three posteriors are overlaid on the same panel.
-# The corrected real-time fit should track the counterfactual retro; the naive fit should diverge from it in the direction of the right-truncation bias (shorter Inc, more negative δ).
-
-using Plots: plot, histogram!, vline!, hline!, plot!, savefig
-using Statistics: median
+# For each of `(μ_inc, σ_inc, μ_δ, σ_δ, k)`, the two posteriors are overlaid on the same panel.
+# If the real-time corrections are working, the corrected real-time posterior should be centred on the full retrospective posterior; the real-time density will be broader because it conditions on less data.
 
 function overlay_marginals(fits, title)
     params = [(:μ_inc, "μ_inc"), (:σ_inc, "σ_inc"),
               (:μ_δ, "μ_δ"),     (:σ_δ, "σ_δ"),
               (:k,   "k")]
     panels = Any[]
-    colours = [:steelblue, :darkorange, :crimson]
+    colours = [:steelblue, :darkorange]
     for (key, label) in params
         p = plot(; xlabel = label, ylabel = "density",
                    legend = (key == :μ_inc ? :topright : false))
@@ -72,15 +63,14 @@ function overlay_marginals(fits, title)
 end
 
 fits = [
-    ("counterfactual retro", post_truth),
-    ("corrected real-time",  post_rt),
-    ("naive real-time",      post_naive),
+    ("full retrospective",  post_retro),
+    ("corrected real-time", post_rt),
 ]
 overlay_marginals(fits, "Posterior marginals at $(obs_date)")
 
 # ## R(t) overlay
 #
-# Posterior medians with 80% CrI ribbons for each bin, the three fits overlaid on a single axis.
+# Posterior medians with 80% CrI ribbons for each bin, the two fits overlaid on a single axis.
 
 function rt_quantiles(post)
     return (lo  = [quantile(exp.(post.log_R_chain[b]), 0.10) for b in eachindex(post.log_R_chain)],
@@ -91,7 +81,7 @@ end
 plt = plot(; xlabel = "Bin index", ylabel = "R(t) (80% CrI)",
              title  = "R(t) at $(obs_date)",
              legend = :topright, ylims = (0.0, 4.0))
-colours = [:steelblue, :darkorange, :crimson]
+colours = [:steelblue, :darkorange]
 for (i, (name, post)) in enumerate(fits)
     q = rt_quantiles(post)
     b = 1:length(q.med)
@@ -105,10 +95,9 @@ plt
 
 # ## Reading the figures
 #
-# - **Counterfactual retro vs corrected real-time:** these should agree closely if the corrections are doing their job.
-#   Any systematic difference is residual bias from approximations (e.g. the cluster-completeness assumes onset-to-report is zero, that source attribution is correct, etc.).
-# - **Corrected vs naive real-time:** the gap is the bias the model fixes.
-#   The naive fit will tend to underestimate Inc (long incubators not yet observed), pull μ_δ negative (only short / pre-symptomatic δ observed), and underestimate R(t) in the bins closest to the cut-off.
+# If the corrected real-time fit produces population posteriors centred on the full retrospective posteriors, the corrections are doing their job — the bias from observing only short delays and incomplete clusters has been removed.
+# Any systematic offset is residual bias from the modelling approximations: the cluster-completeness adjustment assumes onset-to-report is zero, source attribution is correct, and so on.
+# Bins past the cut-off in the R(t) plot have no real-time information and reduce to the prior; agreement is expected only in bins covered by retained cases.
 
 # ## Caveats
 #
@@ -119,5 +108,3 @@ plt
 # - the onset-to-report delay (only chain completion is modelled),
 # - general under-ascertainment,
 # - incomplete source attribution.
-#
-# The counterfactual retrospective fit on this page also uses the eventual exposure attribution to filter cases, which assumes perfect retrospective attribution — in practice some attribution work happens after the cut-off too.

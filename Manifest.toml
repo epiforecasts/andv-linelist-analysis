@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "861c95325bc112f5f7263dd8472c837e83242a57"
+project_hash = "e4cbbf530efb1073a5939676c216cbe581fba3a4"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "bbc22a9a08a0ef6460041086d8a7b27940ed4ffd"
@@ -738,6 +738,12 @@ git-tree-sha1 = "acebe244d53ee1b461970f8910c235b259e772ef"
 uuid = "9aa1b823-49e4-5ca5-8b0f-3971ec8bab6a"
 version = "0.3.2"
 
+[[deps.FastGaussQuadrature]]
+deps = ["LinearAlgebra", "SpecialFunctions", "StaticArrays"]
+git-tree-sha1 = "ad29c8cb0ea5fb1816926d2a49683f890a8daf64"
+uuid = "442a2c76-b920-505d-bb47-c5924d526838"
+version = "1.2.0"
+
 [[deps.FilePathsBase]]
 deps = ["Compat", "Dates"]
 git-tree-sha1 = "3bab2c5aa25e7840a4b065805c0cdfc01f3068d2"
@@ -972,7 +978,7 @@ uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 version = "1.11.0"
 
 [[deps.Hantavirus]]
-deps = ["ADTypes", "ArgParse", "CSV", "DataFrames", "Dates", "Distributions", "FlexiChains", "Integrals", "MCMCChains", "Mooncake", "Plots", "Printf", "Random", "Statistics", "Turing"]
+deps = ["ADTypes", "ArgParse", "CSV", "DataFrames", "Dates", "DifferentiationInterface", "Distributions", "FlexiChains", "ForwardDiff", "Integrals", "MCMCChains", "Mooncake", "Plots", "Printf", "Random", "Statistics", "Turing"]
 path = "."
 uuid = "a3f8c2e1-4b7d-4a9e-8c3f-d5e2f1a0b6c4"
 version = "0.0.0"

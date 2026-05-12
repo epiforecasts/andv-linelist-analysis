@@ -1,5 +1,42 @@
-## CLI entry point — called by `julia -m Hantavirus`.
-## For interactive use, call analyse() directly with keyword arguments.
+## Package entry points.
+## - `fit_joint(d, edges; ...)` runs NUTS on `joint_model`, returns the chain.
+##   Shared by `analyse()` and any external code that wants a fit without
+##   the full IO pipeline.
+## - `analyse(; ...)` loads data, fits, summarises, and writes outputs.
+## - `(@main)(args)` is the CLI entry point invoked by `julia -m Hantavirus`.
+
+"""
+    fit_joint(d, edges;
+              samples = 1000,
+              chains  = max(2, min(Threads.nthreads(), 4)),
+              seed    = nothing,
+              progress = true,
+              fcluster_alg = _F_CLUSTER_ALG)
+
+Run NUTS on `joint_model(d, edges, fcluster_alg)` with Mooncake
+reverse-mode AD and return the `MCMCChains.Chains` object. The sampler
+configuration (AD backend, NUTS target, init scheme, threading) is
+fixed here so `analyse()` and the documentation walk-through share one
+source of truth.
+"""
+function fit_joint(d, edges;
+                   samples::Integer = 1000,
+                   chains::Integer  = max(2, min(Threads.nthreads(), 4)),
+                   seed::Union{Nothing,Integer} = nothing,
+                   progress::Bool = true,
+                   fcluster_alg = _F_CLUSTER_ALG)
+    seed === nothing || Random.seed!(seed)
+    # Mooncake reverse-mode AD: consumes Integrals.jl's ChainRules rrule
+    # for `__solvebp`, which lets F_cluster sit on the gradient path
+    # without an EnzymeRule.
+    adtype = AutoMooncake(; config = Mooncake.Config())
+    return sample(
+        joint_model(d, edges, fcluster_alg),
+        NUTS(0.95; adtype), MCMCThreads(), samples, chains;
+        initial_params = fill(DynamicPPL.InitFromPrior(), chains),
+        progress = progress,
+    )
+end
 
 function analyse(;
     data     = LINELIST_PATH,
@@ -7,13 +44,11 @@ function analyse(;
     output   = OUTPUT_DIR,
     figures  = FIGURES_DIR,
     samples  = 1000,
-    chains   = 4,
+    chains   = max(2, min(Threads.nthreads(), 4)),
     seed     = 20260508,
     progress = true,
-    fcluster_alg = DEFAULT_FCLUSTER_ALG,
+    fcluster_alg = _F_CLUSTER_ALG,
 )
-    Random.seed!(seed)
-
     ll = data isa DataFrame ? data : load_linelist(data)
     if obs_time !== nothing
         ll = filter_realtime(ll, obs_time)
@@ -22,16 +57,7 @@ function analyse(;
     edges = bin_edges_day(d.t0)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time
 
-    # Mooncake reverse-mode AD: consumes Integrals.jl's ChainRules rrule
-    # for `__solvebp`, which lets F_cluster sit on the gradient path
-    # without an EnzymeRule.
-    adtype = AutoMooncake(; config = Mooncake.Config())
-    chn = sample(
-        joint_model(d, edges, fcluster_alg),
-        NUTS(0.95; adtype), MCMCThreads(), samples, chains;
-        initial_params = fill(DynamicPPL.InitFromPrior(), chains),
-        progress = progress,
-    )
+    chn = fit_joint(d, edges; samples, chains, seed, progress, fcluster_alg)
 
     post = summarise(chn)
     save_posterior(post, joinpath(output, "posterior.csv"))
@@ -60,9 +86,9 @@ function (@main)(args)
             arg_type = Int
             default  = 1000
         "--chains", "-c"
-            help     = "number of parallel chains"
+            help     = "number of parallel chains (default: clamp(Threads.nthreads(), 2, 4))"
             arg_type = Int
-            default  = 4
+            default  = max(2, min(Threads.nthreads(), 4))
         "--seed", "-s"
             help     = "random seed"
             arg_type = Int

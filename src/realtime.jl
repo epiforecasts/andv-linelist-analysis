@@ -4,6 +4,9 @@
 ## the cluster-completeness integral that goes into the right-truncated
 ## likelihood.
 
+using FastGaussQuadrature: gausshermite
+using Integrals: QuadratureRule
+
 """
     filter_realtime(ll, obs_date)
 
@@ -70,68 +73,102 @@ end
 # F_cluster(t; μ_inc, σ_inc, μ_δ, σ_δ) = P(Inc(src) + δ + Inc(sec) ≤ t)
 #
 # where Inc(src), Inc(sec) ~ LogNormal(μ_inc, σ_inc) i.i.d. and
-# δ ~ Normal(μ_δ, σ_δ). Evaluated for every source case on every NUTS
-# gradient step.
+# δ ~ Normal(μ_δ, σ_δ).
+# Evaluated for every source case on every NUTS gradient step.
 #
-# Implemented as a 2-D quadrature in standardised normal coordinates
-# (z₁ = log-Inc(src), z₂ = δ): the change of variables removes the
-# parameter-dependent integration domain and bounds the integrand. The
-# inner CDF is the LogNormal CDF of the secondary's incubation.
+# Implemented as a 2-D vector-valued quadrature in standardised normal
+# coordinates (z₁ = log-Inc(src), z₂ = δ).
+# The change of variables removes the parameter-dependent integration
+# domain and bounds the integrand.
+# The integrand returns a vector with one component per requested `t`,
+# so a single solve replaces N scalar solves inside the model loop.
 #
-# AD path: Mooncake reverse mode via DifferentiationInterface.jl, which
-# consumes the ChainRulesCore `rrule` that `Integrals.jl` defines for
-# `__solvebp` (Enzyme reverse mode has no equivalent EnzymeRule and so
-# is incompatible with the Integrals.jl solve machinery).
+# Solver: `Integrals.QuadratureRule` with pre-computed Gauss-Hermite
+# tensor nodes.
+# A fixed-rule solver is required for Mooncake reverse-mode AD:
+# `HCubatureJL`'s adaptive heap mutates internal arrays in ways that
+# trip an unhandled LLVM intrinsic (`sub_ptr`) inside Mooncake, even
+# when the integrand itself is differentiation-friendly.
+# Gauss-Hermite is the natural rule here because the standardised
+# coordinates already carry a Gaussian weight.
 
-# Outer integration box in standardised coordinates. ±8σ captures the
-# integrand to better than 1e-10 in the model regime.
-const _F_CLUSTER_BOX = ([-8.0, -8.0], [8.0, 8.0])
+# Pre-compute Gauss-Hermite tensor nodes once at module load.
+# Returning const arrays from the quadrature `q(n)` callback avoids
+# pulling `FastGaussQuadrature.gausshermite` (and its BLAS eigensolver)
+# into the differentiated path.
+const _GH_N = 20
+const _GH_NODES, _GH_WEIGHTS = let
+    nodes_1d, weights_1d = gausshermite(_GH_N)
+    n = sqrt(2) .* nodes_1d
+    w = weights_1d ./ sqrt(π)
+    nodes   = vec([Float64[x, y] for x in n, y in n])
+    weights = vec([wx * wy for wx in w, wy in w])
+    nodes, weights
+end
+_gh_tensor_q(::Int) = (_GH_NODES, _GH_WEIGHTS)
 
-# Default algorithm: adaptive 2-D HCubature, tight tolerance. Override
-# via the `fcluster_alg` kwarg to `joint_model` and `analyse` for
-# diagnostics or to trade accuracy for speed.
-const DEFAULT_FCLUSTER_ALG = HCubatureJL()
+# `evalrule` in Integrals.jl rescales nodes by (ub-lb)/2 and shifts by
+# (ub+lb)/2; using [-1,1]² means scale = 1, shift = 0, so the rule
+# evaluates the integrand at the pre-computed nodes unchanged.
+const _F_CLUSTER_DOMAIN = ([-1.0, -1.0], [1.0, 1.0])
+const _F_CLUSTER_ALG    = QuadratureRule(_gh_tensor_q; n = _GH_N)
 
+# Out-of-place vector-output integrand. At one (z₁, z₂) point evaluate
+# the LogNormal CDF of the secondary's incubation at every t in p.ts,
+# return a fresh length-N vector.
 function _f_cluster_integrand(z::AbstractVector, p)
     z1, z2 = z[1], z[2]
     inc_src = exp(p.μ_inc + p.σ_inc * z1)
     δ       = p.μ_δ + p.σ_δ * z2
-    s       = p.t - inc_src - δ
-    ϕ1 = exp(-z1 * z1 / 2) / sqrt(2π)
-    ϕ2 = exp(-z2 * z2 / 2) / sqrt(2π)
-    inc_cdf = s > 0 ? cdf(LogNormal(p.μ_inc, p.σ_inc), s) : zero(s)
-    return inc_cdf * ϕ1 * ϕ2
+    # ϕ(z) factors are already absorbed into the Gauss-Hermite weights.
+    return [let s = p.ts[i] - inc_src - δ
+                s > 0 ? cdf(LogNormal(p.μ_inc, p.σ_inc), s) : zero(s)
+            end
+            for i in eachindex(p.ts)]
 end
 
 """
-    F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ;
-              alg = HCubatureJL(), reltol = 1e-8, abstol = 1e-10)
+    F_cluster(ts, μ_inc, σ_inc, μ_δ, σ_δ; alg = _F_CLUSTER_ALG)
 
 Probability that the full source-to-secondary chain
-`Inc(src) + δ + Inc(sec)` is no greater than `t`, with
-`Inc(src), Inc(sec) ~ LogNormal(μ_inc, σ_inc)` (i.i.d.) and
-`δ ~ Normal(μ_δ, σ_δ)`.
+`Inc(src) + δ + Inc(sec)` is no greater than `t`, evaluated at every
+element of `ts` against the same population parameters via a single
+2-D quadrature.
 
-`alg` is any `Integrals.AbstractIntegralAlgorithm`; the default is
-`HCubatureJL()`. Use a different algorithm (e.g. `QuadratureRule` with
-fixed Gauss-Hermite nodes) to trade adaptive accuracy for evaluation
-speed during diagnostics.
+`Inc(src), Inc(sec) ~ LogNormal(μ_inc, σ_inc)` i.i.d., and
+`δ ~ Normal(μ_δ, σ_δ)`.
+Returns a vector of length `length(ts)`.
+
+`alg` is any `Integrals.AbstractIntegralAlgorithm`.
+Default is a 20×20 Gauss-Hermite tensor `QuadratureRule` with nodes
+precomputed at module load.
+Pass e.g. `HCubatureJL()` to swap in an adaptive solver for accuracy
+diagnostics (note: HCubatureJL is not compatible with Mooncake
+reverse-mode AD).
 """
-function F_cluster(t::Real, μ_inc::Real, σ_inc::Real, μ_δ::Real, σ_δ::Real;
-                   alg = DEFAULT_FCLUSTER_ALG,
-                   reltol::Real = 1e-8, abstol::Real = 1e-10)
-    t <= 0 && return zero(float(t))
-    p = (; t, μ_inc, σ_inc, μ_δ, σ_δ)
-    prob = IntegralProblem(_f_cluster_integrand, _F_CLUSTER_BOX, p)
-    sol = solve(prob, alg; reltol = reltol, abstol = abstol)
+function F_cluster(ts::AbstractVector,
+                   μ_inc::Real, σ_inc::Real, μ_δ::Real, σ_δ::Real;
+                   alg = _F_CLUSTER_ALG)
+    p    = (; ts, μ_inc, σ_inc, μ_δ, σ_δ)
+    prob = IntegralProblem(_f_cluster_integrand, _F_CLUSTER_DOMAIN, p)
+    sol  = solve(prob, alg)
     return sol.u
 end
 
 """
-    F_cluster_vec(θ; alg = HCubatureJL())
+    F_cluster(t::Real, μ_inc, σ_inc, μ_δ, σ_δ; kw...)
 
-Vector-input wrapper of [`F_cluster`](@ref) for AD testing.
+Scalar convenience: a single-`t` query that returns the value rather
+than a length-1 vector.
+"""
+F_cluster(t::Real, μ_inc::Real, σ_inc::Real, μ_δ::Real, σ_δ::Real; kw...) =
+    F_cluster([float(t)], μ_inc, σ_inc, μ_δ, σ_δ; kw...)[1]
+
+"""
+    F_cluster_vec(θ; alg = _F_CLUSTER_ALG)
+
+Vector-input wrapper of scalar [`F_cluster`](@ref) for AD testing.
 `θ = [t, μ_inc, σ_inc, μ_δ, σ_δ]`.
 """
-F_cluster_vec(θ; alg = DEFAULT_FCLUSTER_ALG) =
+F_cluster_vec(θ; alg = _F_CLUSTER_ALG) =
     F_cluster(θ[1], θ[2], θ[3], θ[4], θ[5]; alg = alg)
