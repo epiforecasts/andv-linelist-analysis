@@ -15,7 +15,7 @@ cases, or over an 80-day pre-onset window for the zoonotic index.
 |---|---|---|
 | Incubation period (`T_onset − T_inf`) | LogNormal | log-mean ~ Normal(3.0, 0.5), log-SD ~ half-Normal(0, 0.5) |
 | Transmission timing relative to source onset (`T_inf(sec) − T_onset(src)`) | Normal | mean ~ Normal(0, 5), SD ~ half-Normal(0, 1) |
-| Offspring count `Z` per case | Negative-Binomial with mean `R(t)` and dispersion `k` | `k` ~ half-Normal(0.3, 0.5) |
+| Offspring count `Z` per case | Negative-Binomial with mean `R(t)` and dispersion `k` | `1/√k` ~ half-Normal(0, 1) (Stan's reciprocal-sqrt parameterisation; diffuse and symmetric on the overdispersion SD-multiplier scale) |
 | `log R(t)` over weekly bins | Non-centred random walk | first bin ~ Normal(log 1.5, 1); innovation SD ~ half-Normal(0, 0.2) (≈ 5%/day typical, ≈ 15%/day at the prior 95th percentile) |
 
 A per-pair constraint enforces `T_inf(secondary) > T_inf(source)` so that
@@ -45,10 +45,13 @@ There are very few cases after early January 2019, and the random walk on
 `log R(t)` reverts to its prior in those bins. The wide credible intervals
 on the right of the R(t) figure show this.
 
-### Offspring dispersion `k` has prior dependence
+### Offspring dispersion `k` is data-thin
 
-34 cases is thin for identifying a Negative-Binomial dispersion. The prior
-on `k`, centred at 0.3, has visible influence on the posterior centre.
+34 cases is thin for identifying a Negative-Binomial dispersion. The
+posterior on `k` is wide; the reciprocal-sqrt prior on `1/√k` is diffuse
+and symmetric on the overdispersion scale so it does not pull the
+posterior toward any particular value, but the credible interval is
+necessarily wide given the sample size.
 
 ### Right-truncation of long incubation periods
 
