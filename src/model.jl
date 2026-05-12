@@ -152,6 +152,9 @@ distributions, the GI > 0 reject and the cluster-completeness thinning.
 
     realtime = d.obs_time !== nothing
 
+    # Pass 1: sample T_inf and accrue the incubation / δ logprobs.
+    # F_cluster is deferred to a single vectorised call so the 2-D
+    # Gauss-Hermite tensor runs once across all cases instead of N times.
     T_inf = Vector{T}(undef, d.N)
     for i in 1:d.N
         if d.source_idx[i] == 0
@@ -183,13 +186,24 @@ distributions, the GI > 0 reject and the cluster-completeness thinning.
                 end
             end
         end
-        R_i = exp(log_R[which_bin(T_inf[i], edges)])
-        if realtime
-            Δ_src = d.obs_time[i] - T_inf[i]
-            thin  = F_cluster(Δ_src, μ_inc, σ_inc, μ_δ, σ_δ; alg = fcluster_alg)
-            R_eff = R_i * thin
+    end
+
+    # Pass 2: NB offspring likelihood. In realtime mode all N
+    # cluster-completeness probabilities share (μ_inc, σ_inc, μ_δ, σ_δ),
+    # so a single vector-valued F_cluster amortises the quadrature across
+    # cases. Profiling showed F_cluster dominates the per-eval cost; this
+    # collapses N quadrature solves into one.
+    if realtime
+        Δ_srcs = d.obs_time .- T_inf
+        thins  = F_cluster(Δ_srcs, μ_inc, σ_inc, μ_δ, σ_δ; alg = fcluster_alg)
+        for i in 1:d.N
+            R_i   = exp(log_R[which_bin(T_inf[i], edges)])
+            R_eff = R_i * thins[i]
             d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_eff))
-        else
+        end
+    else
+        for i in 1:d.N
+            R_i = exp(log_R[which_bin(T_inf[i], edges)])
             d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
         end
     end
