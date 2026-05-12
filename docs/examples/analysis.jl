@@ -17,13 +17,13 @@ using Hantavirus
 using Chain
 using DataFrames
 using DataFramesMeta
-using Plots
 using Printf
 using Random
 using Turing
 using ADTypes
 using Enzyme
-using CairoMakie: CairoMakie
+using CairoMakie
+using AlgebraOfGraphics
 using PairPlots
 
 Random.seed!(20260508)
