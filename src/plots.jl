@@ -1,12 +1,20 @@
 ## Package-level plotting and summary-table helpers shared by the analysis
-## walkthrough and the CLI. Every function returns a figure object so the
-## caller decides whether to render inline or write to disk.
+## walkthrough and the CLI. Every function returns a Makie `Figure` so the
+## caller decides whether to render inline or write to disk. Plotting uses
+## Makie + AlgebraOfGraphics; a Makie backend (e.g. CairoMakie) must be
+## loaded at the call site to render or save figures.
+
+# Apply a consistent theme to every figure produced here without mutating
+# the user's global Makie theme.
+_default_theme() = merge(theme_latexfonts(), Theme(fontsize = 12))
+
+_with_theme(f) = with_theme(f, _default_theme())
 
 """
     plot_data(ll)
 
 Two-panel view of the raw line list: epicurve by ISO week of onset (left)
-and exposure windows against onset dates (right). Returns a Plots.jl `Plot`.
+and exposure windows against onset dates (right). Returns a `Makie.Figure`.
 """
 function plot_data(ll)
     weekly = @chain DataFrame(week = ll.onset_date) begin
@@ -15,11 +23,6 @@ function plot_data(ll)
         @orderby(:week)
     end
 
-    epicurve = bar(weekly.week, weekly.cases;
-                   legend = false, xlabel = "Week of onset",
-                   ylabel = "Cases", title = "Epicurve (weekly)",
-                   color = :steelblue, linecolor = :steelblue)
-
     sourced = @chain DataFrame(
         exposure_lower = ll.exposure_lower,
         exposure_upper = ll.exposure_upper,
@@ -27,20 +30,58 @@ function plot_data(ll)
         @rsubset(!ismissing(:exposure_lower))
         @orderby(:onset_date)
     end
+    sourced[!, :idx] = 1:nrow(sourced)
 
-    expo = plot(; xlabel = "Date", ylabel = "Case (ordered by onset)",
-                  title = "Exposure windows and onset", legend = :topright)
-    for (j, r) in enumerate(eachrow(sourced))
-        plot!(expo, [r.exposure_lower, r.exposure_upper], [j, j];
-              linewidth = 3, color = :steelblue, label = "")
-        scatter!(expo, [r.onset_date], [j];
-                 markersize = 3, color = :darkorange, label = "")
+    return _with_theme() do
+        fig = Figure(; size = (1200, 450))
+
+        # Epicurve via AlgebraOfGraphics: bar of weekly cases.
+        weekly_aog = DataFrame(
+            week_int = Dates.value.(weekly.week),
+            cases    = weekly.cases,
+        )
+        epi_plot = data(weekly_aog) *
+                   mapping(:week_int => "Week of onset",
+                           :cases    => "Cases") *
+                   visual(BarPlot, color = :steelblue)
+        ag1 = draw!(fig[1, 1], epi_plot;
+                    axis = (title = "Epicurve (weekly)",))
+        ax1 = only(ag1).axis
+        # Replace integer day-of-epoch ticks with the actual dates.
+        let xs = Dates.value.(weekly.week)
+            n = length(xs)
+            keep = unique(round.(Int, range(1, n; length = min(n, 6))))
+            ax1.xticks = (xs[keep], string.(weekly.week[keep]))
+            ax1.xticklabelrotation = π / 6
+        end
+
+        ax2 = Axis(fig[1, 2]; xlabel = "Date",
+                   ylabel = "Case (ordered by onset)",
+                   title = "Exposure windows and onset")
+        for r in eachrow(sourced)
+            lines!(ax2,
+                   [Dates.value(r.exposure_lower),
+                    Dates.value(r.exposure_upper)],
+                   [r.idx, r.idx];
+                   color = :steelblue, linewidth = 3)
+        end
+        scatter!(ax2, Dates.value.(sourced.onset_date), sourced.idx;
+                 color = :darkorange, markersize = 6, label = "Onset")
+        # Empty proxy for the exposure window legend entry.
+        lines!(ax2, Float64[], Float64[];
+               color = :steelblue, linewidth = 3, label = "Exposure window")
+        axislegend(ax2; position = :rt)
+        let dts = sort(unique(vcat(sourced.exposure_lower,
+                                   sourced.exposure_upper,
+                                   sourced.onset_date)))
+            n = length(dts)
+            keep = unique(round.(Int, range(1, n; length = min(n, 6))))
+            ax2.xticks = (Dates.value.(dts[keep]), string.(dts[keep]))
+            ax2.xticklabelrotation = π / 6
+        end
+
+        fig
     end
-    scatter!(expo, Date[], Int[]; color = :steelblue,
-             markershape = :hline, label = "Exposure window")
-    scatter!(expo, Date[], Int[]; color = :darkorange, label = "Onset")
-
-    return plot(epicurve, expo; layout = (1, 2), size = (1200, 450))
 end
 
 # Per-draw scalar parameter as a Vector{Float64} via FlexiChains. Used to
@@ -134,7 +175,6 @@ function _ppc_frame(chn; rng = Random.MersenneTwister(1))
     σ_inc = _draws(chn, :σ_inc)
     μ_δ   = _draws(chn, :μ_δ)
     σ_δ   = _draws(chn, :σ_δ)
-    n = length(μ_inc)
 
     # One source-incubation and one secondary-incubation per draw so GI and
     # SI inherit independent incubation realisations as in the data.
@@ -160,17 +200,16 @@ function _density_band(xs, dists)
     return med, lo, hi
 end
 
-function _pp_panel(title, xs, dists, samples, xlabel; bins = 50)
+# Add an inferred-density ribbon + predictive-sample histogram to `ax`. The
+# histogram is normalised to a PDF so the two layers share a y-axis.
+function _pp_panel!(ax, xs, dists, samples; bins = 50)
     med, lo, hi = _density_band(xs, dists)
-    plt = plot(xs, med; ribbon = (med .- lo, hi .- med),
-               color = :steelblue, fillalpha = 0.25, linewidth = 2,
-               label = "inferred (median + 95%)",
-               title = title, xlabel = xlabel, ylabel = "density",
-               legend = :topright, titlefontsize = 9, legendfontsize = 6)
-    histogram!(plt, samples; bins = bins, normalize = :pdf,
-               color = :darkorange, linecolor = :darkorange,
-               alpha = 0.45, label = "predictive samples")
-    return plt
+    band!(ax, xs, lo, hi; color = (:steelblue, 0.25))
+    inferred = lines!(ax, xs, med; color = :steelblue, linewidth = 2)
+    pred = hist!(ax, samples; bins = bins, normalization = :pdf,
+                 color = (:darkorange, 0.45),
+                 strokecolor = :darkorange, strokewidth = 0.5)
+    return inferred, pred
 end
 
 """
@@ -182,7 +221,7 @@ Each panel overlays the posterior over the parametric density (median PDF
 with a 95% pointwise ribbon across draws) and a histogram of one
 predictive sample per draw. GI / SI use a Normal moment-match of
 `Normal(μ_δ, σ_δ) + LogNormal(μ_inc, σ_inc)` for the inferred ribbon and
-exact `δ + Inc` draws for the histogram. Returns a Plots.jl `Plot`.
+exact `δ + Inc` draws for the histogram. Returns a `Makie.Figure`.
 """
 function plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
     samples = _ppc_frame(chn; rng)
@@ -198,16 +237,38 @@ function plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
     gisi_dists = Normal.(samples.μ_δ .+ mean_inc,
                          sqrt.(samples.σ_δ .^ 2 .+ var_inc))
 
-    p_inc = _pp_panel("Incubation period",     range(0.5, 70.0; length = 200),
-                      inc_dists, vcat(samples.inc_src, samples.inc_sec), "days")
-    p_δ   = _pp_panel("Transmission timing δ", range(-5.0, 5.0; length = 200),
-                      δ_dists, samples.δ, "days from source onset")
-    p_gi  = _pp_panel("Generation interval",   range(0.5, 80.0; length = 200),
-                      gisi_dists, samples.gi, "days")
-    p_si  = _pp_panel("Serial interval",       range(0.5, 80.0; length = 200),
-                      gisi_dists, samples.si, "days")
+    return _with_theme() do
+        fig = Figure(; size = (1000, 700))
 
-    return plot(p_inc, p_δ, p_gi, p_si; layout = (2, 2), size = (1000, 700))
+        panels = [
+            ("Incubation period",     range(0.5, 70.0; length = 200),
+             inc_dists, vcat(samples.inc_src, samples.inc_sec), "days"),
+            ("Transmission timing δ", range(-5.0, 5.0; length = 200),
+             δ_dists, samples.δ, "days from source onset"),
+            ("Generation interval",   range(0.5, 80.0; length = 200),
+             gisi_dists, samples.gi, "days"),
+            ("Serial interval",       range(0.5, 80.0; length = 200),
+             gisi_dists, samples.si, "days"),
+        ]
+
+        local last_inferred = nothing
+        local last_pred = nothing
+        for (k, (title, xs, dists, samps, xlabel)) in enumerate(panels)
+            row, col = fldmod1(k, 2)
+            ax = Axis(fig[row, col]; title = title, xlabel = xlabel,
+                      ylabel = "density",
+                      titlesize = 11)
+            last_inferred, last_pred = _pp_panel!(ax, xs, dists, samps)
+        end
+
+        Legend(fig[3, 1:2],
+               [last_inferred, last_pred],
+               ["inferred (median + 95%)", "predictive samples"];
+               orientation = :horizontal, framevisible = false,
+               tellheight = true, tellwidth = false)
+        rowsize!(fig.layout, 3, Auto(0.1))
+        fig
+    end
 end
 
 """
@@ -217,7 +278,7 @@ Spaghetti plot of R(t) over weekly bins. Each thinned posterior draw is a
 horizontal segment per bin with the line broken between bins so no vertical
 step connectors are drawn. Bin edges come from `BIN_EDGES` (data.jl); the
 first and last bins extend one bin-width past the listed edges. Returns a
-Plots.jl `Plot`.
+`Makie.Figure`.
 """
 function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
     log_R = vector_chain(chn, :log_R)
@@ -228,25 +289,40 @@ function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
     bin_width  = BIN_EDGES[2] - BIN_EDGES[1]
     left_edge  = vcat(BIN_EDGES[1] - bin_width, BIN_EDGES)
     right_edge = vcat(BIN_EDGES, BIN_EDGES[end] + bin_width)
-    xs = Date[]
+
+    xs = Float64[]
     for b in eachindex(log_R)
-        push!(xs, left_edge[b]); push!(xs, right_edge[b]); push!(xs, right_edge[b])
+        push!(xs, Dates.value(left_edge[b]))
+        push!(xs, Dates.value(right_edge[b]))
+        push!(xs, Dates.value(right_edge[b]))
     end
 
-    plt = plot(; ylims = (0.0, ymax),
-                 xlabel = "Date", ylabel = "R(t)",
-                 legend = false,
-                 title  = "Time-varying reproduction number (weekly bins)")
-    for d in idx
-        ys = Float64[]
-        for b in eachindex(log_R)
-            r = exp(log_R[b][d])
-            push!(ys, r); push!(ys, r); push!(ys, NaN)
+    return _with_theme() do
+        fig = Figure(; size = (1000, 500))
+        ax = Axis(fig[1, 1];
+                  xlabel = "Date", ylabel = "R(t)",
+                  title  = "Time-varying reproduction number (weekly bins)",
+                  limits = (nothing, (0.0, ymax)))
+        for d in idx
+            ys = Float64[]
+            for b in eachindex(log_R)
+                r = exp(log_R[b][d])
+                push!(ys, r); push!(ys, r); push!(ys, NaN)
+            end
+            lines!(ax, xs, ys;
+                   color = (:steelblue, 0.25), linewidth = 1.6)
         end
-        plot!(plt, xs, ys; linecolor = :steelblue, linewidth = 1.6, alpha = 0.25)
+        hlines!(ax, [1.0]; color = :grey, linestyle = :dash)
+
+        # Date-formatted x ticks.
+        edge_dates = sort(unique(vcat(left_edge, right_edge)))
+        n = length(edge_dates)
+        keep = unique(round.(Int, range(1, n; length = min(n, 7))))
+        ax.xticks = (Dates.value.(edge_dates[keep]),
+                     string.(edge_dates[keep]))
+        ax.xticklabelrotation = π / 6
+        fig
     end
-    hline!(plt, [1.0]; linestyle = :dash, color = :grey)
-    return plt
 end
 
 """
@@ -256,7 +332,7 @@ Sense-check the per-pair posterior of δ against the fitted population
 `Normal(μ_δ, σ_δ)`. For each sourced pair, take the posterior of
 `δ_pair = T_inf[secondary] − T_onset[source]` and reduce to its median; then
 plot the histogram of those per-pair medians with the population density
-overlaid. Returns a Plots.jl `Plot`.
+overlaid. Returns a `Makie.Figure`.
 """
 function plot_delta_sense_check(chn, data)
     t_inf   = vector_chain(chn, :T_inf)
@@ -274,15 +350,28 @@ function plot_delta_sense_check(chn, data)
     μ_med = quantile(μ_δ, 0.5)
     σ_med = quantile(σ_δ, 0.5)
 
-    plt = histogram(medians; bins = 15, normalize = :pdf,
-                    label  = "per-pair posterior medians (N = $(length(medians)))",
-                    xlabel = "δ (days from source onset)", ylabel = "density",
-                    title  = "Per-pair δ vs fitted population Normal")
-    xs = range(μ_med - 4σ_med, μ_med + 4σ_med; length = 200)
-    plot!(plt, xs, pdf.(Normal(μ_med, σ_med), xs);
-          linewidth = 2, label = "Normal(μ_δ, σ_δ) fitted")
-    vline!(plt, [0.0]; linestyle = :dash, color = :grey, label = "source onset")
-    return plt
+    return _with_theme() do
+        fig = Figure(; size = (900, 500))
+        ax = Axis(fig[1, 1];
+                  xlabel = "δ (days from source onset)",
+                  ylabel = "density",
+                  title  = "Per-pair δ vs fitted population Normal")
+        h_per_pair = hist!(ax, medians;
+                           bins = 15, normalization = :pdf,
+                           color = (:steelblue, 0.55),
+                           strokecolor = :steelblue, strokewidth = 0.5)
+        xs = range(μ_med - 4σ_med, μ_med + 4σ_med; length = 200)
+        l_fit = lines!(ax, xs, pdf.(Normal(μ_med, σ_med), xs);
+                       color = :darkorange, linewidth = 2)
+        v_zero = vlines!(ax, [0.0]; color = :grey, linestyle = :dash)
+        Legend(fig[1, 2],
+               [h_per_pair, l_fit, v_zero],
+               ["per-pair posterior medians (N = $(length(medians)))",
+                "Normal(μ_δ, σ_δ) fitted",
+                "source onset"];
+               framevisible = false, tellwidth = true)
+        fig
+    end
 end
 
 """
@@ -290,7 +379,7 @@ end
 
 Prior-predictive panel: histograms of Inc, δ, and GI/SI drawn from the
 package's independent priors on `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`. Returns a
-Plots.jl `Plot`.
+`Makie.Figure`.
 """
 function plot_prior_predictives(; n::Int = 5000,
                                   rng = Random.MersenneTwister(0))
@@ -302,14 +391,39 @@ function plot_prior_predictives(; n::Int = 5000,
     δ_s   = [rand(rng, Normal(μ_δ[i], σ_δ[i]))       for i in 1:n]
     gi_s  = δ_s .+ inc_s
 
-    p_inc = histogram(inc_s; bins = 100, normalize = :pdf,
-                      title = "Inc (prior)", xlabel = "days",
-                      xlims = (0, 80), legend = false, color = :steelblue)
-    p_del = histogram(δ_s; bins = 100, normalize = :pdf,
-                      title = "δ (prior)", xlabel = "days from source onset",
-                      xlims = (-25, 25), legend = false, color = :steelblue)
-    p_gi  = histogram(gi_s; bins = 100, normalize = :pdf,
-                      title = "GI / SI (prior)", xlabel = "days",
-                      xlims = (-30, 80), legend = false, color = :steelblue)
-    return plot(p_inc, p_del, p_gi; layout = (1, 3), size = (1500, 400))
+    df = vcat(
+        DataFrame(value = inc_s, panel = "Inc (prior)",
+                  xlabel = "days"),
+        DataFrame(value = δ_s,   panel = "δ (prior)",
+                  xlabel = "days from source onset"),
+        DataFrame(value = gi_s,  panel = "GI / SI (prior)",
+                  xlabel = "days"),
+    )
+    # Clip each panel to its viewing window so histograms aren't squashed
+    # by long tails.
+    windows = Dict("Inc (prior)" => (0.0, 80.0),
+                   "δ (prior)"   => (-25.0, 25.0),
+                   "GI / SI (prior)" => (-30.0, 80.0))
+    df = @chain df begin
+        @rsubset(windows[:panel][1] <= :value <= windows[:panel][2])
+    end
+
+    panels = [
+        ("Inc (prior)",       inc_s, "days",                  (0.0, 80.0)),
+        ("δ (prior)",         δ_s,   "days from source onset", (-25.0, 25.0)),
+        ("GI / SI (prior)",   gi_s,  "days",                  (-30.0, 80.0)),
+    ]
+
+    return _with_theme() do
+        fig = Figure(; size = (1500, 400))
+        for (k, (title, samps, xlabel, xlim)) in enumerate(panels)
+            ax = Axis(fig[1, k]; title = title, xlabel = xlabel,
+                      ylabel = "density",
+                      limits = (xlim, nothing))
+            in_window = filter(x -> xlim[1] <= x <= xlim[2], samps)
+            hist!(ax, in_window; bins = 100, normalization = :pdf,
+                  color = :steelblue)
+        end
+        fig
+    end
 end

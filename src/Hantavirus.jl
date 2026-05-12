@@ -10,8 +10,11 @@ using Dates: Dates, Date, Day, dayofweek
 using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
                      Uniform, logpdf, cdf, pdf
 using PairPlots: PairPlots, pairplot
-using Plots: plot, plot!, bar, hline!, histogram, histogram!, vline!,
-             scatter, scatter!, savefig
+using Makie: Makie, Figure, Axis, Legend, Theme, Auto, BarPlot,
+             theme_latexfonts, with_theme,
+             lines!, scatter!, hist!, hlines!, vlines!, band!,
+             axislegend, rowsize!
+using AlgebraOfGraphics: AlgebraOfGraphics, data, mapping, visual, draw!
 using Printf: @printf, @sprintf
 using Random: Random
 using Statistics: quantile, mean, std
