@@ -4,6 +4,11 @@ papers/
 
 # Documenter build output
 docs/build/
+docs/Manifest.toml
+
+# Literate-generated markdown (regenerated from docs/literate/*.jl on
+# every `julia --project=docs docs/make.jl` run).
+docs/src/realtime.md
 
 # Model outputs are regenerable from scripts/run.jl.
 output/

@@ -3,12 +3,24 @@ Pkg.instantiate()
 
 using DocumenterVitepress
 using Documenter
+using Literate
 using Hantavirus
 
 DocMeta.setdocmeta!(
     Hantavirus, :DocTestSetup,
     :(using Hantavirus); recursive = true
 )
+
+# Render Literate sources into docs/src before makedocs walks the pages.
+# `execute = false` defers code execution to Documenter's @example blocks,
+# so the rendered markdown lives in the same session as other pages.
+const LITERATE_DIR  = joinpath(@__DIR__, "literate")
+const GENERATED_DIR = joinpath(@__DIR__, "src")
+for path in readdir(LITERATE_DIR; join = true)
+    endswith(path, ".jl") || continue
+    Literate.markdown(path, GENERATED_DIR;
+                      documenter = true, execute = false)
+end
 
 makedocs(;
     sitename = "Hantavirus.jl",
