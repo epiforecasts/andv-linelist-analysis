@@ -1,6 +1,6 @@
 using Test
 using Hantavirus
-using DifferentiationInterface: AutoEnzyme, AutoForwardDiff, gradient, value_and_gradient
-using Enzyme: Enzyme
+using DifferentiationInterface: AutoMooncake, AutoForwardDiff, value_and_gradient
+using Mooncake: Mooncake
 
 include("test_realtime.jl")

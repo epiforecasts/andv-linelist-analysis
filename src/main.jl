@@ -10,6 +10,7 @@ function analyse(;
     chains   = 4,
     seed     = 20260508,
     progress = true,
+    fcluster_alg = DEFAULT_FCLUSTER_ALG,
 )
     Random.seed!(seed)
 
@@ -21,9 +22,12 @@ function analyse(;
     edges = bin_edges_day(d.t0)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time
 
-    adtype = AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
+    # Mooncake reverse-mode AD: consumes Integrals.jl's ChainRules rrule
+    # for `__solvebp`, which lets F_cluster sit on the gradient path
+    # without an EnzymeRule.
+    adtype = AutoMooncake(; config = Mooncake.Config())
     chn = sample(
-        joint_model(d, edges),
+        joint_model(d, edges, fcluster_alg),
         NUTS(0.95; adtype), MCMCThreads(), samples, chains;
         initial_params = fill(DynamicPPL.InitFromPrior(), chains),
         progress = progress,

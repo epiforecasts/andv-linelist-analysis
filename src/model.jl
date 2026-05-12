@@ -30,7 +30,7 @@
 ##     correction collapses out and the model is identical to the
 ##     retrospective form.
 
-@model function joint_model(d, edges)
+@model function joint_model(d, edges, fcluster_alg = DEFAULT_FCLUSTER_ALG)
     # Population-level parameters
     μ_inc ~ Normal(3.0, 0.5)                       # log-mean Inc (≈ log 20 d)
     σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc
@@ -95,7 +95,7 @@
         R_i = exp(log_R[which_bin(T_inf[i], edges)])
         if realtime
             Δ_src = d.obs_time[i] - T_inf[i]
-            thin  = F_cluster(Δ_src, μ_inc, σ_inc, μ_δ, σ_δ)
+            thin  = F_cluster(Δ_src, μ_inc, σ_inc, μ_δ, σ_δ; alg = fcluster_alg)
             R_eff = R_i * thin
             d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_eff))
         else

@@ -6,17 +6,15 @@ using DataFrames: DataFrame, nrow, eachrow, passmissing
 using Dates: Dates, Date, Day
 using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
                      Uniform, logpdf, logcdf, cdf, pdf
-using FastGaussQuadrature: gausshermite
-using Integrals: IntegralProblem, IntegralFunction, solve, HCubatureJL
+using Integrals: IntegralProblem, solve, HCubatureJL
 using MCMCChains: MCMCChains
 using Plots: plot, plot!, hline!, histogram, histogram!, vline!, scatter, savefig
 using Printf: @printf, @sprintf
 using Random: Random
-using SpecialFunctions: erf
 using Statistics: quantile
 using Turing: Turing, @model, NUTS, MCMCThreads, sample, DynamicPPL
-using ADTypes: AutoEnzyme
-using Enzyme: Enzyme
+using ADTypes: AutoMooncake
+using Mooncake: Mooncake
 import FlexiChains
 
 include("data.jl")
@@ -27,7 +25,7 @@ include("main.jl")
 
 export load_linelist, build_data, bin_edges_day, which_bin, bin_labels
 export joint_model
-export F_cluster, F_cluster_vec, GaussHermite, HCubature
+export F_cluster, F_cluster_vec
 export filter_realtime
 export diagnostics, vector_chain, summarise, save_posterior
 export plot_rt, plot_delta_sense_check, plot_pairplot

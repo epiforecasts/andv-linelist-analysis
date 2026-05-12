@@ -62,22 +62,27 @@ plt = plot(Δs, F;
 plt
 ```
 
-`F_cluster` dispatches on an algorithm switch:
-
-- `GaussHermite(n)` (default `n = 40`) — tensor Gauss-Hermite quadrature
-  in standardised normal coordinates. Statically sized loop with only
-  `+, -, *, /, exp, log, erf`; Enzyme reverse mode differentiates
-  through it cleanly via `DifferentiationInterface.jl`.
-- `HCubature()` — `Integrals.jl` adaptive 2D cubature, used as a
-  higher-accuracy reference. It is **not** Enzyme-reverse-safe and so
-  cannot replace the default on the NUTS gradient path; it lives in the
-  package for value-only comparison tests.
+`F_cluster` is computed by 2-D quadrature in standardised normal
+coordinates over `Integrals.jl`. The default algorithm is
+`HCubatureJL()` — pure-Julia adaptive `h`-cubature, no native binary
+deps, the standard SciML default for multi-D smooth integrands. The
+algorithm is configurable via the `alg` keyword:
 
 ```julia
-F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ)                              # GaussHermite, default
-F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ; alg = GaussHermite(80))      # tighter GH
-F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ; alg = HCubature())           # adaptive reference
+using Integrals: HCubatureJL, QuadratureRule
+
+F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ)                          # HCubatureJL, adaptive
+F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ; reltol = 1e-4)            # looser tol
+F_cluster(t, μ_inc, σ_inc, μ_δ, σ_δ; alg = QuadratureRule(...)) # fixed-node, for diagnostics
 ```
+
+The same switch threads through `joint_model` and `analyse` as the
+`fcluster_alg` argument, so a model fit can be re-run against an
+alternative integral for sensitivity checks. `joint_model` differentiates
+through `F_cluster` under **Mooncake reverse mode** via
+`DifferentiationInterface.jl`, which consumes the
+`ChainRulesCore.rrule` that `Integrals.jl` defines for its solve
+machinery.
 
 ## Fitting both views
 
