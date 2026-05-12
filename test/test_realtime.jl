@@ -28,21 +28,22 @@ end
         (50.0, 3.0, 0.5, 1.0,  2.0),
         (80.0, 3.0, 0.6, -2.0, 1.5),
     ]
-    for c in cases
-        v_qr = F_cluster(c...)
-        v_mc = _f_cluster_mc(c...)
+    for (t, μ_inc, σ_inc, μ_δ, σ_δ) in cases
+        v_qr = F_cluster(t, LogNormal(μ_inc, σ_inc), Normal(μ_δ, σ_δ))
+        v_mc = _f_cluster_mc(t, μ_inc, σ_inc, μ_δ, σ_δ)
         @test isapprox(v_qr, v_mc; atol = 5e-3)
         @test 0 <= v_qr <= 1
     end
 end
 
 @testset "F_cluster: monotone in t and limits" begin
-    p = (3.0, 0.5, 0.0, 1.0)
-    @test F_cluster(0.0,   p...) <= 1e-10
-    @test F_cluster(-1.0,  p...) <= 1e-10
-    @test F_cluster(1.0,   p...) < F_cluster(10.0,  p...)
-    @test F_cluster(10.0,  p...) < F_cluster(80.0,  p...)
-    @test F_cluster(300.0, p...) > 0.999
+    inc = LogNormal(3.0, 0.5)
+    del = Normal(0.0, 1.0)
+    @test F_cluster(0.0,   inc, del) <= 1e-10
+    @test F_cluster(-1.0,  inc, del) <= 1e-10
+    @test F_cluster(1.0,   inc, del) < F_cluster(10.0,  inc, del)
+    @test F_cluster(10.0,  inc, del) < F_cluster(80.0,  inc, del)
+    @test F_cluster(300.0, inc, del) > 0.999
 end
 
 @testset "F_cluster: Mooncake reverse via DifferentiationInterface" begin
