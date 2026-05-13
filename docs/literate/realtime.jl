@@ -7,7 +7,10 @@
 # 2. Late transmissions from any source may not yet have happened or have not yet been linked — observed transmission timings (δ) are enriched for early / pre-symptomatic events.
 # 3. Recent source cases have not had time to seed all their offspring — the observed offspring count is a downward-biased estimate of R(t) near the cut-off.
 #
-# The real-time machinery in `joint_model` corrects for these via per-case right-truncation on Inc and δ and a cluster-completeness adjustment on the NB offspring count (the [`F_cluster`](@ref) integral).
+# The real-time machinery in `joint_model` corrects for these via per-case right-truncation on Inc and δ and an offspring-completeness adjustment on the NB offspring count (the [`F_offspring`](@ref) integral).
+# `F_offspring` is the probability that an offspring's `δ + Inc(sec)` chain has completed by the cut-off, conditional on the source's onset time.
+# The source's own incubation period is *not* marginalised here: the source is observed, so `T_onset[src]` is pinned by the sampled latents in the same model evaluation and the offspring delay reduces to `δ + Inc(sec)`.
+# The argument is therefore `obs_time − T_onset[src]`, not `obs_time − T_inf[src]`.
 # This page validates the corrections by fitting three views of the same outbreak and overlaying their posteriors.
 
 using Hantavirus
@@ -35,7 +38,7 @@ ll_rt    = filter_realtime(ll, obs_date)
 # | Fit | Linelist | `obs_time` | Role |
 # |---|---|---|---|
 # | **Counterfactual retro** | `ll_truth` (infected ≤ obs_date) | `nothing` | Replication target — same outbreak info at `obs_date` but with full forward Inc / δ for retained cases. |
-# | **Corrected real-time** | `ll` (analyse filters to onset ≤ obs_date) | `obs_date` | What `joint_model` offers at the cut-off, with truncation and cluster-completeness corrections active. |
+# | **Corrected real-time** | `ll` (analyse filters to onset ≤ obs_date) | `obs_date` | What `joint_model` offers at the cut-off, with truncation and offspring-completeness corrections active. |
 # | **Full retrospective** | `ll` (the whole outbreak) | `nothing` | Out-of-scope science — post-`obs_date` cases included, shown for interest. |
 #
 # All three fits share the same R(t) bin edges by pinning `t0` to a canonical reference computed from the full line list.
@@ -116,7 +119,7 @@ plt
 # ## Reading the figures
 #
 # If the corrected real-time fit reproduces the counterfactual retro posteriors, the corrections are doing their job — the bias from observing only short delays and incomplete clusters has been removed.
-# Any systematic offset between those two fits is residual bias from the modelling approximations: the cluster-completeness adjustment assumes onset-to-report is zero, source attribution is correct, and so on.
+# Any systematic offset between those two fits is residual bias from the modelling approximations: the offspring-completeness adjustment assumes onset-to-report is zero, source attribution is correct, and so on.
 # The full retrospective is shown for scientific interest only; agreement with the two `obs_date` fits is not expected because it sees later cases.
 # Bins past the cut-off in the R(t) plot have no real-time information and reduce to the prior; agreement is expected only in bins covered by retained cases.
 

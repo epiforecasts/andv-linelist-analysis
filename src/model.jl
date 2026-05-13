@@ -24,11 +24,13 @@
 ## Real-time mode (gated on `d.obs_time !== nothing`):
 ##   - Inc and δ contributions are right-truncated at the per-case cut-off
 ##     via `-logcdf` terms.
-##   - The NB mean for source `src` is thinned by `F_cluster(obs_time[src] -
-##     T_inf[src])` to account for offspring whose total chain has not yet
-##     completed by the cut-off. When `obs_time === nothing` the whole
-##     correction collapses out and the model is identical to the
-##     retrospective form.
+##   - The NB mean for source `src` is thinned by `F_offspring(obs_time[src] -
+##     T_onset[src])` to account for offspring whose `δ + Inc(sec)` chain
+##     has not yet completed by the cut-off. The source's own incubation is
+##     already pinned by the sampled latents `T_onset[src]` and `T_inf[src]`,
+##     so only `δ` and `Inc(sec)` are marginalised here. When
+##     `obs_time === nothing` the whole correction collapses out and the
+##     model is identical to the retrospective form.
 ##
 ## Structure: the three population-level components are written as Turing
 ## models, each parameterised by the priors it samples from. Swapping a
@@ -43,7 +45,7 @@ Model sampling the log-mean `μ_inc` and log-SD `σ_inc` of a LogNormal
 incubation period. Returns a `NamedTuple` `(dist, μ, σ)` where `dist`
 is `LogNormal(μ_inc, σ_inc)`. The parent model uses `dist` to score
 per-case incubation contributions and the raw parameters to evaluate
-downstream quantities such as `F_cluster`.
+downstream quantities such as `F_offspring`.
 
 The priors are arguments so they can be changed without editing this
 file. To swap the *family* (Gamma, Weibull, …) write a parallel
@@ -96,7 +98,7 @@ the same return contract.
 end
 
 """
-    joint_model(d, edges, fcluster_alg = _F_CLUSTER_ALG;
+    joint_model(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
                 incubation   = incubation_model(Normal(3.0, 0.5),
                                                    truncated(Normal(0.0, 0.5); lower = 0)),
                 transmission = transmission_delta_model(Normal(0.0, 5.0),
@@ -114,9 +116,9 @@ and [`random_walk_rt_model`](@ref) for the default contracts.
 The per-case incubation / δ / NB contributions are kept inline because
 factoring them into submodels would shuffle complexity rather than
 remove it: the two source-vs-index branches share the population
-distributions, the GI > 0 reject and the cluster-completeness thinning.
+distributions, the GI > 0 reject and the offspring-completeness thinning.
 """
-@model function joint_model(d, edges, fcluster_alg = _F_CLUSTER_ALG;
+@model function joint_model(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
                             incubation   = incubation_model(
                                 Normal(3.0, 0.5),
                                 truncated(Normal(0.0, 0.5); lower = 0)),
@@ -148,8 +150,8 @@ distributions, the GI > 0 reject and the cluster-completeness thinning.
     realtime = d.obs_time !== nothing
 
     # Pass 1: sample T_inf and accrue the incubation / δ logprobs.
-    # F_cluster is deferred to a single vectorised call so the 2-D
-    # Gauss-Hermite tensor runs once across all cases instead of N times.
+    # F_offspring is deferred to a single vectorised call so the 1-D
+    # Gauss-Hermite rule runs once across all cases instead of N times.
     # Per-case logprob contributions are accumulated locally into `lp`
     # and added in a single `@addlogprob!` at the loop end. Each
     # `@addlogprob!` goes through the DynamicPPL accumulator machinery
@@ -192,13 +194,16 @@ distributions, the GI > 0 reject and the cluster-completeness thinning.
     Turing.@addlogprob! lp
 
     # Pass 2: NB offspring likelihood. In realtime mode all N
-    # cluster-completeness probabilities share the same population
-    # distributions, so a single vector-valued F_cluster amortises the
-    # quadrature across cases. Profiling showed F_cluster dominates the
-    # per-eval cost; this collapses N quadrature solves into one.
+    # offspring-completeness probabilities share the same population
+    # distributions, so a single vector-valued F_offspring amortises the
+    # quadrature across cases. Profiling showed the quadrature dominates
+    # the per-eval cost; this collapses N solves into one. The reference
+    # point is the source's onset time (a sampled latent), not its
+    # infection time: the source's own incubation is already scored, so
+    # the remaining offspring delay is `δ + Inc(sec)`.
     if realtime
-        Δ_srcs = d.obs_time .- T_inf
-        thins  = F_cluster(Δ_srcs, inc.dist, delta.dist; alg = fcluster_alg)
+        Δ_srcs = d.obs_time .- T_onset
+        thins  = F_offspring(Δ_srcs, inc.dist, delta.dist; alg = foffspring_alg)
         for i in 1:d.N
             R_i   = exp(log_R[which_bin(T_inf[i], edges)])
             R_eff = R_i * thins[i]

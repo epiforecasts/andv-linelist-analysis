@@ -11,9 +11,9 @@
               chains  = max(2, min(Threads.nthreads(), 4)),
               seed    = nothing,
               progress = true,
-              fcluster_alg = _F_CLUSTER_ALG)
+              foffspring_alg = _F_OFFSPRING_ALG)
 
-Run NUTS on `joint_model(d, edges, fcluster_alg)` with Mooncake
+Run NUTS on `joint_model(d, edges, foffspring_alg)` with Mooncake
 reverse-mode AD and return the `MCMCChains.Chains` object. The sampler
 configuration (AD backend, NUTS target, init scheme, threading) is
 fixed here so `analyse()` and the documentation walk-through share one
@@ -24,14 +24,14 @@ function fit_joint(d, edges;
                    chains::Integer  = max(2, min(Threads.nthreads(), 4)),
                    seed::Union{Nothing,Integer} = nothing,
                    progress::Bool = true,
-                   fcluster_alg = _F_CLUSTER_ALG)
+                   foffspring_alg = _F_OFFSPRING_ALG)
     seed === nothing || Random.seed!(seed)
     # Mooncake reverse-mode AD: consumes Integrals.jl's ChainRules rrule
-    # for `__solvebp`, which lets F_cluster sit on the gradient path
+    # for `__solvebp`, which lets F_offspring sit on the gradient path
     # without an EnzymeRule.
     adtype = AutoMooncake(; config = Mooncake.Config())
     return sample(
-        joint_model(d, edges, fcluster_alg),
+        joint_model(d, edges, foffspring_alg),
         NUTS(0.95; adtype), MCMCThreads(), samples, chains;
         initial_params = fill(DynamicPPL.InitFromPrior(), chains),
         progress = progress,
@@ -48,7 +48,7 @@ function analyse(;
     chains   = max(2, min(Threads.nthreads(), 4)),
     seed     = 20260508,
     progress = true,
-    fcluster_alg = _F_CLUSTER_ALG,
+    foffspring_alg = _F_OFFSPRING_ALG,
 )
     ll = data isa DataFrame ? data : load_linelist(data)
     if obs_time !== nothing
@@ -58,7 +58,7 @@ function analyse(;
     edges = bin_edges_day(d.t0)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time
 
-    chn = fit_joint(d, edges; samples, chains, seed, progress, fcluster_alg)
+    chn = fit_joint(d, edges; samples, chains, seed, progress, foffspring_alg)
 
     post = summarise(chn)
     save_posterior(post, joinpath(output, "posterior.csv"))

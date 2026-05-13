@@ -1,7 +1,7 @@
 ## Real-time extension utilities.
 ##
 ## Helpers to simulate a real-time analysis from a closed-out line list and
-## the cluster-completeness integral that goes into the right-truncated
+## the offspring-completeness integral that goes into the right-truncated
 ## likelihood.
 
 using FastGaussQuadrature: gausshermite
@@ -68,114 +68,140 @@ function _filter_linelist(ll, mask::AbstractVector{Bool})
 end
 
 # ---------------------------------------------------------------------------
-# Cluster-completeness integral
+# Offspring-completeness integral
 # ---------------------------------------------------------------------------
 #
-# F_cluster(t; μ_inc, σ_inc, μ_δ, σ_δ) = P(Inc(src) + δ + Inc(sec) ≤ t)
+# F_offspring(Δ; μ_inc, σ_inc, μ_δ, σ_δ) = P(δ + Inc(sec) ≤ Δ)
 #
-# where Inc(src), Inc(sec) ~ LogNormal(μ_inc, σ_inc) i.i.d. and
-# δ ~ Normal(μ_δ, σ_δ).
-# Evaluated for every source case on every NUTS gradient step.
+# where Inc(sec) ~ LogNormal(μ_inc, σ_inc) and δ ~ Normal(μ_δ, σ_δ).
+# Evaluated for every observed source case on every NUTS gradient step,
+# with Δ = obs_time − T_onset[src]. The source's own incubation is *not*
+# marginalised over here: in `joint_model` `Inc(src) = T_onset[src] −
+# T_inf[src]` is a sampled latent already scored against `inc_dist`, so
+# conditioning on it leaves only `δ` and `Inc(sec)` free for the
+# offspring-completeness probability.
 #
-# Implemented as a 2-D vector-valued quadrature in standardised normal
-# coordinates (z₁ = log-Inc(src), z₂ = δ).
-# The change of variables removes the parameter-dependent integration
-# domain and bounds the integrand.
-# The integrand returns a vector with one component per requested `t`,
-# so a single solve replaces N scalar solves inside the model loop.
+# Implemented as a 1-D quadrature in the standardised normal coordinate
+# z attached to the Normal δ axis,
+#
+#   δ = μ_δ + σ_δ · z,   z ~ N(0, 1),
+#
+# with the LogNormal Inc(sec) CDF in closed form:
+#
+#   F_offspring(Δ) = ∫ F_inc(Δ − μ_δ − σ_δ z) ϕ(z) dz,
+#
+# where `F_inc` is the LogNormal(μ_inc, σ_inc) CDF (returning 0 when its
+# argument is non-positive). Integrating over the δ axis (not the
+# Inc(sec) axis) keeps the integrand smooth: `F_inc(t − δ)` is C∞ in `δ`
+# wherever the argument is positive, so Gauss-Hermite converges
+# essentially exactly at modest node counts. The mirror formulation —
+# integrating over the Inc(sec) log-axis with the Normal δ CDF in
+# closed form — looks superficially symmetric but has a step-like
+# integrand (Φ composed with exp) and converges very slowly.
+#
+# A single vector-valued solve evaluates the integral at every requested
+# Δ simultaneously, so one quadrature replaces N scalar solves in the
+# model loop.
 #
 # Solver: `Integrals.QuadratureRule` with pre-computed Gauss-Hermite
-# tensor nodes.
-# A fixed-rule solver is required for Mooncake reverse-mode AD:
+# nodes. A fixed-rule solver is required for Mooncake reverse-mode AD:
 # `HCubatureJL`'s adaptive heap mutates internal arrays in ways that
 # trip an unhandled LLVM intrinsic (`sub_ptr`) inside Mooncake, even
-# when the integrand itself is differentiation-friendly.
-# Gauss-Hermite is the natural rule here because the standardised
-# coordinates already carry a Gaussian weight.
+# when the integrand itself is differentiation-friendly. Gauss-Hermite
+# is the natural rule because the standardised coordinate already
+# carries a Gaussian weight.
 
-# Pre-compute Gauss-Hermite tensor nodes once at module load.
-# Returning const arrays from the quadrature `q(n)` callback avoids
-# pulling `FastGaussQuadrature.gausshermite` (and its BLAS eigensolver)
-# into the differentiated path.
+# Pre-compute Gauss-Hermite nodes once at module load. Returning const
+# arrays from the quadrature `q(n)` callback avoids pulling
+# `FastGaussQuadrature.gausshermite` (and its BLAS eigensolver) into the
+# differentiated path.
 const _GH_N = 14
 const _GH_NODES, _GH_WEIGHTS = let
     nodes_1d, weights_1d = gausshermite(_GH_N)
+    # Change of variables to a standard normal: δ = μ_δ + σ_δ z,
+    # so absorb sqrt(2) into the nodes and divide weights by sqrt(π).
     n = sqrt(2) .* nodes_1d
     w = weights_1d ./ sqrt(π)
-    nodes   = vec([Float64[x, y] for x in n, y in n])
-    weights = vec([wx * wy for wx in w, wy in w])
+    # Wrap each node in a 1-element vector so the QuadratureRule callback
+    # matches the `AbstractVector` signature Integrals.jl expects.
+    nodes   = [Float64[x] for x in n]
+    weights = collect(w)
     nodes, weights
 end
-_gh_tensor_q(::Int) = (_GH_NODES, _GH_WEIGHTS)
+_gh_q(::Int) = (_GH_NODES, _GH_WEIGHTS)
 
 # `evalrule` in Integrals.jl rescales nodes by (ub-lb)/2 and shifts by
-# (ub+lb)/2; using [-1,1]² means scale = 1, shift = 0, so the rule
+# (ub+lb)/2; using [-1, 1] means scale = 1, shift = 0, so the rule
 # evaluates the integrand at the pre-computed nodes unchanged.
-const _F_CLUSTER_DOMAIN = ([-1.0, -1.0], [1.0, 1.0])
-const _F_CLUSTER_ALG    = QuadratureRule(_gh_tensor_q; n = _GH_N)
+const _F_OFFSPRING_DOMAIN = ([-1.0], [1.0])
+const _F_OFFSPRING_ALG    = QuadratureRule(_gh_q; n = _GH_N)
 
 # Closed-form LogNormal CDF, avoids constructing a `LogNormal` per node.
 # cdf(LogNormal(μ, σ), x) = 0.5 * erfc(-(log(x) - μ) / (σ * √2))
 @inline _lognormal_cdf(x, μ, σ) =
     x > 0 ? oftype(x, 0.5) * erfc(-(log(x) - μ) / (σ * sqrt(oftype(x, 2)))) : zero(x)
 
-# Out-of-place vector-output integrand. At one (z₁, z₂) point evaluate
-# the LogNormal CDF of the secondary's incubation at every t in p.ts,
-# return a fresh length-N vector.
-function _f_cluster_integrand(z::AbstractVector, p)
-    z1, z2 = z[1], z[2]
-    inc_src = exp(p.μ_inc + p.σ_inc * z1)
-    δ       = p.μ_δ + p.σ_δ * z2
-    # ϕ(z) factors are already absorbed into the Gauss-Hermite weights.
-    return [_lognormal_cdf(p.ts[i] - inc_src - δ, p.μ_inc, p.σ_inc)
+# Out-of-place vector-output integrand. At one z point compute the
+# realised δ, then evaluate the LogNormal CDF of Inc(sec) at every
+# `Δ − δ` requested in `p.ts`; returns a fresh length-N vector.
+function _f_offspring_integrand(z::AbstractVector, p)
+    z1 = z[1]
+    δ  = p.μ_δ + p.σ_δ * z1
+    # ϕ(z) is already absorbed into the Gauss-Hermite weights.
+    return [_lognormal_cdf(p.ts[i] - δ, p.μ_inc, p.σ_inc)
             for i in eachindex(p.ts)]
 end
 
 """
-    F_cluster(ts, inc_dist::LogNormal, δ_dist::Normal; alg = _F_CLUSTER_ALG)
+    F_offspring(ts, inc_dist::LogNormal, δ_dist::Normal; alg = _F_OFFSPRING_ALG)
 
-Probability that the full source-to-secondary chain
-`Inc(src) + δ + Inc(sec)` is no greater than `t`, evaluated at every
-element of `ts` against the same population distributions via a single
-2-D quadrature.
+Probability that the offspring's transmission-plus-incubation chain
+`δ + Inc(sec)` is no greater than `Δ`, evaluated at every element of
+`ts` against the same population distributions via a single 1-D
+quadrature.
 
-`Inc(src), Inc(sec) ~ inc_dist` i.i.d., and `δ ~ δ_dist`.
-Returns a vector of length `length(ts)`.
+`Inc(sec) ~ inc_dist` and `δ ~ δ_dist`. Returns a vector of length
+`length(ts)`.
 
-`alg` is any `Integrals.AbstractIntegralAlgorithm`.
-Default is a 20×20 Gauss-Hermite tensor `QuadratureRule` with nodes
-precomputed at module load.
+The integral is the conditional offspring-completeness for an observed
+source whose onset time `T_onset[src]` is already pinned by the model:
+the caller supplies `Δ = obs_time − T_onset[src]`, and the source's own
+incubation is *not* marginalised over here (it is a sampled latent
+scored elsewhere in `joint_model`).
+
+`alg` is any `Integrals.AbstractIntegralAlgorithm`. Default is a 14-point
+Gauss-Hermite `QuadratureRule` with nodes precomputed at module load.
 Pass e.g. `HCubatureJL()` to swap in an adaptive solver for accuracy
 diagnostics (note: HCubatureJL is not compatible with Mooncake
 reverse-mode AD).
 """
-function F_cluster(ts::AbstractVector,
-                   inc_dist::LogNormal, δ_dist::Normal;
-                   alg = _F_CLUSTER_ALG)
+function F_offspring(ts::AbstractVector,
+                     inc_dist::LogNormal, δ_dist::Normal;
+                     alg = _F_OFFSPRING_ALG)
     μ_inc, σ_inc = inc_dist.μ, inc_dist.σ
     μ_δ,   σ_δ   = δ_dist.μ,   δ_dist.σ
     p    = (; ts, μ_inc, σ_inc, μ_δ, σ_δ)
-    prob = IntegralProblem(_f_cluster_integrand, _F_CLUSTER_DOMAIN, p)
+    prob = IntegralProblem(_f_offspring_integrand, _F_OFFSPRING_DOMAIN, p)
     sol  = solve(prob, alg)
     return sol.u
 end
 
 """
-    F_cluster(t::Real, inc_dist, δ_dist; kw...)
+    F_offspring(t::Real, inc_dist, δ_dist; kw...)
 
 Scalar convenience: a single-`t` query that returns the value rather
 than a length-1 vector.
 """
-F_cluster(t::Real, inc_dist::LogNormal, δ_dist::Normal; kw...) =
-    F_cluster([float(t)], inc_dist, δ_dist; kw...)[1]
+F_offspring(t::Real, inc_dist::LogNormal, δ_dist::Normal; kw...) =
+    F_offspring([float(t)], inc_dist, δ_dist; kw...)[1]
 
 """
-    F_cluster_vec(θ; alg = _F_CLUSTER_ALG)
+    F_offspring_vec(θ; alg = _F_OFFSPRING_ALG)
 
-Vector-input wrapper of scalar [`F_cluster`](@ref) for AD testing.
+Vector-input wrapper of scalar [`F_offspring`](@ref) for AD testing.
 `θ = [t, μ_inc, σ_inc, μ_δ, σ_δ]`; the distributions are reconstructed
 internally so callers (e.g. DifferentiationInterface.jl) keep working
 with a flat real-valued input.
 """
-F_cluster_vec(θ; alg = _F_CLUSTER_ALG) =
-    F_cluster(θ[1], LogNormal(θ[2], θ[3]), Normal(θ[4], θ[5]); alg = alg)
+F_offspring_vec(θ; alg = _F_OFFSPRING_ALG) =
+    F_offspring(θ[1], LogNormal(θ[2], θ[3]), Normal(θ[4], θ[5]); alg = alg)
