@@ -1,8 +1,43 @@
 using Test
+using Aqua
 # Use `import` (not `using`) so the package's exported `main` function is
 # not brought into `Main`. Otherwise Julia's `(@main)` auto-invocation
 # would run the full `analyse()` pipeline at the end of the test script.
 import TransmissionLinelist
+
+@testset "Aqua.jl meta-tests" begin
+    @testset "Unbound args" begin
+        Aqua.test_unbound_args(TransmissionLinelist)
+    end
+
+    @testset "Undefined exports" begin
+        Aqua.test_undefined_exports(TransmissionLinelist)
+    end
+
+    @testset "Project extras" begin
+        Aqua.test_project_extras(TransmissionLinelist)
+    end
+
+    @testset "Stale deps" begin
+        Aqua.test_stale_deps(TransmissionLinelist)
+    end
+
+    @testset "Deps compat" begin
+        Aqua.test_deps_compat(TransmissionLinelist)
+    end
+
+    @testset "Undocumented names" begin
+        Aqua.test_undocumented_names(TransmissionLinelist)
+    end
+
+    @testset "Piracies" begin
+        Aqua.test_piracies(TransmissionLinelist)
+    end
+
+    @testset "Ambiguities" begin
+        Aqua.test_ambiguities(TransmissionLinelist)
+    end
+end
 
 # Exported names that are not callable functions (skip from the meta-test).
 const NON_FUNCTION_EXPORTS = Symbol[]
