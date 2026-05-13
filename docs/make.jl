@@ -6,14 +6,14 @@ using Documenter
 using Literate
 using CodeTracking
 using CairoMakie
-using Hantavirus
+using TransmissionLinelist
 
 # Retina-quality figures in the rendered docs.
 CairoMakie.activate!(; px_per_unit = 2.0)
 
 DocMeta.setdocmeta!(
-    Hantavirus, :DocTestSetup,
-    :(using Hantavirus); recursive = true
+    TransmissionLinelist, :DocTestSetup,
+    :(using TransmissionLinelist); recursive = true
 )
 
 # Write the joint model `@model` definition source out as a stand-alone
@@ -22,7 +22,7 @@ DocMeta.setdocmeta!(
 # which trips on bare `{T}` in the Julia code.
 let ll = load_linelist()
     d   = build_data(ll)
-    src = @code_string Hantavirus.joint_model_def(d, bin_edges_day(d.t0))
+    src = @code_string TransmissionLinelist.joint_model_def(d, bin_edges_day(d.t0))
     write(joinpath(@__DIR__, "examples", "joint_model_source.jl"), src)
 end
 
@@ -36,13 +36,13 @@ Literate.markdown(LITERATE_SRC, LITERATE_OUT;
                   mdstrings = true, credit = false)
 
 makedocs(;
-    sitename = "Hantavirus.jl",
-    authors = "Sebastian Funk, and contributors",
+    sitename = "TransmissionLinelist.jl",
+    authors = "Sebastian Funk, Sam Abbott, and contributors",
     clean = true,
     doctest = false,
     linkcheck = true,
     warnonly = [:docs_block, :missing_docs, :autodocs_block, :linkcheck],
-    modules = [Hantavirus],
+    modules = [TransmissionLinelist],
     pages = [
         "Home" => "index.md",
         "Model" => "model.md",
@@ -51,14 +51,14 @@ makedocs(;
         "API Reference" => "api.md",
     ],
     format = DocumenterVitepress.MarkdownVitepress(;
-        repo = "github.com/sbfnk/hantavirus",
+        repo = "github.com/epiforecasts/andv-linelist-analysis",
         devbranch = "main",
         devurl = "dev",
     ),
 )
 
 deploydocs(;
-    repo = "github.com/sbfnk/hantavirus",
+    repo = "github.com/epiforecasts/andv-linelist-analysis",
     target = "build",
     branch = "gh-pages",
     devbranch = "main",
