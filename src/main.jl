@@ -2,11 +2,27 @@
 ## For interactive use, call analyse() directly with keyword arguments.
 
 """
-    sample_fit(model; samples=1000, chains=4, target_accept=0.95,
-               seed=20260508, progress=false)
+$(TYPEDSIGNATURES)
 
-Run NUTS on `model` using the package's default Enzyme AD backend and
-`InitFromPrior()` chain initialisation. Returns the FlexiChain.
+Run NUTS on `model` using Enzyme AD and `InitFromPrior()` initialisation.
+
+Wraps `Turing.sample` with the package's defaults: Enzyme reverse-mode
+gradients, multi-chain `MCMCThreads()` and prior-based chain
+initialisation. Used by [`analyse`](@ref) and the analysis walkthrough.
+
+# Arguments
+- `model`: a `Turing` model, e.g. the output of [`joint_model`](@ref).
+
+# Keyword Arguments
+- `samples`: number of NUTS samples per chain. Defaults to `1000`.
+- `chains`: number of parallel chains. Defaults to `4`.
+- `target_accept`: NUTS target acceptance rate. Defaults to `0.95`.
+- `seed`: random seed passed to `Random.seed!`. Defaults to `20260508`.
+- `progress`: whether to display the sampler's progress bar. Defaults
+  to `false`.
+
+# Returns
+A FlexiChain (as returned by `Turing.sample`).
 """
 function sample_fit(model;
     samples       = 1000,
@@ -25,6 +41,42 @@ function sample_fit(model;
     )
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Fit the joint ANDV model and write posterior summaries and figures.
+
+Loads the line list, builds the model data, runs NUTS with Enzyme
+gradients across multiple chains, prints the [`summarise`](@ref) output,
+writes `posterior.csv` to `output`, and renders five PNG figures into
+`figures` (`Rt.png`, `delta_sense_check.png`, `pairplot.png`,
+`prior_predictives.png`, `posterior_predictions.png`). This is the
+single source of truth for the CLI options exposed by [`main`](@ref)
+and the Options table in the README.
+
+# Keyword Arguments
+- `data`: path to the line-list CSV. Defaults to the bundled
+  `data/linelist.csv`.
+- `output`: directory in which to write `posterior.csv`. Defaults to
+  the package's `output/` directory.
+- `figures`: directory in which to write the figures. Defaults to the
+  package's `figures/` directory.
+- `samples`: number of NUTS samples per chain. Defaults to `1000`.
+- `chains`: number of parallel chains. Defaults to `4`.
+- `seed`: random seed. Defaults to `20260508`.
+- `progress`: whether to display the sampler's progress bar. Defaults
+  to `true`.
+
+# Returns
+A `(chn, post)` tuple containing the raw `Turing.sample` chain and the
+summary tuple returned by [`summarise`](@ref).
+
+# Examples
+```julia
+using Hantavirus
+chn, post = analyse(samples = 500, chains = 2)
+```
+"""
 function analyse(;
     data     = LINELIST_PATH,
     output   = OUTPUT_DIR,
@@ -77,20 +129,37 @@ function _save_makie_figure(fig, path)
     return path
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Command-line entry point invoked by `julia -m Hantavirus`.
+
+Parses `args` (typically `ARGS`) with `ArgParse` and forwards the parsed
+options to [`analyse`](@ref). The `help=` strings here mirror the
+`# Keyword Arguments` section of [`analyse`](@ref), which is the single
+source of truth.
+
+# Arguments
+- `args`: a vector of CLI argument strings (typically `ARGS`).
+
+# Returns
+`0` as the process exit code, as expected by Julia's `julia -m` entry
+point convention.
+"""
 function (@main)(args)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
     @add_arg_table! s begin
         "--data", "-d"
-            help    = "path to linelist CSV"
+            help    = "path to the line-list CSV"
             default = LINELIST_PATH
         "--output", "-o"
-            help    = "output directory for posterior.csv"
+            help    = "directory in which to write posterior.csv"
             default = OUTPUT_DIR
         "--figures", "-f"
-            help    = "directory for figures"
+            help    = "directory in which to write the figures"
             default = FIGURES_DIR
         "--samples", "-n"
-            help     = "NUTS samples per chain"
+            help     = "number of NUTS samples per chain"
             arg_type = Int
             default  = 1000
         "--chains", "-c"

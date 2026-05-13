@@ -100,15 +100,16 @@ julia --project=. -t auto -m Hantavirus
 A few minutes on a laptop. Posterior saved to `output/posterior.csv` and
 figures to `figures/`.
 
-Options:
+Options (kept in sync with the `analyse()` docstring, which is the
+single source of truth):
 
 ```
--d, --data      path to linelist CSV   (default: data/linelist.csv)
--o, --output    output directory        (default: output/)
--f, --figures   figures directory       (default: figures/)
--n, --samples   NUTS samples per chain  (default: 1000)
--c, --chains    number of chains        (default: 4)
--s, --seed      random seed             (default: 20260508)
+-d, --data      path to the line-list CSV                  (default: data/linelist.csv)
+-o, --output    directory in which to write posterior.csv  (default: output/)
+-f, --figures   directory in which to write the figures    (default: figures/)
+-n, --samples   number of NUTS samples per chain           (default: 1000)
+-c, --chains    number of parallel chains                  (default: 4)
+-s, --seed      random seed                                (default: 20260508)
 ```
 
 Example:
