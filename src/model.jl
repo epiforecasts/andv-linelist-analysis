@@ -33,7 +33,7 @@
     # symmetrically on the overdispersion scale.
     phi_inv_sqrt ~ truncated(Normal(0.0, 1.0); lower = 0)
     k := 1.0 / phi_inv_sqrt^2
-    σ_rw  ~ truncated(Normal(0.0, 0.2); lower = 0) # log-R RW innovation SD (~5%/day typical, ~15%/day at prior 95th pct)
+    σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD allows sharp R(t) swings under interventions
 
     # Concrete element type derived from a sampled scalar — avoids the
     # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.

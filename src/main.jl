@@ -35,12 +35,12 @@ function analyse(;
     progress = true,
     plots    = true,
 )
-    ll = load_linelist(data)
-    m  = joint_model(ll)
-    d  = m.d
+    ll    = load_linelist(data)
+    d     = build_data(ll)
+    edges = bin_edges_day(d.t0)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx)
 
-    chn = sample_fit(m.model;
+    chn = sample_fit(joint_model(d, edges);
         samples  = samples,
         chains   = chains,
         seed     = seed,
@@ -65,25 +65,6 @@ function analyse(;
     end
 
     return chn, post
-end
-
-# Saving a Makie figure needs a Makie backend (e.g. CairoMakie) loaded at
-# the call site. Look the `save` method up dynamically so the package
-# itself doesn't depend on a particular backend.
-function _save_makie_figure(fig, path)
-    backend = nothing
-    for name in (:CairoMakie, :GLMakie, :WGLMakie)
-        if isdefined(Main, name)
-            backend = getfield(Main, name)
-            break
-        end
-    end
-    if backend === nothing
-        @warn "No Makie backend loaded in Main; skipping figure save" path
-        return path
-    end
-    Base.invokelatest(backend.save, path, fig; px_per_unit = 2.0)
-    return path
 end
 
 function (@main)(args)
