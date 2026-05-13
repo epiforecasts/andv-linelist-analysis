@@ -9,24 +9,22 @@
 #
 # The real-time machinery in `joint_model` corrects for these via per-case right-truncation on Inc and δ and an offspring-completeness adjustment on the NB offspring count (the [`F_offspring`](@ref) integral).
 # `F_offspring` is the probability that an offspring's `δ + Inc(sec)` chain has completed by the cut-off, conditional on the source's onset time.
-# The source's own incubation period is *not* marginalised here: the source is observed, so `T_onset[src]` is pinned by the sampled latents in the same model evaluation and the offspring delay reduces to `δ + Inc(sec)`.
-# The argument is therefore `obs_time − T_onset[src]`, not `obs_time − T_inf[src]`.
-# This page validates the corrections by fitting the same outbreak at three real-time cut-offs and overlaying the resulting posteriors against a counterfactual retrospective and the full closed-out fit.
+# The argument is `obs_time − T_onset[src]`, not `obs_time − T_inf[src]` — the source's own incubation is a sampled latent already scored, so the offspring delay reduces to `δ + Inc(sec)`.
+# This page validates the corrections by fitting the same outbreak at three real-time cut-offs and overlaying the resulting R(t) posteriors against a counterfactual retrospective and the full closed-out fit.
 
 using Hantavirus
 using DataFrames: nrow
 using Dates: Date, Day
-using Plots: plot, plot!, histogram!, hline!, vline!, savefig
-using Statistics: median, quantile
+using Statistics: quantile
+using CairoMakie
 
 # ## The three fits per cut-off
 #
 # At each `obs_date` the replication target for the corrected real-time fit is a **counterfactual retrospective** fit that filters the line list by exposure rather than by onset.
-# Both views condition on the same set of cases — those known to have been infected by `obs_date` — but only the corrected real-time fit needs to recover the full incubation and transmission distributions from right-truncated observations.
+# Both views condition on the same set of cases (those known to have been infected by `obs_date`) but only the corrected real-time fit needs to recover the full incubation and transmission distributions from right-truncated observations.
 # If the corrections work, the two posteriors should agree.
 #
 # A single full retrospective fit on the closed-out outbreak is shared across all three cut-offs and shown for scientific interest.
-# Post-`obs_date` cases can shift the posterior even though they would not be available in real time, so this fit is out of scope for validating the corrections.
 
 obs_dates = [Date("2018-12-15"), Date("2018-12-31"), Date("2019-01-07")]
 ll        = load_linelist()
@@ -34,11 +32,11 @@ t0_ref    = minimum(ll.onset_date) - Day(60)
 seed      = 20260512
 tmp       = (output = mktempdir(), figures = mktempdir())
 
-# The full retrospective fit is independent of `obs_date` and is fit once.
+# Full retrospective fit (independent of `obs_date`, fit once).
 
 chn_retro, post_retro = analyse(; data = ll, t0 = t0_ref, seed, tmp...,)
 
-# For each cut-off, fit the counterfactual retrospective (filter by exposure, no `obs_time`) and the corrected real-time view (whole line list, `obs_time = obs_date`; `analyse` filters internally).
+# At each cut-off, fit the counterfactual retrospective (exposure-filtered, no `obs_time`) and the corrected real-time view (whole line list, `obs_time = obs_date`).
 
 fits_by_date = map(obs_dates) do obs_date
     ll_truth  = filter_by_exposure(ll, obs_date)
@@ -47,57 +45,16 @@ fits_by_date = map(obs_dates) do obs_date
     (; obs_date, post_truth, post_rt)
 end
 
-# | Fit | Linelist | `obs_time` | Role |
-# |---|---|---|---|
-# | **Counterfactual retro** | `filter_by_exposure(ll, obs_date)` | `nothing` | Replication target — same outbreak info at `obs_date` but with full forward Inc / δ for retained cases. |
-# | **Corrected real-time** | `ll` (analyse filters to onset ≤ obs_date) | `obs_date` | What `joint_model` offers at the cut-off, with truncation and offspring-completeness corrections active. |
-# | **Full retrospective** | `ll` (the whole outbreak) | `nothing` | Out-of-scope science — post-`obs_date` cases included, shown for interest; independent of `obs_date` and shared across panels. |
-#
-# All fits share the same R(t) bin edges by pinning `t0` to `t0_ref` computed from the full line list.
-# `bin_edges_day(d.t0)` then returns identical edges across fits and bin indices are directly comparable.
+# All fits share R(t) bin edges by pinning `t0` to `t0_ref` so `bin_edges_day(d.t0)` returns identical edges across fits.
 
 @assert length(post_retro.log_R_chain) ==
         length(fits_by_date[1].post_truth.log_R_chain) ==
         length(fits_by_date[1].post_rt.log_R_chain)
 
-# ## Population posteriors
-#
-# Population marginals are shown for the latest cut-off only (`2019-01-07`).
-# The three earlier cut-offs differ mainly in how much of the outbreak is visible, which is best read from the R(t) facets below.
-
-function overlay_marginals(fits, title)
-    params = [(:μ_inc, "μ_inc"), (:σ_inc, "σ_inc"),
-              (:μ_δ, "μ_δ"),     (:σ_δ, "σ_δ"),
-              (:k,   "k")]
-    panels = Any[]
-    colours = [:steelblue, :darkorange, :seagreen]
-    for (key, label) in params
-        p = plot(; xlabel = label, ylabel = "density",
-                   legend = (key == :μ_inc ? :topright : false))
-        for (i, (name, post)) in enumerate(fits)
-            histogram!(p, getproperty(post, key);
-                       bins = 30, normalize = :pdf,
-                       linecolor = colours[i], fillcolor = colours[i],
-                       fillalpha = 0.30, linealpha = 0.9, label = name)
-        end
-        push!(panels, p)
-    end
-    return plot(panels...; layout = (2, 3), size = (1200, 700),
-                plot_title = title)
-end
-
-latest = fits_by_date[end]
-fits_latest = [
-    ("counterfactual retro", latest.post_truth),
-    ("corrected real-time",  latest.post_rt),
-    ("full retrospective",   post_retro),
-]
-overlay_marginals(fits_latest, "Posterior marginals at $(latest.obs_date)")
-
 # ## R(t) per cut-off
 #
-# A 3-panel layout, one per `obs_date`, with all three fits overlaid in each panel.
-# Posterior medians with 80% CrI ribbons for each bin; bin indices are comparable across fits and panels because `t0_ref` is shared.
+# One panel per `obs_date` with all three fits overlaid.
+# Posterior medians with 80% CrI ribbons; bin indices are comparable across panels because `t0_ref` is shared.
 
 function rt_quantiles(post)
     return (lo  = [quantile(exp.(post.log_R_chain[b]), 0.10) for b in eachindex(post.log_R_chain)],
@@ -105,31 +62,64 @@ function rt_quantiles(post)
             hi  = [quantile(exp.(post.log_R_chain[b]), 0.90) for b in eachindex(post.log_R_chain)])
 end
 
-colours = [:steelblue, :darkorange, :seagreen]
-panels = Any[]
-for (j, fit) in enumerate(fits_by_date)
-    panel_fits = [
-        ("counterfactual retro", fit.post_truth),
-        ("corrected real-time",  fit.post_rt),
+let
+    colours = [:steelblue, :darkorange, :seagreen]
+    fig = Figure(; size = (1500, 500))
+    for (j, fit) in enumerate(fits_by_date)
+        ax = Axis(fig[1, j];
+                  xlabel = "Bin index", ylabel = "R(t) (80% CrI)",
+                  title  = "obs_date = $(fit.obs_date)",
+                  limits = (nothing, (0.0, 4.0)))
+        panel_fits = [
+            ("counterfactual retro", fit.post_truth),
+            ("corrected real-time",  fit.post_rt),
+            ("full retrospective",   post_retro),
+        ]
+        for (i, (name, post)) in enumerate(panel_fits)
+            q = rt_quantiles(post)
+            b = collect(1:length(q.med))
+            band!(ax, b, q.lo, q.hi; color = (colours[i], 0.2))
+            lines!(ax, b, q.med; color = colours[i], linewidth = 2,
+                   label = name)
+        end
+        hlines!(ax, [1.0]; color = :grey, linestyle = :dash)
+        j == 1 && axislegend(ax; position = :rt)
+    end
+    fig
+end
+
+# ## Population posteriors at the latest cut-off
+#
+# Overlaid marginals of `(μ_inc, σ_inc, μ_δ, σ_δ, k)` for the latest cut-off (`2019-01-07`).
+# If the corrected real-time density tracks the counterfactual retro density on each panel, the corrections are recovering the population from the truncated observations.
+
+let
+    latest = fits_by_date[end]
+    fits = [
+        ("counterfactual retro", latest.post_truth),
+        ("corrected real-time",  latest.post_rt),
         ("full retrospective",   post_retro),
     ]
-    p = plot(; xlabel = "Bin index", ylabel = "R(t) (80% CrI)",
-               title  = "obs_date = $(fit.obs_date)",
-               legend = (j == 1 ? :topright : false),
-               ylims  = (0.0, 4.0))
-    for (i, (name, post)) in enumerate(panel_fits)
-        q = rt_quantiles(post)
-        b = 1:length(q.med)
-        plot!(p, b, q.med;
-              ribbon = (q.med .- q.lo, q.hi .- q.med),
-              linewidth = 2, color = colours[i], fillalpha = 0.20,
-              label = name)
+    params = [(:μ_inc, "μ_inc"), (:σ_inc, "σ_inc"),
+              (:μ_δ, "μ_δ"),     (:σ_δ, "σ_δ"),
+              (:k,   "k")]
+    colours = [:steelblue, :darkorange, :seagreen]
+
+    fig = Figure(; size = (1200, 700))
+    for (idx, (key, label)) in enumerate(params)
+        row, col = fldmod1(idx, 3)
+        ax = Axis(fig[row, col]; xlabel = label, ylabel = "density")
+        for (i, (name, post)) in enumerate(fits)
+            hist!(ax, getproperty(post, key);
+                  bins = 30, normalization = :pdf,
+                  color = (colours[i], 0.3),
+                  strokecolor = colours[i], strokewidth = 1,
+                  label = name)
+        end
+        idx == 1 && axislegend(ax; position = :rt)
     end
-    hline!(p, [1.0]; linestyle = :dash, color = :grey, label = "")
-    push!(panels, p)
+    fig
 end
-plot(panels...; layout = (1, 3), size = (1500, 500),
-     plot_title = "R(t) across real-time cut-offs")
 
 # ## Reading the figures
 #
@@ -153,7 +143,7 @@ plot(panels...; layout = (1, 3), size = (1500, 500),
 # **Pre-symptomatic transmission with an unobserved source.**
 # When `δ < −Inc[src]`, a source's onset can be later than its secondary's onset.
 # At an obs_time cut-off the secondary can be in the line list while the source isn't; `filter_realtime` then drops the source attribution and the secondary looks like an apparent index.
-# This is probably small for ANDV (δ averages near zero with σ_δ ≈ 1) but is a real selection effect that the current implementation does not correct for.
+# Probably small for ANDV (δ averages near zero with σ_δ ≈ 1) but a real selection effect the current implementation doesn't correct for.
 #
 # **Ongoing zoonosis.**
 # The model treats index (zoonotic) cases as a small starter set; cluster-completeness only thins observed sources, it doesn't add back population members whose Inc hasn't completed yet.
