@@ -61,8 +61,8 @@ Weekly bins; shaded band is the 95% credible interval.
 
 ## Methods and limitations
 
-Model description, priors, and the data-augmentation handling of double interval censoring are in [MODEL.md](MODEL.md).
-Known caveats — within-day exposure encoding pinning σ_δ, late-bin R(t) reverting to its prior, mild prior dependence of `k`, and right-truncation of long incubation periods — are in [LIMITATIONS.md](LIMITATIONS.md).
+Model description and priors are in [MODEL.md](MODEL.md).
+Known caveats are in [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Repository layout
 
