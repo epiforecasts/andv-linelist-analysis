@@ -77,9 +77,7 @@
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
             end
         end
-        # Clamp log R(t) to keep p = k/(k+R) strictly in (0, 1) during NUTS
-        # exploration; the bounds sit well outside posterior support.
-        R_i = exp(clamp(log_R_at(T_inf[i], edges, log_R), -50.0, 50.0))
+        R_i = exp(log_R_at(T_inf[i], edges, log_R))
         d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
     end
 end
