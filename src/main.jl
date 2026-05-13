@@ -9,11 +9,6 @@
                adtype = AutoMooncake(; config = Mooncake.Config()))
 
 Run NUTS on `model` and return the `MCMCChains.Chains` object.
-
-Mooncake reverse-mode AD is the default because it is the only backend
-that survives `Integrals.jl`'s `solve` through the real-time
-`F_offspring` cubature; Enzyme works for the retrospective form but
-trips inside HCubature for the real-time form.
 """
 function sample_fit(model;
     samples::Integer       = 1000,
@@ -52,18 +47,20 @@ function analyse(;
     edges = bin_edges_day(d.t0)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time
 
-    chn = sample_fit(joint_model(d, edges, foffspring_alg);
+    chn = sample_fit(joint_model_def(d, edges, foffspring_alg);
                      samples, chains, seed, progress)
 
     post = summarise(chn)
     save_posterior(post, joinpath(output, "posterior.csv"))
 
     mkpath(figures)
-    _save_makie_figure(plot_rt(chn),                   joinpath(figures, "Rt.png"))
-    _save_makie_figure(plot_delta_sense_check(chn, d), joinpath(figures, "delta_sense_check.png"))
-    _save_makie_figure(plot_prior_predictives(),       joinpath(figures, "prior_predictives.png"))
-    _save_makie_figure(plot_posterior_predictive(chn), joinpath(figures, "posterior_predictions.png"))
-    _save_makie_figure(plot_pair(chn),                 joinpath(figures, "pairplot.png"))
+    _save_makie_figure(plot_rt(chn),                       joinpath(figures, "Rt.png"))
+    _save_makie_figure(plot_delta_sense_check(chn, d),     joinpath(figures, "delta_sense_check.png"))
+    _save_makie_figure(plot_inc_sense_check(chn, d),       joinpath(figures, "inc_sense_check.png"))
+    _save_makie_figure(plot_z_ppc(chn, d),                 joinpath(figures, "z_ppc.png"))
+    _save_makie_figure(plot_prior_predictives(),           joinpath(figures, "prior_predictives.png"))
+    _save_makie_figure(plot_predictive_distributions(chn), joinpath(figures, "predictive_distributions.png"))
+    _save_makie_figure(plot_pair(chn),                     joinpath(figures, "pairplot.png"))
 
     return chn, post
 end

@@ -3,7 +3,7 @@
 ## Three population-level components, written as swappable Turing models:
 ##   - Incubation period            — `incubation_model(μ_prior, σ_prior)`
 ##   - Transmission timing δ        — `transmission_delta_model(...)`
-##   - log R(t) time series         — `random_walk_rt_model(n_bins; ...)`
+##   - log R(t) time series         — `random_walk_rt_model(n_knots; ...)`
 ##
 ## Per-case latents: an infection time `T_inf[i]` and an onset time
 ## `T_onset[i]`. The GI > 0 constraint `T_inf[secondary] > T_inf[source]`
@@ -25,14 +25,7 @@
     incubation_model(μ_prior, σ_prior)
 
 Model sampling the log-mean `μ_inc` and log-SD `σ_inc` of a LogNormal
-incubation period. Returns a `NamedTuple` `(dist, μ, σ)` where `dist`
-is `LogNormal(μ_inc, σ_inc)`. The parent model uses `dist` to score
-per-case incubation contributions and the raw parameters to evaluate
-downstream quantities such as `F_offspring`.
-
-The priors are arguments so they can be changed without editing this
-file. To swap the *family* (Gamma, Weibull, …) write a parallel
-model that returns a NamedTuple with the same fields.
+incubation period. Returns `(dist = LogNormal(μ_inc, σ_inc), μ, σ)`.
 """
 @model function incubation_model(μ_prior = Normal(3.0, 0.5),
                                  σ_prior = truncated(Normal(0.0, 0.5); lower = 0))
@@ -45,10 +38,7 @@ end
     transmission_delta_model(μ_prior, σ_prior)
 
 Model for the population mean `μ_δ` and SD `σ_δ` of the per-pair
-transmission timing (gap between a secondary's infection and its
-source's onset). Returns `(dist = Normal(μ_δ, σ_δ), μ, σ)`. As with
-[`incubation_model`](@ref) the priors are arguments and the return
-contract is the swap point for alternative families.
+transmission timing. Returns `(dist = Normal(μ_δ, σ_δ), μ, σ)`.
 """
 @model function transmission_delta_model(μ_prior = Normal(0.0, 5.0),
                                          σ_prior = truncated(Normal(0.0, 1.0); lower = 0))
@@ -58,60 +48,50 @@ contract is the swap point for alternative families.
 end
 
 """
-    random_walk_rt_model(n_bins;
-                            init_prior  = Normal(log(1.5), 1.0),
-                            sigma_prior = truncated(Normal(0.0, 0.5); lower = 0))
+    random_walk_rt_model(n_knots;
+                         init_prior  = Normal(log(1.5), 1.0),
+                         sigma_prior = truncated(Normal(0.0, 0.2); lower = 0))
 
-Non-centred weekly random walk on log R(t) over `n_bins` bins. Returns
-the length-`n_bins` `log_R` vector. The non-centred parameterisation
-decouples `σ_rw` from the walk to avoid the funnel that diverges NUTS
-under the centred form.
-
-`joint_model` accepts any model that returns a length-`n_bins`
-real-valued vector for log R(t), so alternative time-series structures
-(AR1, GP, piecewise constant) drop in by writing a parallel model with
-the same return contract.
+Non-centred weekly random walk on log R(t) at `n_knots` knots. Returns
+the length-`n_knots` `log_R` vector evaluated at the knot dates;
+`log_R_at` linearly interpolates between knots.
 """
-@model function random_walk_rt_model(n_bins::Integer;
-                                        init_prior  = Normal(log(1.5), 1.0),
-                                        sigma_prior = truncated(Normal(0.0, 0.5); lower = 0))
+@model function random_walk_rt_model(n_knots::Integer;
+                                     init_prior  = Normal(log(1.5), 1.0),
+                                     sigma_prior = truncated(Normal(0.0, 0.2); lower = 0))
     σ_rw       ~ sigma_prior
     log_R_init ~ init_prior
     T = typeof(log_R_init)
-    ε ~ Turing.filldist(Normal(zero(T), one(T)), n_bins - 1)
+    ε ~ Turing.filldist(Normal(zero(T), one(T)), n_knots - 1)
     return vcat(log_R_init, log_R_init .+ accumulate(+, σ_rw .* ε))
 end
 
 """
     safe_nb(k, R)
 
-`NegativeBinomial(k, p)` with `p = max(k/(k+R), eps(typeof(k)))`. The
-clamp keeps the gradient finite when an extreme NUTS proposal overflows
-`exp(log_R)` to `Inf`; the clamped value gives a vanishing likelihood
-for any observed `Zobs > 0`, so the proposal is still rejected on
-acceptance.
+`NegativeBinomial(k, p)` with `p = max(k/(k+R), eps(typeof(k)))`. Keeps
+the gradient finite when an extreme NUTS proposal overflows `exp(log_R)`
+to `Inf`.
 """
 safe_nb(k, R) = NegativeBinomial(k, max(k / (k + R), eps(typeof(k))))
 
 """
-    joint_model(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
-                incubation   = incubation_model(),
-                transmission = transmission_delta_model(),
-                rt           = random_walk_rt_model(length(edges) + 1),
-                k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
+    joint_model_def(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
+                    incubation   = incubation_model(),
+                    transmission = transmission_delta_model(),
+                    rt           = random_walk_rt_model(length(edges)),
+                    k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
 
 Joint Bayesian model over incubation, transmission timing, and the
-weekly random walk on log R(t). The three population components are
-passed in as Turing submodels so priors and structural choices can be
-swapped without editing this function — see [`incubation_model`](@ref),
-[`transmission_delta_model`](@ref), and [`random_walk_rt_model`](@ref)
-for the default contracts.
+weekly random walk on log R(t) at the knot dates. The three population
+components are passed in as Turing submodels so priors and structural
+choices can be swapped without editing this function.
 """
-@model function joint_model(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
-                            incubation   = incubation_model(),
-                            transmission = transmission_delta_model(),
-                            rt           = random_walk_rt_model(length(edges) + 1),
-                            k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
+@model function joint_model_def(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
+                                incubation   = incubation_model(),
+                                transmission = transmission_delta_model(),
+                                rt           = random_walk_rt_model(length(edges)),
+                                k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
     inc    ~ to_submodel(incubation, false)
     delta  ~ to_submodel(transmission, false)
     _log_R ~ to_submodel(rt, false)
@@ -119,8 +99,6 @@ for the default contracts.
 
     log_R := _log_R
 
-    # Concrete element type so per-case latent vectors don't fall back
-    # to `Vector{Real}` and tax AD with dynamic dispatch.
     T = typeof(inc.μ)
 
     T_onset = Vector{T}(undef, d.N)
@@ -132,8 +110,7 @@ for the default contracts.
 
     # F_offspring(obs_time − T_onset[src]) is the joint right-truncation
     # for an observed sourced pair and the binomial thinning factor for
-    # source `src`'s offspring count — same probability, used in both
-    # the per-case loop and the NB likelihood below.
+    # source `src`'s offspring count.
     thins = realtime ?
         F_offspring(d.obs_time .- T_onset, inc.dist, delta.dist;
                     alg = foffspring_alg) : T[]
@@ -146,10 +123,6 @@ for the default contracts.
             Turing.@addlogprob! logpdf(inc.dist, T_onset[i] - T_inf[i])
             realtime && Turing.@addlogprob! -logcdf(inc.dist, d.obs_time[i] - T_inf[i])
         else
-            # Upper bound at `T_onset[i] - 1e-6` so the prior's support
-            # is exactly where the LogNormal Inc likelihood is finite —
-            # mirrors the index-case prior. Avoids InitFromPrior failures
-            # from random draws that put `T_inf[i] > T_onset[i]`.
             T_inf[i] ~ Uniform(d.exp_lo_day[i],
                                min(d.exp_hi_day[i], T_onset[i] - 1e-6))
             if T_inf[i] <= T_inf[src]
@@ -157,18 +130,15 @@ for the default contracts.
             else
                 Turing.@addlogprob! logpdf(inc.dist,   T_onset[i] - T_inf[i])
                 Turing.@addlogprob! logpdf(delta.dist, T_inf[i]   - T_onset[src])
-                # `floatmin` guards Mooncake against a stray `log(0)`
-                # when an extreme NUTS proposal collapses `thins[src]`.
                 realtime && Turing.@addlogprob! -log(max(thins[src], floatmin(T)))
             end
         end
     end
 
-    # `safe_nb` clamps the NB success probability into [eps, 1] so an
-    # extreme NUTS proposal that overflows `exp(log_R)` to `Inf` doesn't
-    # throw a DomainError on the gradient path.
+    # Clamp log R(t) so p = k/(k+R) stays strictly in (0, 1) during NUTS
+    # exploration; `safe_nb` floors p as a belt-and-braces fallback.
     for i in 1:d.N
-        R_i   = exp(log_R[which_bin(T_inf[i], edges)])
+        R_i   = exp(clamp(log_R_at(T_inf[i], edges, log_R), -50.0, 50.0))
         R_eff = realtime ? R_i * thins[i] : R_i
         d.Zobs[i] ~ safe_nb(k, R_eff)
     end
