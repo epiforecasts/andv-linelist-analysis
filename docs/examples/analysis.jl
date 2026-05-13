@@ -108,6 +108,13 @@ plot_inc_sense_check(chn, d)
 
 # ## Offspring posterior-predictive check
 #
-# For each posterior draw, replicate `Z_rep[i] ~ NegativeBinomial(k, k/(k+R_i))` per case using the posterior median of `T_inf[i]` to anchor `R_i`, and compare frequencies of each `Z` value against the observed line list along with three aggregate test statistics.
+# Joint-draw posterior-predictive check.
+# For each posterior draw, replicate `Z_rep[i] ~ NegativeBinomial(k, k/(k+R_i))` per case, with `R_i = exp(log_R_at(T_inf[i], edges, log_R))` evaluated at the same draw's `T_inf[i]`, `log_R`, and `k` (matching the model's likelihood, clamp and all).
+# The left panel compares frequencies of each `Z` value against the observed line list.
+# The right column has three stacked subpanels — one per discrete test statistic (`sum(Z)`, `max(Z)`, `count(Z = 0)`) — each showing the histogram of the replicated statistic with the observed value as a dashed vertical rule.
 
 plot_z_ppc(chn, d)
+
+# Numeric values for each test statistic — observed, replicated median + 95% CrI, and the two-sided Bayesian posterior-predictive p-value `2 · min(P(T_rep ≥ T_obs), P(T_rep ≤ T_obs))`.
+
+z_ppc_summary(chn, d)
