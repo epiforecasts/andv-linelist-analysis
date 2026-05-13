@@ -17,6 +17,7 @@ using Hantavirus
 using Chain
 using DataFrames
 using DataFramesMeta
+using FlexiChains
 using Printf
 using Random
 using CairoMakie
@@ -62,6 +63,12 @@ plot_prior_predictives()
 # `sample_fit` wraps the package's default NUTS configuration: Enzyme reverse-mode AD, chains initialised from the prior, 1000 post-warmup draws across 4 chains, `target_accept = 0.95`.
 
 chn = sample_fit(model)
+
+# ## Sampler output
+
+chn
+
+# ## Diagnostics
 
 diagnostics_table(chn)
 
