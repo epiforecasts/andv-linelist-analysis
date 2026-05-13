@@ -1,0 +1,10 @@
+[deps]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+Hantavirus = "a3f8c2e1-4b7d-4a9e-8c3f-d5e2f1a0b6c4"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+Hantavirus = {path = ".."}
+
+[compat]
+Aqua = "0.8"
