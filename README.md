@@ -103,12 +103,13 @@ figures to `figures/`.
 Options:
 
 ```
--d, --data      path to linelist CSV   (default: data/linelist.csv)
--o, --output    output directory        (default: output/)
--f, --figures   figures directory       (default: figures/)
--n, --samples   NUTS samples per chain  (default: 1000)
--c, --chains    number of chains        (default: 4)
--s, --seed      random seed             (default: 20260508)
+-d, --data        path to linelist CSV   (default: data/linelist.csv)
+-o, --output      output directory        (default: output/)
+-f, --figures     figures directory       (default: figures/)
+    --no-figures  skip all figure generation
+-n, --samples     NUTS samples per chain  (default: 1000)
+-c, --chains      number of chains        (default: 4)
+-s, --seed        random seed             (default: 20260508)
 ```
 
 Example:
