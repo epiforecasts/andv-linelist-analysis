@@ -29,22 +29,6 @@ function _num_divergences(chn)
     return 0
 end
 
-"""
-$(TYPEDSIGNATURES)
-
-Compute summary MCMC diagnostics from a sampled chain.
-
-Returns the largest split-rhat and smallest bulk ESS over all scalar
-parameter entries together with the total number of NUTS divergences
-(`numerical_error`).
-
-# Arguments
-- `chn`: a chain returned by `Turing.sample`.
-
-# Returns
-A named tuple `(rhat, ess, ndiv)` with the maximum rhat, minimum bulk
-ESS, and divergence count.
-"""
 function diagnostics(chn)
     rhats = _scalar_stats(FlexiChains.rhat(chn))
     esses = _scalar_stats(FlexiChains.ess(chn; kind = :bulk))
@@ -55,22 +39,8 @@ end
 # Extracting vector parameters
 # ---------------------------------------------------------------------------
 
-"""
-$(TYPEDSIGNATURES)
-
-Extract pooled posterior draws for each entry of a vector-valued parameter.
-
-For a chain holding a vector parameter such as `T_inf`, `T_onset`, or
-`log_R`, returns one pooled-across-chains sample vector per entry.
-
-# Arguments
-- `chn`: a chain returned by `Turing.sample`.
-- `name`: the parameter name as a `Symbol`, e.g. `:log_R`.
-
-# Returns
-A `Vector{Vector{Float64}}` of length equal to the parameter dimension,
-each element containing the pooled posterior draws for that entry.
-"""
+# Returns a vector of pooled samples for each entry of a vector-valued
+# parameter (T_inf, offset, log_R, ...).
 function vector_chain(chn, name::Symbol)
     arr = chn[name, stack = true]
     N = size(arr, 3)
@@ -88,24 +58,9 @@ function _print_qci(label, x; fmt = "%.2f")
     @eval @printf $("  %-30s " * fmt * " (95%% CrI " * fmt * " – " * fmt * ")\n") $label $med $lo $hi
 end
 
-"""
-$(TYPEDSIGNATURES)
-
-Print and return a posterior summary of the fitted model.
-
-Computes the pooled posterior of the population parameters and the derived
-generation-interval / serial-interval marginals and pre-symptomatic
-transmission probabilities, prints [`summary_table`](@ref) to `stdout`,
-and returns the underlying samples that [`save_posterior`](@ref) and the
-plotting functions in `plots.jl` consume.
-
-# Arguments
-- `chn`: a chain returned by `Turing.sample`, e.g. from [`joint_model`](@ref).
-
-# Returns
-A named tuple `(μ_inc, σ_inc, μ_δ, σ_δ, k, log_R_chain, mean_gi_si,
-sd_gi_si, p_pre)` of pooled posterior samples and derived quantities.
-"""
+# Compute the named-tuple of posterior draws used downstream by
+# `save_posterior` and CLI printing. Also prints the headline summary table
+# from `summary_table(chn)` for terminal use.
 function summarise(chn)
     μ_inc = vec(collect(chn[:μ_inc])); σ_inc = vec(collect(chn[:σ_inc]))
     μ_δ   = vec(collect(chn[:μ_δ]));   σ_δ   = vec(collect(chn[:σ_δ]))
@@ -134,25 +89,6 @@ end
 # Persistence
 # ---------------------------------------------------------------------------
 
-
-"""
-$(TYPEDSIGNATURES)
-
-Write the posterior samples to a CSV file.
-
-Writes one row per posterior draw with columns for the population
-parameters, the derived GI / SI mean and SD, the pre-symptomatic
-transmission probabilities, and one `log_R_b` column per weekly knot.
-Creates the parent directory if needed.
-
-# Arguments
-- `post`: the summary tuple returned by [`summarise`](@ref).
-- `path`: output CSV path.
-
-# Returns
-The result of `CSV.write` (the path written), as a side effect of writing
-the file.
-"""
 function save_posterior(post, path)
     df = DataFrame(μ_inc = post.μ_inc, σ_inc = post.σ_inc,
                    μ_δ = post.μ_δ,     σ_δ = post.σ_δ,

@@ -16,13 +16,13 @@ DocMeta.setdocmeta!(
     :(using TransmissionLinelist); recursive = true
 )
 
-# Write the joint_model source out as a stand-alone fenced code block so the
-# Literate page can pull it in via Documenter @example / explicit include
-# without going through Vue's MDX parser, which trips on bare `{T}` in the
-# Julia code.
+# Write the joint model `@model` definition source out as a stand-alone
+# fenced code block so the Literate page can pull it in via Documenter
+# @example / explicit include without going through Vue's MDX parser,
+# which trips on bare `{T}` in the Julia code.
 let ll = load_linelist()
     d   = build_data(ll)
-    src = @code_string joint_model(d, bin_edges_day(d.t0))
+    src = @code_string TransmissionLinelist.joint_model(d, bin_edges_day(d.t0))
     write(joinpath(@__DIR__, "examples", "joint_model_source.jl"), src)
 end
 

@@ -29,10 +29,12 @@ Random.seed!(20260508)
 # ## Load the line list
 #
 # `load_linelist` parses the bundled CSV and drops the `_alt` sensitivity rows.
-# `prepare_model` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset), builds the weekly R(t) knot dates, and returns the Turing model alongside the augmented data struct.
+# `build_data` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset); `bin_edges_day` returns the weekly R(t) knot dates as day offsets.
 
-ll = load_linelist()
-model, d, edges = prepare_model(ll)
+ll    = load_linelist()
+d     = build_data(ll)
+edges = bin_edges_day(d.t0)
+model = joint_model(d, edges)
 
 @chain ll begin
     @select(:patient_id, :exposure_lower, :exposure_upper,
@@ -86,15 +88,35 @@ plot_rt(chn)
 
 plot_pair(chn)
 
-# ## Posterior-predictive delay distributions
+# ## Predictive distributions for the delays
 #
-# Inc and δ panels show the posterior over the parametric density (median PDF with a 95% pointwise ribbon across draws) overlaid with one predictive realisation per draw.
-# GI and SI show the predictive-sample histogram only.
+# Implied population distributions for the incubation period, transmission timing δ, and the derived generation and serial intervals under the fitted posterior — i.e. what a new case or transmission pair would look like.
+# This is not a check against the observed data; for that see the sense-check and PPC panels below.
+# Inc and δ panels show the posterior over the parametric density (median PDF with a 95% pointwise ribbon across draws) overlaid with one predictive realisation per draw; GI and SI show the predictive-sample histogram only.
 
-plot_posterior_predictive(chn)
+plot_predictive_distributions(chn)
 
 # ## δ sense check
 #
 # Compare the per-pair posterior medians of δ to the fitted population `Normal(μ_δ, σ_δ)`.
 
 plot_delta_sense_check(chn, d)
+
+# ## Incubation-period sense check
+#
+# Compare the per-case posterior medians of `T_onset[i] − T_inf[i]` to the fitted population `LogNormal(μ_inc, σ_inc)`.
+
+plot_inc_sense_check(chn, d)
+
+# ## Offspring posterior-predictive check
+#
+# Joint-draw posterior-predictive check.
+# For each posterior draw, replicate `Z_rep[i] ~ NegativeBinomial(k, k/(k+R_i))` per case, with `R_i = exp(log_R_at(T_inf[i], edges, log_R))` evaluated at the same draw's `T_inf[i]`, `log_R`, and `k` (matching the model's likelihood, clamp and all).
+# The left panel compares frequencies of each `Z` value against the observed line list.
+# The right column has three stacked subpanels — one per discrete test statistic (`sum(Z)`, `max(Z)`, `count(Z = 0)`) — each showing the histogram of the replicated statistic with the observed value as a dashed vertical rule.
+
+plot_z_ppc(chn, d)
+
+# Numeric values for each test statistic — observed, replicated median + 95% CrI, and the two-sided Bayesian posterior-predictive p-value `2 · min(P(T_rep ≥ T_obs), P(T_rep ≤ T_obs))`.
+
+z_ppc_summary(chn, d)

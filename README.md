@@ -51,7 +51,7 @@ Per case the mean is `R(t)` evaluated at the case's infection time, and `k` is t
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
-| Dispersion `k` | 0.32 (0.14 – 0.90) |
+| Dispersion `k` | 0.37 (0.15 – 1.07) |
 
 ### Time-varying reproduction number R(t)
 
@@ -61,8 +61,8 @@ Weekly bins; shaded band is the 95% credible interval.
 
 ## Methods and limitations
 
-Model description, priors, and the data-augmentation handling of double interval censoring are in [MODEL.md](MODEL.md).
-Known caveats — within-day exposure encoding pinning σ_δ, late-bin R(t) reverting to its prior, mild prior dependence of `k`, and right-truncation of long incubation periods — are in [LIMITATIONS.md](LIMITATIONS.md).
+Model description and priors are in [MODEL.md](MODEL.md).
+Known caveats are in [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Repository layout
 
@@ -100,16 +100,15 @@ julia --project=. -t auto -m TransmissionLinelist
 A few minutes on a laptop. Posterior saved to `output/posterior.csv` and
 figures to `figures/`.
 
-Options (kept in sync with the `analyse()` docstring, which is the
-single source of truth):
+Options:
 
 ```
--d, --data      path to the line-list CSV                  (default: data/linelist.csv)
--o, --output    directory in which to write posterior.csv  (default: output/)
--f, --figures   directory in which to write the figures    (default: figures/)
--n, --samples   number of NUTS samples per chain           (default: 1000)
--c, --chains    number of parallel chains                  (default: 4)
--s, --seed      random seed                                (default: 20260508)
+-d, --data      path to linelist CSV   (default: data/linelist.csv)
+-o, --output    output directory        (default: output/)
+-f, --figures   figures directory       (default: figures/)
+-n, --samples   NUTS samples per chain  (default: 1000)
+-c, --chains    number of chains        (default: 4)
+-s, --seed      random seed             (default: 20260508)
 ```
 
 Example:
