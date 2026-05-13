@@ -1,5 +1,6 @@
-name = "Hantavirus"
+name = "TransmissionLinelist"
 uuid = "a3f8c2e1-4b7d-4a9e-8c3f-d5e2f1a0b6c4"
+authors = ["Sebastian Funk <sebastian.funk@lshtm.ac.uk>", "Sam Abbott <sam.abbott@lshtm.ac.uk>"]
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -21,6 +22,12 @@ Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
 
 [compat]
 ADTypes = "1.22"

@@ -1,11 +1,11 @@
-module Hantavirus
+module TransmissionLinelist
 
 using ArgParse: ArgParseSettings, @add_arg_table!, parse_args
 using Chain: @chain
 using CSV: CSV
 using DataFrames: DataFrame, nrow, eachrow, passmissing, rename!, sort!
 using DataFramesMeta: @select, @transform, @subset, @combine, @by, @rtransform,
-                      @rsubset, @orderby, @rename
+                     @rsubset, @orderby, @rename
 using Dates: Dates, Date, Day, dayofweek
 using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
                      Uniform, logpdf, cdf, pdf
@@ -41,6 +41,6 @@ export plot_data, plot_rt, plot_pair, plot_predictive_distributions
 export plot_delta_sense_check, plot_inc_sense_check, plot_z_ppc
 export plot_prior_predictives
 export z_ppc_summary
-export analyse, sample_fit, main
+export analyse, sample_fit
 
 end

@@ -21,19 +21,54 @@
 ## from δ and Inc. The per-pair constraint T_inf[secondary] > T_inf[source]
 ## is enforced via a -Inf reject in the likelihood to ensure GI > 0.
 
-@model function joint_model_def(d, edges)
+"""
+$(TYPEDSIGNATURES)
+
+Joint Turing model for the Epuyén ANDV outbreak.
+
+Estimates the incubation period (LogNormal), the per-pair transmission
+timing `δ` relative to source onset (Normal), a weekly piecewise-linear
+log-R(t) random walk, and the offspring dispersion `k`, from interval-
+censored exposure and onset windows. Each case has continuous latent
+infection and onset times; the positive generation-interval constraint
+`T_inf[secondary] > T_inf[source]` is enforced via a `-Inf` reject in
+the likelihood. The model is described in `METHODS.md`.
+
+# Arguments
+- `d`: model data tuple as returned by [`build_data`](@ref), with fields
+  `t0`, `onset_lo_day`, `onset_hi_day`, `exp_lo_day`, `exp_hi_day`,
+  `source_idx`, `Zobs`, and `N`.
+- `edges`: knot positions in days from `t0`, as returned by
+  [`bin_edges_day`](@ref).
+
+# Returns
+A `DynamicPPL.Model` ready to pass to `Turing.sample`. The sampled chain
+contains the population parameters `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`,
+`phi_inv_sqrt`, `σ_rw`, the derived `k` and `log_R`, the random-walk
+innovations `ε` and initial value `log_R_init`, and the per-case latent
+vectors `T_onset` and `T_inf`.
+
+# Examples
+```julia
+ll    = load_linelist()
+d     = build_data(ll)
+edges = bin_edges_day(d.t0)
+m     = joint_model(d, edges)
+```
+"""
+@model function joint_model(d, edges)
     # Population-level parameters
     μ_inc ~ Normal(3.0, 0.5)                       # log-mean Inc (≈ log 20 d)
     σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc
-    μ_δ ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
-    σ_δ ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
+    μ_δ   ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
+    σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
     # NB offspring dispersion via Stan's reciprocal-sqrt reparameterisation:
     # 1/√k is the SD multiplier in Var = μ + μ²·(1/√k)². Half-Normal(0, 1)
     # spans Poisson (1/√k → 0) to heavy super-spreader (1/√k ≈ 2)
     # symmetrically on the overdispersion scale.
     phi_inv_sqrt ~ truncated(Normal(0.0, 1.0); lower = 0)
     k := 1.0 / phi_inv_sqrt^2
-    σ_rw ~ truncated(Normal(0.0, 0.2); lower = 0) # log-R RW innovation SD (~5%/day typical, ~15%/day at prior 95th pct)
+    σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD allows sharp R(t) swings under interventions
 
     # Concrete element type derived from a sampled scalar — avoids the
     # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
@@ -71,15 +106,13 @@
             if T_inf[i] <= T_inf[src]
                 Turing.@addlogprob! -Inf
             else
-                inc_i = T_onset[i] - T_inf[i]
+                inc_i  = T_onset[i] - T_inf[i]
                 δ_pair = T_inf[i] - T_onset[src]
                 Turing.@addlogprob! logpdf(inc_dist, inc_i)
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
             end
         end
-        # Clamp log R(t) to keep p = k/(k+R) strictly in (0, 1) during NUTS
-        # exploration; the bounds sit well outside posterior support.
-        R_i = exp(clamp(log_R_at(T_inf[i], edges, log_R), -50.0, 50.0))
+        R_i = exp(log_R_at(T_inf[i], edges, log_R))
         d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
     end
 end

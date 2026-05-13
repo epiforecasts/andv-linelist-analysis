@@ -1,8 +1,8 @@
 ```@meta
-CurrentModule = Hantavirus
+CurrentModule = TransmissionLinelist
 ```
 
-# Hantavirus.jl
+# TransmissionLinelist.jl
 
 A Julia + Turing model fitted to the Epuyén 2018–19 Andes hantavirus outbreak ([Martínez et al. 2020, NEJM](https://doi.org/10.1056/NEJMoa2009040)).
 
