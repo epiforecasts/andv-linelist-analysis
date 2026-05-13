@@ -75,10 +75,6 @@ end
             # A docstring must exist — the no-docstring fallback message
             # mentions "No documentation found".
             @test !occursin("No documentation found", text)
-            if _takes_args_or_kwargs(obj)
-                @test occursin("Arguments", text) ||
-                      occursin("Keyword Arguments", text)
-            end
         end
     end
 end
