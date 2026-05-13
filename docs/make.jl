@@ -12,7 +12,7 @@ DocMeta.setdocmeta!(
 
 makedocs(;
     sitename = "Hantavirus.jl",
-    authors = "Sebastian Funk, and contributors",
+    authors = "Sebastian Funk, Sam Abbott, and contributors",
     clean = true,
     doctest = false,
     linkcheck = true,
