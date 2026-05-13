@@ -1,47 +1,25 @@
-## Joint model for the Epuyén ANDV outbreak: incubation period, per-pair
-## transmission timing relative to source onset, and time-varying reproduction
-## number.
+## Joint model for the Epuyén ANDV outbreak.
 ##
-## Three quantities estimated together from the line list:
+## Three population-level components, written as swappable Turing models:
+##   - Incubation period            — `incubation_model(μ_prior, σ_prior)`
+##   - Transmission timing δ        — `transmission_delta_model(...)`
+##   - log R(t) time series         — `random_walk_rt_model(n_bins; ...)`
 ##
-##   1. Incubation period           — LogNormal(μ_inc, σ_inc), from each case's
-##                                    exposure-window-to-onset gap.
-##   2. Transmission timing δ       — Normal(μ_δ, σ_δ), the gap between a
-##                                    secondary's infection time and its
-##                                    source's symptom onset. Identified
-##                                    per-pair from the line list.
-##   3. Time-varying reproduction   — log R(t) on a weekly random walk, with
-##      number                        Negative-Binomial offspring (dispersion k).
-##
-## Each case has continuous latents: an infection time T_inf and an onset time
-## T_onset. Interval-censored onsets and exposure dates are handled by
-## Bayesian data augmentation over these latents.
-##
-## The generation interval and serial interval are derived in post-processing
-## from δ and Inc. The per-pair constraint T_inf[secondary] > T_inf[source]
-## is enforced via a -Inf reject in the likelihood to ensure GI > 0.
+## Per-case latents: an infection time `T_inf[i]` and an onset time
+## `T_onset[i]`. The GI > 0 constraint `T_inf[secondary] > T_inf[source]`
+## is enforced by a `-Inf` reject in the per-case loop.
 ##
 ## Real-time mode (gated on `d.obs_time !== nothing`):
-##   - Index (zoonotic) cases: Inc is right-truncated at the per-case
-##     cut-off via a single `-logcdf(inc.dist, obs_time - T_inf[i])` term.
-##   - Sourced cases: the observation event T_onset[i] ≤ obs_time is a
-##     joint constraint on the offspring pair `(δ, Inc)` —
-##     `δ + Inc ≤ obs_time − T_onset[src]` — and so is normalised by a
-##     single `-log F_offspring(obs_time − T_onset[src])`, not the product
-##     of marginal Inc and δ CDFs.
-##   - The NB mean for source `src` is thinned by `F_offspring(obs_time[src] -
-##     T_onset[src])` to account for offspring whose `δ + Inc(sec)` chain
-##     has not yet completed by the cut-off. The source's own incubation is
-##     already pinned by the sampled latents `T_onset[src]` and `T_inf[src]`,
-##     so only `δ` and `Inc(sec)` are marginalised here. When
-##     `obs_time === nothing` the whole correction collapses out and the
-##     model is identical to the retrospective form.
-##
-## Structure: the three population-level components are written as Turing
-## models, each parameterised by the priors it samples from. Swapping a
-## prior — or, by writing a parallel model with the same return contract,
-## swapping the distributional family or the R(t) time-series model — does
-## not require touching `joint_model`.
+##   - Index cases get Inc-only right-truncation `-logcdf(inc.dist, ...)`
+##     (no δ).
+##   - Sourced cases get the joint right-truncation
+##     `-log F_offspring(obs_time − T_onset[src])`: the observation event
+##     `T_onset[i] ≤ obs_time` is `δ + Inc(sec) ≤ obs_time − T_onset[src]`,
+##     a joint constraint on the pair `(δ, Inc)` normalised by a single
+##     `F_offspring`, not the product of marginal CDFs.
+##   - NB rate `R` is thinned by the same `F_offspring(obs_time − T_onset[src])`
+##     (binomial thinning of the offspring count). Same value as the
+##     truncation, so a single vectorised `F_offspring` call serves both.
 
 """
     incubation_model(μ_prior, σ_prior)
@@ -56,7 +34,8 @@ The priors are arguments so they can be changed without editing this
 file. To swap the *family* (Gamma, Weibull, …) write a parallel
 model that returns a NamedTuple with the same fields.
 """
-@model function incubation_model(μ_prior, σ_prior)
+@model function incubation_model(μ_prior = Normal(3.0, 0.5),
+                                 σ_prior = truncated(Normal(0.0, 0.5); lower = 0))
     μ_inc ~ μ_prior
     σ_inc ~ σ_prior
     return (; dist = LogNormal(μ_inc, σ_inc), μ = μ_inc, σ = σ_inc)
@@ -71,7 +50,8 @@ source's onset). Returns `(dist = Normal(μ_δ, σ_δ), μ, σ)`. As with
 [`incubation_model`](@ref) the priors are arguments and the return
 contract is the swap point for alternative families.
 """
-@model function transmission_delta_model(μ_prior, σ_prior)
+@model function transmission_delta_model(μ_prior = Normal(0.0, 5.0),
+                                         σ_prior = truncated(Normal(0.0, 1.0); lower = 0))
     μ_δ ~ μ_prior
     σ_δ ~ σ_prior
     return (; dist = Normal(μ_δ, σ_δ), μ = μ_δ, σ = σ_δ)
@@ -103,33 +83,33 @@ the same return contract.
 end
 
 """
+    safe_nb(k, R)
+
+`NegativeBinomial(k, p)` with `p = max(k/(k+R), eps(typeof(k)))`. The
+clamp keeps the gradient finite when an extreme NUTS proposal overflows
+`exp(log_R)` to `Inf`; the clamped value gives a vanishing likelihood
+for any observed `Zobs > 0`, so the proposal is still rejected on
+acceptance.
+"""
+safe_nb(k, R) = NegativeBinomial(k, max(k / (k + R), eps(typeof(k))))
+
+"""
     joint_model(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
-                incubation   = incubation_model(Normal(3.0, 0.5),
-                                                   truncated(Normal(0.0, 0.5); lower = 0)),
-                transmission = transmission_delta_model(Normal(0.0, 5.0),
-                                                           truncated(Normal(0.0, 1.0); lower = 0)),
+                incubation   = incubation_model(),
+                transmission = transmission_delta_model(),
                 rt           = random_walk_rt_model(length(edges) + 1),
                 k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
 
-Joint Bayesian model over incubation, transmission timing and the
-weekly random walk on log R(t). The three population-level components
-are passed in as Turing submodels so priors and structural choices can
-be swapped without editing this function. See
-[`incubation_model`](@ref), [`transmission_delta_model`](@ref)
-and [`random_walk_rt_model`](@ref) for the default contracts.
-
-The per-case incubation / δ / NB contributions are kept inline because
-factoring them into submodels would shuffle complexity rather than
-remove it: the two source-vs-index branches share the population
-distributions, the GI > 0 reject and the offspring-completeness thinning.
+Joint Bayesian model over incubation, transmission timing, and the
+weekly random walk on log R(t). The three population components are
+passed in as Turing submodels so priors and structural choices can be
+swapped without editing this function — see [`incubation_model`](@ref),
+[`transmission_delta_model`](@ref), and [`random_walk_rt_model`](@ref)
+for the default contracts.
 """
 @model function joint_model(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
-                            incubation   = incubation_model(
-                                Normal(3.0, 0.5),
-                                truncated(Normal(0.0, 0.5); lower = 0)),
-                            transmission = transmission_delta_model(
-                                Normal(0.0, 5.0),
-                                truncated(Normal(0.0, 1.0); lower = 0)),
+                            incubation   = incubation_model(),
+                            transmission = transmission_delta_model(),
                             rt           = random_walk_rt_model(length(edges) + 1),
                             k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
     inc    ~ to_submodel(incubation, false)
@@ -137,16 +117,12 @@ distributions, the GI > 0 reject and the offspring-completeness thinning.
     _log_R ~ to_submodel(rt, false)
     k      ~ k_prior
 
-    # Track log_R as a deterministic so MCMCChains sees the same `log_R`
-    # vector the pre-refactor model exposed.
     log_R := _log_R
 
-    # Concrete element type derived from a sampled scalar — avoids the
-    # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
+    # Concrete element type so per-case latent vectors don't fall back
+    # to `Vector{Real}` and tax AD with dynamic dispatch.
     T = typeof(inc.μ)
 
-    # T_onset is a latent over the recorded onset window (defaults to a
-    # one-day window when only a single onset date was recorded).
     T_onset = Vector{T}(undef, d.N)
     for i in 1:d.N
         T_onset[i] ~ Uniform(d.onset_lo_day[i], d.onset_hi_day[i])
@@ -154,93 +130,41 @@ distributions, the GI > 0 reject and the offspring-completeness thinning.
 
     realtime = d.obs_time !== nothing
 
-    # In realtime mode the same `F_offspring(obs_time − T_onset[src])`
-    # appears in two places — the NB thinning of source `src` (pass 2)
-    # and the joint right-truncation of every offspring whose recorded
-    # source is `src` (pass 1, sourced branch). Compute it once across
-    # all N cases via a single vector-valued solve so the 1-D
-    # Gauss-Hermite rule runs once instead of N+M times; both passes
-    # then index into the resulting vector.
-    thins = if realtime
+    # F_offspring(obs_time − T_onset[src]) is the joint right-truncation
+    # for an observed sourced pair and the binomial thinning factor for
+    # source `src`'s offspring count — same probability, used in both
+    # the per-case loop and the NB likelihood below.
+    thins = realtime ?
         F_offspring(d.obs_time .- T_onset, inc.dist, delta.dist;
-                    alg = foffspring_alg)
-    else
-        T[]
-    end
+                    alg = foffspring_alg) : T[]
 
-    # Pass 1: sample T_inf and accrue the incubation / δ logprobs.
-    # Per-case logprob contributions are accumulated locally into `lp`
-    # and added in a single `@addlogprob!` at the loop end. Each
-    # `@addlogprob!` goes through the DynamicPPL accumulator machinery
-    # (and Mooncake records each as a separate tape entry); collapsing
-    # the 1-to-4 addlogprob calls per case into one removes most of
-    # that overhead.
     T_inf = Vector{T}(undef, d.N)
-    lp = zero(T)
     for i in 1:d.N
-        if d.source_idx[i] == 0
-            # Zoonotic index: free latent T_inf pre-onset.
+        src = d.source_idx[i]
+        if src == 0
             T_inf[i] ~ Uniform(d.onset_lo_day[i] - 80.0, T_onset[i] - 1e-6)
-            inc_i = T_onset[i] - T_inf[i]
-            lp += logpdf(inc.dist, inc_i)
-            if realtime
-                lp -= logcdf(inc.dist, d.obs_time[i] - T_inf[i])
-            end
+            Turing.@addlogprob! logpdf(inc.dist, T_onset[i] - T_inf[i])
+            realtime && Turing.@addlogprob! -logcdf(inc.dist, d.obs_time[i] - T_inf[i])
         else
-            # Sourced case: T_inf anchored to listed exposure window.
-            # GI > 0 enforced by rejecting trajectories where the secondary
-            # was infected before its source.
-            src = d.source_idx[i]
             T_inf[i] ~ Uniform(d.exp_lo_day[i], d.exp_hi_day[i])
             if T_inf[i] <= T_inf[src]
-                lp += oftype(lp, -Inf)
+                Turing.@addlogprob! oftype(zero(T), -Inf)
             else
-                inc_i  = T_onset[i] - T_inf[i]
-                δ_pair = T_inf[i] - T_onset[src]
-                lp += logpdf(inc.dist, inc_i)
-                lp += logpdf(delta.dist, δ_pair)
-                if realtime
-                    # Joint truncation on the offspring pair (δ, Inc):
-                    # the observation event T_onset[i] ≤ obs_time is
-                    # equivalent to δ + Inc(sec) ≤ obs_time − T_onset[src],
-                    # i.e. a single F_offspring normaliser rather than the
-                    # product of marginal Inc and δ CDFs. Reuses the
-                    # pre-computed `thins[src]` so the quadrature is
-                    # shared with the pass-2 NB thinning. `floatmin`
-                    # guards against `log(0)` when `Δ_srcs[src]` lands
-                    # at or below zero on a NUTS step (T_onset[src] at
-                    # the upper end of its onset window) — the AD path
-                    # would otherwise hit a DomainError under Mooncake.
-                    lp -= log(max(thins[src], floatmin(T)))
-                end
+                Turing.@addlogprob! logpdf(inc.dist,   T_onset[i] - T_inf[i])
+                Turing.@addlogprob! logpdf(delta.dist, T_inf[i]   - T_onset[src])
+                # `floatmin` guards Mooncake against a stray `log(0)`
+                # when an extreme NUTS proposal collapses `thins[src]`.
+                realtime && Turing.@addlogprob! -log(max(thins[src], floatmin(T)))
             end
         end
     end
-    Turing.@addlogprob! lp
 
-    # Pass 2: NB offspring likelihood. The reference point for thinning
-    # is the source's onset time (a sampled latent), not its infection
-    # time: the source's own incubation is already scored, so the
-    # remaining offspring delay is `δ + Inc(sec)`. `thins` was computed
-    # above so it could be re-used for the per-offspring truncation.
-    #
-    # `nb_p` clamps the NB success probability into [eps, 1] so that an
-    # extreme NUTS proposal pushing `log_R[bin]` past ~700 (overflow to
-    # Inf in R_i) does not throw a `DomainError` inside the
-    # differentiated path. The clamped value still produces a vanishing
-    # NB likelihood for any observed `Zobs > 0`, so the proposal is
-    # rejected at acceptance — the clamp just keeps the gradient finite.
-    nb_p(k, R) = max(k / (k + R), eps(typeof(k)))
-    if realtime
-        for i in 1:d.N
-            R_i   = exp(log_R[which_bin(T_inf[i], edges)])
-            R_eff = R_i * thins[i]
-            d.Zobs[i] ~ NegativeBinomial(k, nb_p(k, R_eff))
-        end
-    else
-        for i in 1:d.N
-            R_i = exp(log_R[which_bin(T_inf[i], edges)])
-            d.Zobs[i] ~ NegativeBinomial(k, nb_p(k, R_i))
-        end
+    # `safe_nb` clamps the NB success probability into [eps, 1] so an
+    # extreme NUTS proposal that overflows `exp(log_R)` to `Inf` doesn't
+    # throw a DomainError on the gradient path.
+    for i in 1:d.N
+        R_i   = exp(log_R[which_bin(T_inf[i], edges)])
+        R_eff = realtime ? R_i * thins[i] : R_i
+        d.Zobs[i] ~ safe_nb(k, R_eff)
     end
 end
