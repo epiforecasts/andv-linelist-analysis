@@ -533,16 +533,6 @@ function z_ppc_summary(chn, d;
     return DataFrame(rows)
 end
 
-"""
-    plot_z_ppc(chn, d; rng = Random.MersenneTwister(1),
-               edges = bin_edges_day(d.t0))
-
-Posterior-predictive check for the per-case exposure-count vector `Z`.
-Replicates `Z_rep` jointly in `(T_inf, log_R, k)` and overlays the
-observed `Zobs` histogram with the posterior-predictive distribution of
-counts at each value of `z`. Returns a `Makie.Figure`. See
-[`z_ppc_summary`](@ref) for the numeric companion.
-"""
 function plot_z_ppc(chn, d;
                     rng = Random.MersenneTwister(1),
                     edges = bin_edges_day(d.t0))
@@ -724,4 +714,24 @@ function plot_prior_predictives(; n::Int = 5000,
         draw!(fig[1, 1], spec; facet = (linkxaxes = :none, linkyaxes = :none))
         fig
     end
+end
+
+
+# Saving a Makie figure needs a Makie backend (e.g. CairoMakie) loaded at
+# the call site. Look the `save` method up dynamically so the package
+# itself doesn't depend on a particular backend.
+function _save_makie_figure(fig, path)
+    backend = nothing
+    for name in (:CairoMakie, :GLMakie, :WGLMakie)
+        if isdefined(Main, name)
+            backend = getfield(Main, name)
+            break
+        end
+    end
+    if backend === nothing
+        @warn "No Makie backend loaded in Main; skipping figure save" path
+        return path
+    end
+    Base.invokelatest(backend.save, path, fig; px_per_unit = 2.0)
+    return path
 end
