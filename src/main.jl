@@ -2,8 +2,7 @@
 ## For interactive use, call analyse() directly with keyword arguments.
 
 """
-    sample_fit(model; samples=1000, chains=4, target_accept=0.95,
-               seed=20260508, progress=false)
+$(TYPEDSIGNATURES)
 
 Run NUTS on `model` using the package's default Enzyme AD backend and
 `InitFromPrior()` chain initialisation. Returns the FlexiChain.
@@ -26,9 +25,7 @@ function sample_fit(model;
 end
 
 """
-    analyse(; data=LINELIST_PATH, output=OUTPUT_DIR, figures=FIGURES_DIR,
-              samples=1000, chains=4, seed=20260508, progress=true,
-              plots=true) -> (chain, post)
+$(TYPEDSIGNATURES)
 
 Run the full analysis pipeline.
 
@@ -99,7 +96,7 @@ function _save_makie_figure(fig, path)
 end
 
 """
-    main(args)
+$(TYPEDSIGNATURES)
 
 CLI entry point invoked by `julia -m Hantavirus`.
 

@@ -8,7 +8,7 @@ const FIGURES_DIR   = joinpath(pkgdir(@__MODULE__), "figures")
 const BIN_EDGES = collect(Date("2018-11-12"):Day(7):Date("2019-02-04"))
 
 """
-    load_linelist(path = LINELIST_PATH) -> DataFrame
+$(TYPEDSIGNATURES)
 
 Load the Epuyén line-list CSV.
 
@@ -40,7 +40,7 @@ function _parse_source(s)
 end
 
 """
-    build_data(ll) -> NamedTuple
+$(TYPEDSIGNATURES)
 
 Convert a line-list `DataFrame` into the named tuple consumed by
 `joint_model_def`.
@@ -70,14 +70,14 @@ function build_data(ll)
 end
 
 """
-    bin_edges_day(t0) -> Vector{Float64}
+$(TYPEDSIGNATURES)
 
 Convert the weekly R(t) knot dates to days since `t0`.
 """
 bin_edges_day(t0) = Float64[Dates.value(d - t0) for d in BIN_EDGES]
 
 """
-    joint_model(ll) -> (; model, d, edges)
+$(TYPEDSIGNATURES)
 
 Build the joint model from a line-list `ll` (output of `load_linelist`).
 Returns a NamedTuple with the Turing `model`, the augmented data struct
@@ -91,7 +91,7 @@ function joint_model(ll)
 end
 
 """
-    log_R_at(t, knots, log_R) -> Real
+$(TYPEDSIGNATURES)
 
 Piecewise-linearly interpolate log R(t) at time `t`.
 
@@ -107,7 +107,7 @@ function log_R_at(t::Real, knots::AbstractVector{<:Real}, log_R)
 end
 
 """
-    bin_labels() -> Vector{String}
+$(TYPEDSIGNATURES)
 
 Return the knot date strings used as R(t) axis labels.
 """

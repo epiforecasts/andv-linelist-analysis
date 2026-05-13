@@ -9,6 +9,7 @@ using DataFramesMeta: @select, @transform, @subset, @combine, @by, @rtransform,
 using Dates: Dates, Date, Day, dayofweek
 using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
                      Uniform, logpdf, cdf, pdf
+using DocStringExtensions: TYPEDSIGNATURES
 using PairPlots: PairPlots, pairplot
 using Makie: Makie, Figure, Axis, Legend, Theme, Auto, BarPlot, Hist,
              Lines, Scatter, MarkerElement, PolyElement, GridLayout,

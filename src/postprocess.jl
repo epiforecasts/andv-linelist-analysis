@@ -30,7 +30,7 @@ function _num_divergences(chn)
 end
 
 """
-    diagnostics(chn) -> NamedTuple
+$(TYPEDSIGNATURES)
 
 Compute convergence diagnostics for an MCMC chain.
 
@@ -50,7 +50,7 @@ end
 # ---------------------------------------------------------------------------
 
 """
-    vector_chain(chn, name::Symbol) -> Vector{Vector{Float64}}
+$(TYPEDSIGNATURES)
 
 Extract a vector-valued parameter from a chain as pooled samples.
 
@@ -75,7 +75,7 @@ function _print_qci(label, x; fmt = "%.2f")
 end
 
 """
-    summarise(chn) -> NamedTuple
+$(TYPEDSIGNATURES)
 
 Print a posterior summary and return key posterior vectors.
 
@@ -114,7 +114,7 @@ end
 # ---------------------------------------------------------------------------
 
 """
-    save_posterior(post, path)
+$(TYPEDSIGNATURES)
 
 Write posterior samples to a CSV file at `path`.
 
