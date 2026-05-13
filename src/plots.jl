@@ -533,6 +533,16 @@ function z_ppc_summary(chn, d;
     return DataFrame(rows)
 end
 
+"""
+    plot_z_ppc(chn, d; rng = Random.MersenneTwister(1),
+               edges = bin_edges_day(d.t0))
+
+Posterior-predictive check for the per-case exposure-count vector `Z`.
+Replicates `Z_rep` jointly in `(T_inf, log_R, k)` and overlays the
+observed `Zobs` histogram with the posterior-predictive distribution of
+counts at each value of `z`. Returns a `Makie.Figure`. See
+[`z_ppc_summary`](@ref) for the numeric companion.
+"""
 function plot_z_ppc(chn, d;
                     rng = Random.MersenneTwister(1),
                     edges = bin_edges_day(d.t0))
