@@ -86,15 +86,28 @@ plot_rt(chn)
 
 plot_pair(chn)
 
-# ## Posterior-predictive delay distributions
+# ## Predictive distributions for the delays
 #
-# Inc and δ panels show the posterior over the parametric density (median PDF with a 95% pointwise ribbon across draws) overlaid with one predictive realisation per draw.
-# GI and SI show the predictive-sample histogram only.
+# Implied population distributions for the incubation period, transmission timing δ, and the derived generation and serial intervals under the fitted posterior — i.e. what a new case or transmission pair would look like.
+# This is not a check against the observed data; for that see the sense-check and PPC panels below.
+# Inc and δ panels show the posterior over the parametric density (median PDF with a 95% pointwise ribbon across draws) overlaid with one predictive realisation per draw; GI and SI show the predictive-sample histogram only.
 
-plot_posterior_predictive(chn)
+plot_predictive_distributions(chn)
 
 # ## δ sense check
 #
 # Compare the per-pair posterior medians of δ to the fitted population `Normal(μ_δ, σ_δ)`.
 
 plot_delta_sense_check(chn, d)
+
+# ## Incubation-period sense check
+#
+# Compare the per-case posterior medians of `T_onset[i] − T_inf[i]` to the fitted population `LogNormal(μ_inc, σ_inc)`.
+
+plot_inc_sense_check(chn, d)
+
+# ## Offspring posterior-predictive check
+#
+# For each posterior draw, replicate `Z_rep[i] ~ NegativeBinomial(k, k/(k+R_i))` per case using the posterior median of `T_inf[i]` to anchor `R_i`, and compare frequencies of each `Z` value against the observed line list along with three aggregate test statistics.
+
+plot_z_ppc(chn, d)

@@ -50,11 +50,13 @@ function analyse(;
     save_posterior(post, joinpath(output, "posterior.csv"))
 
     mkpath(figures)
-    _save_makie_figure(plot_rt(chn),                   joinpath(figures, "Rt.png"))
-    _save_makie_figure(plot_delta_sense_check(chn, d), joinpath(figures, "delta_sense_check.png"))
-    _save_makie_figure(plot_prior_predictives(),       joinpath(figures, "prior_predictives.png"))
-    _save_makie_figure(plot_posterior_predictive(chn), joinpath(figures, "posterior_predictions.png"))
-    _save_makie_figure(plot_pair(chn),                 joinpath(figures, "pairplot.png"))
+    _save_makie_figure(plot_rt(chn),                       joinpath(figures, "Rt.png"))
+    _save_makie_figure(plot_delta_sense_check(chn, d),     joinpath(figures, "delta_sense_check.png"))
+    _save_makie_figure(plot_inc_sense_check(chn, d),       joinpath(figures, "inc_sense_check.png"))
+    _save_makie_figure(plot_z_ppc(chn, d),                 joinpath(figures, "z_ppc.png"))
+    _save_makie_figure(plot_prior_predictives(),           joinpath(figures, "prior_predictives.png"))
+    _save_makie_figure(plot_predictive_distributions(chn), joinpath(figures, "predictive_distributions.png"))
+    _save_makie_figure(plot_pair(chn),                     joinpath(figures, "pairplot.png"))
 
     return chn, post
 end

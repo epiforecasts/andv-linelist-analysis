@@ -234,16 +234,24 @@ function _pp_panel_hist_only!(ax, samples; bins = 50)
 end
 
 """
-    plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
+    plot_predictive_distributions(chn; rng = Random.MersenneTwister(1))
 
-Two-by-two panel of posterior-predictive distributions for incubation
-period, transmission timing δ, generation interval, and serial interval.
-Inc and δ panels overlay the posterior over the parametric density
-(median PDF with a 95% pointwise ribbon across draws) and a histogram of
-one predictive sample per draw. GI and SI show the predictive-sample
-histogram only. Returns a `Makie.Figure`.
+Two-by-two panel of the implied population distributions under the
+posterior for incubation period, transmission timing δ, generation
+interval, and serial interval. Each panel shows draws from
+`p(y_new | data) = ∫ p(y_new | θ) p(θ | data) dθ`, i.e. what a new case
+or transmission pair would look like under the fitted parameters.
+
+This is *not* a posterior-predictive check against observed data; for
+that, see `plot_z_ppc`, `plot_delta_sense_check`, and
+`plot_inc_sense_check`.
+
+Inc and δ panels overlay the parametric density (median PDF with a 95%
+pointwise ribbon across draws) and a histogram of one predictive sample
+per draw. GI and SI show the predictive-sample histogram only. Returns a
+`Makie.Figure`.
 """
-function plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
+function plot_predictive_distributions(chn; rng = Random.MersenneTwister(1))
     samples = _ppc_frame(chn; rng)
 
     inc_dists = LogNormal.(samples.μ_inc, samples.σ_inc)
@@ -375,6 +383,184 @@ function plot_delta_sense_check(chn, data)
                ["per-pair posterior medians (N = $(length(medians)))",
                 "Normal(μ_δ, σ_δ) fitted",
                 "source onset"];
+               framevisible = false, tellwidth = true)
+        fig
+    end
+end
+
+"""
+    plot_z_ppc(chn, data; rng = Random.MersenneTwister(1), edges = bin_edges_day(data.t0))
+
+Posterior-predictive check for the observed offspring counts `Zobs`. For
+each posterior draw and each case `i`, draws a replicated offspring count
+`Z_rep[i] ~ NegativeBinomial(k, k/(k+R_i))`, where `R_i` is `exp(log_R)`
+interpolated at the posterior median of `T_inf[i]` using the same machinery
+as the model. Compares the count of cases at each `Z` value (0, 1, 2, …)
+between the observed line list and the replicated distribution.
+
+The left panel is a rootogram-style bar chart: bars are observed
+frequencies; points + 95% pointwise CrI lines are replicated frequencies.
+The right panel shows posterior-predictive distributions of three discrete
+test statistics (`sum(Z)`, `max(Z)`, `count(Z == 0)`) with the observed
+values marked.
+
+Returns a `Makie.Figure`.
+"""
+function plot_z_ppc(chn, data;
+                    rng = Random.MersenneTwister(1),
+                    edges = bin_edges_day(data.t0))
+    k_draws = _draws(chn, :k)
+    log_R   = vector_chain(chn, :log_R)
+    t_inf   = vector_chain(chn, :T_inf)
+    n_draws = length(k_draws)
+    N       = data.N
+
+    # Use the posterior median of T_inf[i] for each case so the replicated
+    # R_i tracks where the model places each case in time. This loses
+    # within-case T_inf uncertainty but keeps the PPC interpretable.
+    t_inf_med = [quantile(t_inf[i], 0.5) for i in 1:N]
+
+    # Per-draw R_i: interpolate log_R at each case's median T_inf.
+    R_per_draw = Matrix{Float64}(undef, n_draws, N)
+    for d_idx in 1:n_draws
+        logR_d = [log_R[b][d_idx] for b in eachindex(log_R)]
+        for i in 1:N
+            lr = log_R_at(t_inf_med[i], edges, logR_d)
+            R_per_draw[d_idx, i] = exp(clamp(lr, -50.0, 50.0))
+        end
+    end
+
+    # One Z_rep[i] per posterior draw.
+    Z_rep = Matrix{Int}(undef, n_draws, N)
+    for d_idx in 1:n_draws
+        k_d = k_draws[d_idx]
+        for i in 1:N
+            R_i = R_per_draw[d_idx, i]
+            p   = k_d / (k_d + R_i)
+            Z_rep[d_idx, i] = rand(rng, NegativeBinomial(k_d, p))
+        end
+    end
+
+    Zobs = data.Zobs
+    zmax_obs = maximum(Zobs)
+    # Show observed range plus a small margin; cap to keep the plot legible.
+    zmax = min(max(zmax_obs + 2, 6), 20)
+    z_values = 0:zmax
+
+    obs_counts = [count(==(z), Zobs) for z in z_values]
+    rep_counts = Matrix{Int}(undef, n_draws, length(z_values))
+    for d_idx in 1:n_draws
+        for (j, z) in enumerate(z_values)
+            rep_counts[d_idx, j] = count(==(z), view(Z_rep, d_idx, :))
+        end
+    end
+    rep_med = [quantile(view(rep_counts, :, j), 0.5)   for j in eachindex(z_values)]
+    rep_lo  = [quantile(view(rep_counts, :, j), 0.025) for j in eachindex(z_values)]
+    rep_hi  = [quantile(view(rep_counts, :, j), 0.975) for j in eachindex(z_values)]
+
+    # Aggregate test statistics per draw.
+    sum_rep   = [sum(view(Z_rep, d_idx, :))     for d_idx in 1:n_draws]
+    max_rep   = [maximum(view(Z_rep, d_idx, :)) for d_idx in 1:n_draws]
+    zeros_rep = [count(==(0), view(Z_rep, d_idx, :)) for d_idx in 1:n_draws]
+    sum_obs   = sum(Zobs)
+    max_obs   = maximum(Zobs)
+    zeros_obs = count(==(0), Zobs)
+
+    return _with_theme() do
+        fig = Figure(; size = (1200, 500))
+
+        ax1 = Axis(fig[1, 1];
+                   xlabel = "Offspring count Z",
+                   ylabel = "Number of cases",
+                   title  = "Z by value: observed vs replicated",
+                   xticks = collect(z_values))
+        b_obs = barplot!(ax1, collect(z_values), Float64.(obs_counts);
+                         color = (:steelblue, 0.55),
+                         strokecolor = :steelblue, strokewidth = 0.5)
+        # Error bars for the replicated 95% CrI plus a median marker.
+        rangebars!(ax1, collect(z_values), rep_lo, rep_hi;
+                   color = :darkorange, whiskerwidth = 8)
+        s_rep = scatter!(ax1, collect(z_values), rep_med;
+                         color = :darkorange, markersize = 8)
+
+        ax2 = Axis(fig[1, 2];
+                   xlabel = "Test statistic value",
+                   ylabel = "density",
+                   title  = "Discrete test statistics (replicated vs observed)")
+        # Three overlaid histograms on the same x; each statistic gets its
+        # own colour with the observed value as a dashed vline.
+        h_sum = hist!(ax2, sum_rep; bins = 30, normalization = :pdf,
+                      color = (:steelblue, 0.45))
+        v_sum = vlines!(ax2, [Float64(sum_obs)];
+                        color = :steelblue, linestyle = :dash, linewidth = 2)
+        h_max = hist!(ax2, max_rep; bins = 30, normalization = :pdf,
+                      color = (:darkorange, 0.45))
+        v_max = vlines!(ax2, [Float64(max_obs)];
+                        color = :darkorange, linestyle = :dash, linewidth = 2)
+        h_zero = hist!(ax2, zeros_rep; bins = 30, normalization = :pdf,
+                       color = (:seagreen, 0.45))
+        v_zero = vlines!(ax2, [Float64(zeros_obs)];
+                         color = :seagreen, linestyle = :dash, linewidth = 2)
+
+        Legend(fig[2, 1],
+               [b_obs, s_rep],
+               ["observed", "replicated (median + 95% CrI)"];
+               orientation = :horizontal, framevisible = false,
+               tellheight = true, tellwidth = false)
+        Legend(fig[2, 2],
+               [h_sum, h_max, h_zero],
+               ["sum(Z)", "max(Z)", "count(Z = 0)"];
+               orientation = :horizontal, framevisible = false,
+               tellheight = true, tellwidth = false)
+        rowsize!(fig.layout, 2, Auto(0.12))
+        fig
+    end
+end
+
+"""
+    plot_inc_sense_check(chn, data; n_density_draws = 200)
+
+Sense-check the per-case posterior of the incubation period against the
+fitted population `LogNormal(μ_inc, σ_inc)`. For each case, takes the
+posterior of `inc_i = T_onset[i] − T_inf[i]` and reduces to its median;
+plots the histogram of those per-case medians with the median PDF (and
+95% pointwise ribbon) of the population LogNormal overlaid. Returns a
+`Makie.Figure`.
+"""
+function plot_inc_sense_check(chn, data; n_density_draws::Int = 200)
+    t_inf   = vector_chain(chn, :T_inf)
+    t_onset = vector_chain(chn, :T_onset)
+    μ_inc   = _draws(chn, :μ_inc)
+    σ_inc   = _draws(chn, :σ_inc)
+
+    medians = [quantile(t_onset[i] .- t_inf[i], 0.5) for i in 1:data.N]
+
+    # Thin posterior draws of (μ_inc, σ_inc) for the density ribbon.
+    step = max(1, length(μ_inc) ÷ n_density_draws)
+    idx  = 1:step:length(μ_inc)
+    dists = [LogNormal(μ_inc[i], σ_inc[i]) for i in idx]
+
+    upper = max(maximum(medians) * 1.2, 60.0)
+    xs = range(0.5, upper; length = 200)
+    med, lo, hi = _density_band(xs, dists)
+
+    return _with_theme() do
+        fig = Figure(; size = (900, 500))
+        ax = Axis(fig[1, 1];
+                  xlabel = "Incubation period (days)",
+                  ylabel = "density",
+                  title  = "Per-case Inc vs fitted population LogNormal")
+        h_per_case = hist!(ax, medians;
+                           bins = 15, normalization = :pdf,
+                           color = (:steelblue, 0.55),
+                           strokecolor = :steelblue, strokewidth = 0.5)
+        b_fit = band!(ax, xs, lo, hi; color = (:darkorange, 0.25))
+        l_fit = lines!(ax, xs, med; color = :darkorange, linewidth = 2)
+        Legend(fig[1, 2],
+               [h_per_case, l_fit, b_fit],
+               ["per-case posterior medians (N = $(length(medians)))",
+                "LogNormal(μ_inc, σ_inc) median PDF",
+                "95% pointwise ribbon"];
                framevisible = false, tellwidth = true)
         fig
     end
