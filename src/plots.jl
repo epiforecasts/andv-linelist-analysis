@@ -439,33 +439,6 @@ function plot_delta_sense_check(chn, d)
     end
 end
 
-"""
-    plot_z_ppc(chn, data; rng = Random.MersenneTwister(1), edges = bin_edges_day(data.t0))
-
-Posterior-predictive check for the observed offspring counts `Zobs`. For
-each posterior draw `d` and each case `i`, samples a replicated offspring
-count `Z_rep[i, d] ~ NegativeBinomial(k[d], k[d]/(k[d] + R_i))`, where
-`R_i = exp(clamp(log_R_at(T_inf[i, d], edges, log_R[:, d]), -50, 50))`.
-The clamp matches the model's likelihood.
-
-Joint-draw: `T_inf[i]`, `log_R[:]`, and `k` are taken from the same
-posterior draw, so the PPC reflects full posterior uncertainty in case
-infection times alongside the time-varying R(t) and dispersion.
-
-Compares the count of cases at each `Z` value (0, 1, 2, …) between the
-observed line list and the replicated distribution.
-
-The left panel is a rootogram-style bar chart: bars are observed
-frequencies; points + 95% pointwise CrI lines are replicated frequencies.
-The right column is three stacked subpanels, one per discrete test
-statistic (`sum(Z)`, `max(Z)`, `count(Z == 0)`). Each subpanel shows the
-histogram of the replicated statistic and the observed value as a dashed
-vertical rule. For numeric values (observed, replicated median + 95%
-CrI, two-sided Bayesian posterior-predictive p-value) see the companion
-`z_ppc_summary`.
-
-Returns a `Makie.Figure`.
-"""
 # Joint-draw posterior-predictive replication of Z. Returns an
 # `(n_draws × N)` matrix where each row is one replicated line list under
 # the model's Negative-Binomial likelihood, using the same draw of
@@ -536,6 +509,33 @@ function z_ppc_summary(chn, d;
     return DataFrame(rows)
 end
 
+"""
+    plot_z_ppc(chn, data; rng = Random.MersenneTwister(1), edges = bin_edges_day(data.t0))
+
+Posterior-predictive check for the observed offspring counts `Zobs`. For
+each posterior draw `d` and each case `i`, samples a replicated offspring
+count `Z_rep[i, d] ~ NegativeBinomial(k[d], k[d]/(k[d] + R_i))`, where
+`R_i = exp(clamp(log_R_at(T_inf[i, d], edges, log_R[:, d]), -50, 50))`.
+The clamp matches the model's likelihood.
+
+Joint-draw: `T_inf[i]`, `log_R[:]`, and `k` are taken from the same
+posterior draw, so the PPC reflects full posterior uncertainty in case
+infection times alongside the time-varying R(t) and dispersion.
+
+Compares the count of cases at each `Z` value (0, 1, 2, …) between the
+observed line list and the replicated distribution.
+
+The left panel is a rootogram-style bar chart: bars are observed
+frequencies; points + 95% pointwise CrI lines are replicated frequencies.
+The right column is three stacked subpanels, one per discrete test
+statistic (`sum(Z)`, `max(Z)`, `count(Z == 0)`). Each subpanel shows the
+histogram of the replicated statistic and the observed value as a dashed
+vertical rule. For numeric values (observed, replicated median + 95%
+CrI, two-sided Bayesian posterior-predictive p-value) see the companion
+`z_ppc_summary`.
+
+Returns a `Makie.Figure`.
+"""
 function plot_z_ppc(chn, d;
         rng = Random.MersenneTwister(1),
         edges = bin_edges_day(d.t0))
