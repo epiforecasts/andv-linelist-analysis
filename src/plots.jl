@@ -347,7 +347,7 @@ function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
     step    = max(1, n_draws ÷ n_draws_plot)
     idx     = collect(1:step:n_draws)
 
-    knot_dates = BIN_EDGES
+    knot_dates = BIN_EDGES[1:length(log_R)]
     xs = Float64[Dates.value(d) for d in knot_dates]
 
     # Long form: one row per (draw, knot). `draw` is the only grouping

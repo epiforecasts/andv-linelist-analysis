@@ -81,7 +81,14 @@ function analyse(;
     end
     d     = build_data(ll; obs_time = obs_time, t0 = t0)
     edges = bin_edges_day(d.t0)
-    @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time
+    if obs_time !== nothing
+        obs_offset = Float64(Dates.value(obs_time - d.t0))
+        edges = edges[edges .<= obs_offset]
+        if isempty(edges) || edges[end] < obs_offset
+            push!(edges, obs_offset)
+        end
+    end
+    @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time n_knots=length(edges)
 
     chn = sample_fit(joint_model_def(d, edges, foffspring_alg);
                      samples, chains, seed, progress)

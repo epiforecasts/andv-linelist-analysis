@@ -9,6 +9,7 @@ using DifferentiationInterface: AutoMooncake, AutoForwardDiff, value_and_gradien
 using Mooncake: Mooncake
 
 include("test_realtime.jl")
+include("test_recovery.jl")
 
 @testset "Aqua.jl meta-tests" begin
     @testset "Unbound args" begin
