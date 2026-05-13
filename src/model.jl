@@ -223,16 +223,24 @@ distributions, the GI > 0 reject and the offspring-completeness thinning.
     # time: the source's own incubation is already scored, so the
     # remaining offspring delay is `δ + Inc(sec)`. `thins` was computed
     # above so it could be re-used for the per-offspring truncation.
+    #
+    # `nb_p` clamps the NB success probability into [eps, 1] so that an
+    # extreme NUTS proposal pushing `log_R[bin]` past ~700 (overflow to
+    # Inf in R_i) does not throw a `DomainError` inside the
+    # differentiated path. The clamped value still produces a vanishing
+    # NB likelihood for any observed `Zobs > 0`, so the proposal is
+    # rejected at acceptance — the clamp just keeps the gradient finite.
+    nb_p(k, R) = max(k / (k + R), eps(typeof(k)))
     if realtime
         for i in 1:d.N
             R_i   = exp(log_R[which_bin(T_inf[i], edges)])
             R_eff = R_i * thins[i]
-            d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_eff))
+            d.Zobs[i] ~ NegativeBinomial(k, nb_p(k, R_eff))
         end
     else
         for i in 1:d.N
             R_i = exp(log_R[which_bin(T_inf[i], edges)])
-            d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
+            d.Zobs[i] ~ NegativeBinomial(k, nb_p(k, R_i))
         end
     end
 end
