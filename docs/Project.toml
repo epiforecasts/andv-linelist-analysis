@@ -29,7 +29,7 @@ TransmissionLinelist = {path = ".."}
 ADTypes = "1.22"
 AlgebraOfGraphics = "0.10, 0.11, 0.12"
 CairoMakie = "0.15"
-Chain = "0.6"
+Chain = "0.6, 1.0"
 CodeTracking = "3.0.2"
 DataFrames = "1.6"
 DataFramesMeta = "0.15"
