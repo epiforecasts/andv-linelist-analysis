@@ -36,7 +36,7 @@ ll = load_linelist()
 
 @chain ll begin
     @select(:patient_id, :exposure_lower, :exposure_upper,
-            :onset_date, :source_case, :Z)
+        :onset_date, :source_case, :Z)
     first(8)
 end
 
