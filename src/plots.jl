@@ -142,11 +142,22 @@ end
     diagnostics_table(chn)
 
 Single-row `DataFrame` summarising sampler diagnostics: maximum R̂, minimum
-bulk ESS, and divergence count.
+bulk ESS, divergence count, and wall-clock sampling time in seconds. The
+runtime is read from FlexiChains' per-chain `sampling_time` metadata; under
+`MCMCThreads` chains run in parallel so the wall clock is approximated by
+the maximum over chains. Returns `missing` for the runtime if the chain
+carries no timing metadata.
 """
 function diagnostics_table(chn)
     d = diagnostics(chn)
-    return DataFrame(rhat_max = d.rhat, ess_min = d.ess, divergences = d.ndiv)
+    times = collect(skipmissing(FlexiChains.sampling_time(chn)))
+    runtime = isempty(times) ? missing : maximum(times)
+    return DataFrame(
+        rhat_max          = d.rhat,
+        ess_min           = d.ess,
+        divergences       = d.ndiv,
+        runtime_seconds   = runtime,
+    )
 end
 
 """

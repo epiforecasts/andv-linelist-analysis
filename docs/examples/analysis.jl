@@ -64,6 +64,10 @@ plot_prior_predictives()
 
 chn = sample_fit(model)
 
+# ## Diagnostics
+#
+# Maximum R̂, minimum bulk ESS, divergence count, and wall-clock sampling time (seconds, approximated by the slowest chain under `MCMCThreads`).
+
 diagnostics_table(chn)
 
 # ## Key outputs
