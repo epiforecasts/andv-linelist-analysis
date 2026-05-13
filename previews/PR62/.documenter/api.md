@@ -24,7 +24,7 @@ The knots span the outbreak in weekly steps; combined with [`log_R_at`](/api#Tra
 A `Vector{Float64}` of length `length(BIN_EDGES)` giving the knot positions in days.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/data.jl#L105" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/data.jl#L105" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -48,7 +48,7 @@ One entry per `log_R` element. Used to label plots and posterior summaries produ
 A `Vector{String}` of ISO-format knot dates.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/data.jl#L174" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/data.jl#L174" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -87,7 +87,7 @@ d.N
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/data.jl#L61" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/data.jl#L61" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -107,7 +107,7 @@ diagnostics(
 Return convergence diagnostics for `chn`: `(; rhat, ess, ndiv)` — the maximum `R̂` across scalar parameter entries, the minimum bulk ESS, and the divergent transition count.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/postprocess.jl#L32" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/postprocess.jl#L32" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -124,7 +124,7 @@ diagnostics_table(chn)
 Single-row `DataFrame` summarising sampler diagnostics: maximum R̂, minimum bulk ESS, divergence count, and wall-clock sampling time in seconds. The runtime is read from FlexiChains&#39; per-chain `sampling_time` metadata; under `MCMCThreads` chains run in parallel so the wall clock is approximated by the maximum over chains. Returns `missing` for the runtime if the chain carries no timing metadata.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/plots.jl#L171-L180" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/plots.jl#L171-L180" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -164,7 +164,7 @@ m     = joint_model(d, edges)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/model.jl#L24" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/model.jl#L24" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -202,7 +202,7 @@ first(ll, 3)
 
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/data.jl#L10" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/data.jl#L10" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -238,7 +238,7 @@ Linearly interpolates `log_R` against `knots` at the time `t`, clamping to the e
 The interpolated log R value at `t`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/data.jl#L150" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/data.jl#L150" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -255,7 +255,7 @@ plot_data(ll)
 Two-panel view of the raw line list: epicurve by ISO week of onset (left) and exposure windows against onset dates (right). Returns a `Makie.Figure`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/plots.jl#L13-L18" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/plots.jl#L13-L18" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -272,7 +272,7 @@ plot_delta_sense_check(chn, data)
 Sense-check the per-pair posterior of δ against the fitted population `Normal(μ_δ, σ_δ)`. For each sourced pair, take the posterior of `δ_pair = T_inf[secondary] − T_onset[source]` and reduce to its median; then plot the histogram of those per-pair medians with the population density overlaid. Returns a `Makie.Figure`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/plots.jl#L384-L392" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/plots.jl#L384-L392" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -289,7 +289,7 @@ plot_inc_sense_check(chn, data; n_density_draws = 200)
 Sense-check the per-case posterior of the incubation period against the fitted population `LogNormal(μ_inc, σ_inc)`. For each case, takes the posterior of `inc_i = T_onset[i] − T_inf[i]` and reduces to its median; plots the histogram of those per-case medians with the median PDF (and 95% pointwise ribbon) of the population LogNormal overlaid. Returns a `Makie.Figure`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/plots.jl#L618-L627" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/plots.jl#L618-L627" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -306,7 +306,7 @@ plot_pair(chn; thin = 2)
 Corner plot of the population scalars `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`, `k` via PairPlots.jl. Returns a Makie `Figure` (requires a Makie backend such as CairoMakie loaded at the call site).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/plots.jl#L193-L199" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/plots.jl#L193-L199" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -327,7 +327,7 @@ This is _not_ a posterior-predictive check against observed data; for that, see 
 Inc and δ panels overlay the parametric density (median PDF with a 95% pointwise ribbon across draws) and a histogram of one predictive sample per draw. GI and SI show the predictive-sample histogram only. Returns a `Makie.Figure`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/plots.jl#L266-L283" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/plots.jl#L266-L283" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -346,7 +346,7 @@ Prior-predictive panel: histograms of Inc, δ, and GI/SI drawn from the package&
 Three histograms faceted by quantity is the kind of plot AoG was built for: one long-form data frame, `mapping(:value, layout = :panel)`, `visual(Hist)`. Each panel still has its own viewing window so long tails don&#39;t squash the bars; rather than per-facet axis limits, the input is pre-clipped to the window for each panel.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/plots.jl#L667-L679" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/plots.jl#L667-L679" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -365,7 +365,7 @@ Spaghetti plot of R(t) over the weekly knots. Each thinned posterior draw is a p
 Per-draw spaghetti is built as a long-form `DataFrame` and drawn via AlgebraOfGraphics with `group = :draw`, which is the idiomatic way to spell &quot;one line per draw&quot; once the data is tidy.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/plots.jl#L333-L343" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/plots.jl#L333-L343" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -395,7 +395,7 @@ Wraps [`build_data`](/api#TransmissionLinelist.build_data-Tuple{Any}), [`bin_edg
 A 3-tuple `(model, d, edges)`: the Turing model, the augmented data named tuple from [`build_data`](/api#TransmissionLinelist.build_data-Tuple{Any}), and the weekly knot edges from [`bin_edges_day`](/api#TransmissionLinelist.bin_edges_day-Tuple{Any}).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/data.jl#L124" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/data.jl#L124" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -413,7 +413,7 @@ sample_fit(model; samples=1000, chains=4, target_accept=0.95,
 Run NUTS on `model` using the package&#39;s default Enzyme AD backend and `InitFromPrior()` chain initialisation. Returns the FlexiChain.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/main.jl#L4-L10" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/main.jl#L4-L10" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -431,7 +431,7 @@ save_posterior(post, path) -> Any
 Write the posterior summary `post` (as returned by [`summarise`](/api#TransmissionLinelist.summarise-Tuple{Any})) to a CSV at `path`, one column per scalar parameter plus one column per `log_R` knot.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/postprocess.jl#L106" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/postprocess.jl#L106" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -451,7 +451,7 @@ summarise(
 Build the named-tuple of posterior draws consumed by [`save_posterior`](/api#TransmissionLinelist.save_posterior-Tuple{Any,%20Any}) and print the headline summary table via [`summary_table`](/api#TransmissionLinelist.summary_table-Tuple{Any}).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/postprocess.jl#L72" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/postprocess.jl#L72" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -468,7 +468,7 @@ summary_table(chn)
 Posterior summary `DataFrame` for the headline quantities: incubation mean, 95th and 99th percentiles, transmission timing μ_δ / σ_δ, GI / SI mean and SD, and Negative-Binomial dispersion k. Columns: `quantity`, `median`, `lower_95`, `upper_95`.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/plots.jl#L123-L130" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/plots.jl#L123-L130" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -486,7 +486,7 @@ vector_chain(chn, name::Symbol) -> Any
 Return a vector of pooled posterior samples for each entry of a vector-valued parameter (e.g. `:T_inf`, `:log_R`).
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/postprocess.jl#L49" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/postprocess.jl#L49" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
@@ -504,7 +504,7 @@ z_ppc_summary(chn, d; rng = Random.MersenneTwister(1),
 Companion to `plot_z_ppc` returning a `DataFrame` of numeric posterior-predictive summaries for three discrete test statistics — `sum(Z)`, `max(Z)`, and `count(Z = 0)`. Replicates `Z_rep` jointly in `(T_inf, log_R, k)` to match `plot_z_ppc`. Columns: `statistic`, `observed`, `rep_median`, `rep_lower_95`, `rep_upper_95`, `p_ppp`, where `p_ppp = 2 · min(P(T_rep ≥ T_obs), P(T_rep ≤ T_obs))` is the two-sided Bayesian posterior-predictive p-value.
 
 
-<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/95336ba2dc8245ea799c128ad9a79ab3a7e145f5/src/plots.jl#L494-L505" target="_blank" rel="noreferrer">source</a></Badge>
+<Badge type="info" class="source-link" text="source"><a href="https://github.com/epiforecasts/andv-linelist-analysis/blob/16d746393c68dc113a490e945c0772f6031823f5/src/plots.jl#L494-L505" target="_blank" rel="noreferrer">source</a></Badge>
 
 </details>
 
