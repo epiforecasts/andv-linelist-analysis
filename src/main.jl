@@ -32,9 +32,6 @@ function sample_fit(model;
     )
 end
 
-# Backwards-compatible alias used by the doc walkthrough.
-const fit_joint = sample_fit
-
 function analyse(;
     data     = LINELIST_PATH,
     obs_time::Union{Nothing,Date} = nothing,

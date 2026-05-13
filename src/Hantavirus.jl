@@ -35,7 +35,7 @@ include("plots.jl")
 include("main.jl")
 
 export load_linelist, build_data, bin_edges_day, which_bin, bin_labels
-export prepare_model, sample_fit, fit_joint
+export prepare_model, sample_fit
 export joint_model, incubation_model, transmission_delta_model,
        random_walk_rt_model
 export F_offspring, F_offspring_vec
