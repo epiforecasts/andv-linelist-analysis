@@ -7,6 +7,16 @@
 
 Run NUTS on `model` using the package's default Enzyme AD backend and
 `InitFromPrior()` chain initialisation. Returns the FlexiChain.
+
+# Arguments
+- `model`: a Turing model, e.g. from [`joint_model`](@ref).
+
+# Keyword Arguments
+- `samples`: NUTS samples per chain.
+- `chains`: number of parallel chains.
+- `target_accept`: NUTS acceptance target.
+- `seed`: random seed.
+- `progress`: show a NUTS progress bar.
 """
 function sample_fit(model;
         samples = 1000,

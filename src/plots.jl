@@ -15,6 +15,9 @@ _with_theme(f) = with_theme(f, _default_theme())
 
 Two-panel view of the raw line list: epicurve by ISO week of onset (left)
 and exposure windows against onset dates (right). Returns a `Makie.Figure`.
+
+# Arguments
+- `ll`: line-list `DataFrame` from [`load_linelist`](@ref).
 """
 function plot_data(ll)
     weekly = @chain DataFrame(week = ll.onset_date) begin
@@ -127,6 +130,9 @@ Posterior summary `DataFrame` for the headline quantities: incubation mean,
 95th and 99th percentiles, transmission timing μ_δ / σ_δ, GI / SI mean and
 SD, and Negative-Binomial dispersion k. Columns: `quantity`, `median`,
 `lower_95`, `upper_95`.
+
+# Arguments
+- `chn`: FlexiChain returned by [`sample_fit`](@ref).
 """
 function summary_table(chn)
     μ_inc = _draws(chn, :μ_inc)
@@ -178,6 +184,9 @@ runtime is read from FlexiChains' per-chain `sampling_time` metadata; under
 `MCMCThreads` chains run in parallel so the wall clock is approximated by
 the maximum over chains. Returns `missing` for the runtime if the chain
 carries no timing metadata.
+
+# Arguments
+- `chn`: FlexiChain returned by [`sample_fit`](@ref).
 """
 function diagnostics_table(chn)
     d = diagnostics(chn)
@@ -197,6 +206,12 @@ end
 Corner plot of the population scalars `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`, `k`
 via PairPlots.jl. Returns a Makie `Figure` (requires a Makie backend such
 as CairoMakie loaded at the call site).
+
+# Arguments
+- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+
+# Keyword Arguments
+- `thin`: keep every `thin`-th draw before plotting.
 """
 function plot_pair(chn; thin::Int = 2)
     tbl = @chain DataFrame(
@@ -281,6 +296,12 @@ Inc and δ panels overlay the parametric density (median PDF with a 95%
 pointwise ribbon across draws) and a histogram of one predictive sample
 per draw. GI and SI show the predictive-sample histogram only. Returns a
 `Makie.Figure`.
+
+# Arguments
+- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+
+# Keyword Arguments
+- `rng`: RNG used to draw the per-draw predictive samples.
 """
 function plot_predictive_distributions(chn; rng = Random.MersenneTwister(1))
     samples = _ppc_frame(chn; rng)
@@ -342,6 +363,13 @@ Knot dates come from `BIN_EDGES` (data.jl). Returns a `Makie.Figure`.
 Per-draw spaghetti is built as a long-form `DataFrame` and drawn via
 AlgebraOfGraphics with `group = :draw`, which is the idiomatic way to
 spell "one line per draw" once the data is tidy.
+
+# Arguments
+- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+
+# Keyword Arguments
+- `n_draws_plot`: maximum number of draws to plot.
+- `ymax`: upper y-axis limit.
 """
 function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
     log_R = vector_chain(chn, :log_R)
@@ -391,6 +419,10 @@ Sense-check the per-pair posterior of δ against the fitted population
 `δ_pair = T_inf[secondary] − T_onset[source]` and reduce to its median; then
 plot the histogram of those per-pair medians with the population density
 overlaid. Returns a `Makie.Figure`.
+
+# Arguments
+- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+- `d`: model data tuple from [`build_data`](@ref).
 """
 function plot_delta_sense_check(chn, d)
     t_inf = vector_chain(chn, :T_inf)
@@ -504,6 +536,14 @@ posterior-predictive summaries for three discrete test statistics —
 `observed`, `rep_median`, `rep_lower_95`, `rep_upper_95`, `p_ppp`, where
 `p_ppp = 2 · min(P(T_rep ≥ T_obs), P(T_rep ≤ T_obs))` is the two-sided
 Bayesian posterior-predictive p-value.
+
+# Arguments
+- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+- `d`: model data tuple from [`build_data`](@ref).
+
+# Keyword Arguments
+- `rng`: RNG used to draw the replicated `Z_rep` per posterior draw.
+- `edges`: knot day offsets, defaults to [`bin_edges_day`](@ref)(`d.t0`).
 """
 function z_ppc_summary(chn, d;
         rng = Random.MersenneTwister(1),
@@ -648,6 +688,13 @@ posterior of `inc_i = T_onset[i] − T_inf[i]` and reduces to its median;
 plots the histogram of those per-case medians with the median PDF (and
 95% pointwise ribbon) of the population LogNormal overlaid. Returns a
 `Makie.Figure`.
+
+# Arguments
+- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+- `data`: model data tuple from [`build_data`](@ref).
+
+# Keyword Arguments
+- `n_density_draws`: number of posterior draws used for the density ribbon.
 """
 function plot_inc_sense_check(chn, data; n_density_draws::Int = 200)
     t_inf = vector_chain(chn, :T_inf)
@@ -700,6 +747,10 @@ for: one long-form data frame, `mapping(:value, layout = :panel)`,
 `visual(Hist)`. Each panel still has its own viewing window so long
 tails don't squash the bars; rather than per-facet axis limits, the
 input is pre-clipped to the window for each panel.
+
+# Keyword Arguments
+- `n`: number of prior draws to simulate.
+- and any other keyword arguments forwarded to the panel construction.
 """
 function plot_prior_predictives(; n::Int = 5000,
         rng = Random.MersenneTwister(0))
