@@ -52,19 +52,15 @@ end
 
 bin_edges_day(t0) = Float64[Dates.value(d - t0) for d in BIN_EDGES]
 
-function which_bin(t::Real, edges::Vector{Float64})
-    for (b, e) in enumerate(edges)
-        t < e && return b
-    end
-    return length(edges) + 1
+# Piecewise-linear interpolation: log_R[b] is the value at knot b, with
+# linear interpolation inside the knot range and clamping outside.
+function log_R_at(t::Real, knots::AbstractVector{<:Real}, log_R)
+    t <= knots[1]   && return log_R[1]
+    t >= knots[end] && return log_R[end]
+    b = searchsortedlast(knots, t)
+    w = (t - knots[b]) / (knots[b + 1] - knots[b])
+    return (1 - w) * log_R[b] + w * log_R[b + 1]
 end
 
-# Pretty labels for the R(t) bins, used in summaries and posterior output.
-function bin_labels()
-    labels = String[string("≤ ", BIN_EDGES[1])]
-    for i in 2:length(BIN_EDGES)
-        push!(labels, string(BIN_EDGES[i-1], " – ", BIN_EDGES[i]))
-    end
-    push!(labels, string("> ", BIN_EDGES[end]))
-    return labels
-end
+# Knot date labels, one per log_R entry.
+bin_labels() = string.(BIN_EDGES)

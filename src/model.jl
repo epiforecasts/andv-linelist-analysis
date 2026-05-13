@@ -27,18 +27,23 @@
     σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc
     μ_δ   ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
     σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
-    k     ~ truncated(Normal(0.3, 0.5); lower = 0) # NB offspring dispersion (centred low — known super-spreader pathogen)
+    # NB offspring dispersion via Stan's reciprocal-sqrt reparameterisation:
+    # 1/√k is the SD multiplier in Var = μ + μ²·(1/√k)². Half-Normal(0, 1)
+    # spans Poisson (1/√k → 0) to heavy super-spreader (1/√k ≈ 2)
+    # symmetrically on the overdispersion scale.
+    phi_inv_sqrt ~ truncated(Normal(0.0, 1.0); lower = 0)
+    k := 1.0 / phi_inv_sqrt^2
     σ_rw  ~ truncated(Normal(0.0, 0.2); lower = 0) # log-R RW innovation SD (~5%/day typical, ~15%/day at prior 95th pct)
 
     # Concrete element type derived from a sampled scalar — avoids the
     # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
     T = typeof(μ_inc)
 
-    # Non-centred random walk on log R(t): decouples σ_rw from log_R to
-    # avoid the funnel that diverges NUTS under the centred form.
-    n_bins = length(edges) + 1
+    # Non-centred random walk on log R(t) at the weekly knots. log_R[b] is
+    # the value at knot b; R(t) is linearly interpolated between knots.
+    n_knots = length(edges)
     log_R_init ~ Normal(log(1.5), 1.0)
-    ε ~ Turing.filldist(Normal(zero(T), one(T)), n_bins - 1)
+    ε ~ Turing.filldist(Normal(zero(T), one(T)), n_knots - 1)
     log_R := vcat(log_R_init, log_R_init .+ accumulate(+, σ_rw .* ε))
 
     inc_dist = LogNormal(μ_inc, σ_inc)
@@ -72,10 +77,7 @@
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
             end
         end
-        # `clamp` is a numerical guard against transient leapfrog overshoots
-        # producing `exp(log_R) = Inf` → `p = 0` and a NegativeBinomial domain
-        # error. Bounds are well outside the posterior support.
-        R_i = exp(clamp(log_R[which_bin(T_inf[i], edges)], -50.0, 50.0))
+        R_i = exp(log_R_at(T_inf[i], edges, log_R))
         d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
     end
 end

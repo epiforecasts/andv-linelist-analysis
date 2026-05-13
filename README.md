@@ -1,5 +1,7 @@
 # Andes virus — joint estimation of incubation, transmission timing, and R(t)
 
+[![Docs (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://sbfnk.github.io/hantavirus/dev)
+
 A Julia + Turing model fitted to the Epuyén 2018–19 Andes hantavirus outbreak
 ([Martínez et al. 2020, NEJM](https://doi.org/10.1056/NEJMoa2009040)).
 
@@ -49,7 +51,7 @@ Per case the mean is `R(t)` evaluated at the case's infection time, and `k` is t
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
-| Dispersion `k` | 0.4 (0.1 – 0.9) |
+| Dispersion `k` | 0.32 (0.14 – 0.90) |
 
 ### Time-varying reproduction number R(t)
 
@@ -63,7 +65,7 @@ The model is described in detail in [METHODS.md](METHODS.md), including
 priors, the data-augmentation handling of double interval censoring, the
 positive-generation-interval constraint, and known limitations
 (within-day exposure encoding pinning σ_δ, late-bin R(t) reverting to its
-prior, mild prior dependence of `k`, and right-truncation of long
+prior, the data-thin posterior on `k`, and right-truncation of long
 incubation periods).
 
 ## Repository layout
