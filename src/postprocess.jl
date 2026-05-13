@@ -119,38 +119,22 @@ end
 # R(t) figure
 # ---------------------------------------------------------------------------
 
-# Spaghetti plot of R(t) over weekly bins: each thinned posterior draw is a
-# horizontal line for each bin, with the line broken between bins so no
-# vertical step connectors are drawn. Bin edges come from `BIN_EDGES`
-# (data.jl); the first and last bins extend one bin-width past the listed
-# edges. Saved as a PNG.
+# Spaghetti plot of R(t) over weekly knots: each thinned posterior draw is a
+# piecewise-linear trajectory through `(knot_date[b], exp(log_R[b]))`. Knot
+# dates come from `BIN_EDGES` (data.jl). Saved as a PNG.
 function plot_rt(post, path; n_draws_plot = 100, ymax = 4.0)
     log_R = post.log_R_chain
     n_draws = length(log_R[1])
     step    = max(1, n_draws ÷ n_draws_plot)
     idx     = 1:step:n_draws
 
-    bin_width  = BIN_EDGES[2] - BIN_EDGES[1]
-    left_edge  = vcat(BIN_EDGES[1] - bin_width, BIN_EDGES)
-    right_edge = vcat(BIN_EDGES, BIN_EDGES[end] + bin_width)
-    # Two points per bin (left, right) then a NaN-on-y placeholder so the
-    # line is broken between bins (no vertical step connectors).
-    xs = Date[]
-    for b in eachindex(log_R)
-        push!(xs, left_edge[b]); push!(xs, right_edge[b]); push!(xs, right_edge[b])
-    end
-
     plt = plot(; ylims = (0.0, ymax),
                  xlabel = "Date", ylabel = "R(t)",
                  legend = false,
-                 title  = "Time-varying reproduction number (weekly bins)")
+                 title  = "Time-varying reproduction number (weekly knots)")
     for d in idx
-        ys = Float64[]
-        for b in eachindex(log_R)
-            r = exp(log_R[b][d])
-            push!(ys, r); push!(ys, r); push!(ys, NaN)
-        end
-        plot!(plt, xs, ys; linecolor = :steelblue, linewidth = 1.6, alpha = 0.25)
+        ys = [exp(log_R[b][d]) for b in eachindex(log_R)]
+        plot!(plt, BIN_EDGES, ys; linecolor = :steelblue, linewidth = 1.6, alpha = 0.25)
     end
     hline!(plt, [1.0]; linestyle = :dash, color = :grey)
     mkpath(dirname(path))
