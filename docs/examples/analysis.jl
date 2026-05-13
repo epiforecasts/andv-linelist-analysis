@@ -29,7 +29,7 @@ Random.seed!(20260508)
 # ## Load the line list
 #
 # `load_linelist` parses the bundled CSV and drops the `_alt` sensitivity rows.
-# `prepare_model` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset), builds the weekly R(t) bin edges, and returns the Turing model alongside the augmented data struct.
+# `prepare_model` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset), builds the weekly R(t) knot dates, and returns the Turing model alongside the augmented data struct.
 
 ll = load_linelist()
 model, d, edges = prepare_model(ll)
@@ -70,9 +70,9 @@ diagnostics_table(chn)
 
 summary_table(chn)
 
-# ## R(t) over weekly bins
+# ## R(t) over weekly knots
 #
-# Spaghetti of thinned posterior draws over the weekly bins; reverts to the prior in late-January bins where cases are thin (see Limitations).
+# Spaghetti of thinned posterior draws through the weekly knots (linearly interpolated); reverts to the prior in late-January knots where cases are thin (see Limitations).
 
 plot_rt(chn)
 

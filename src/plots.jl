@@ -284,11 +284,9 @@ end
 """
     plot_rt(chn; n_draws_plot = 100, ymax = 4.0)
 
-Spaghetti plot of R(t) over weekly bins. Each thinned posterior draw is a
-horizontal segment per bin with the line broken between bins so no vertical
-step connectors are drawn. Bin edges come from `BIN_EDGES` (data.jl); the
-first and last bins extend one bin-width past the listed edges. Returns a
-`Makie.Figure`.
+Spaghetti plot of R(t) over the weekly knots. Each thinned posterior draw
+is a piecewise-linear trajectory through `(knot_date[b], exp(log_R[b]))`.
+Knot dates come from `BIN_EDGES` (data.jl). Returns a `Makie.Figure`.
 """
 function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
     log_R = vector_chain(chn, :log_R)
@@ -296,40 +294,27 @@ function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
     step    = max(1, n_draws ÷ n_draws_plot)
     idx     = 1:step:n_draws
 
-    bin_width  = BIN_EDGES[2] - BIN_EDGES[1]
-    left_edge  = vcat(BIN_EDGES[1] - bin_width, BIN_EDGES)
-    right_edge = vcat(BIN_EDGES, BIN_EDGES[end] + bin_width)
-
-    xs = Float64[]
-    for b in eachindex(log_R)
-        push!(xs, Dates.value(left_edge[b]))
-        push!(xs, Dates.value(right_edge[b]))
-        push!(xs, Dates.value(right_edge[b]))
-    end
+    knot_dates = BIN_EDGES
+    xs = Float64[Dates.value(d) for d in knot_dates]
 
     return _with_theme() do
         fig = Figure(; size = (1000, 500))
         ax = Axis(fig[1, 1];
                   xlabel = "Date", ylabel = "R(t)",
-                  title  = "Time-varying reproduction number (weekly bins)",
+                  title  = "Time-varying reproduction number (weekly knots)",
                   limits = (nothing, (0.0, ymax)))
         for d in idx
-            ys = Float64[]
-            for b in eachindex(log_R)
-                r = exp(log_R[b][d])
-                push!(ys, r); push!(ys, r); push!(ys, NaN)
-            end
+            ys = [exp(log_R[b][d]) for b in eachindex(log_R)]
             lines!(ax, xs, ys;
                    color = (:steelblue, 0.25), linewidth = 1.6)
         end
         hlines!(ax, [1.0]; color = :grey, linestyle = :dash)
 
         # Date-formatted x ticks.
-        edge_dates = sort(unique(vcat(left_edge, right_edge)))
-        n = length(edge_dates)
+        n = length(knot_dates)
         keep = unique(round.(Int, range(1, n; length = min(n, 7))))
-        ax.xticks = (Dates.value.(edge_dates[keep]),
-                     string.(edge_dates[keep]))
+        ax.xticks = (Dates.value.(knot_dates[keep]),
+                     string.(knot_dates[keep]))
         ax.xticklabelrotation = π / 6
         fig
     end
