@@ -22,8 +22,13 @@
 ## is enforced via a -Inf reject in the likelihood to ensure GI > 0.
 ##
 ## Real-time mode (gated on `d.obs_time !== nothing`):
-##   - Inc and δ contributions are right-truncated at the per-case cut-off
-##     via `-logcdf` terms.
+##   - Index (zoonotic) cases: Inc is right-truncated at the per-case
+##     cut-off via a single `-logcdf(inc.dist, obs_time - T_inf[i])` term.
+##   - Sourced cases: the observation event T_onset[i] ≤ obs_time is a
+##     joint constraint on the offspring pair `(δ, Inc)` —
+##     `δ + Inc ≤ obs_time − T_onset[src]` — and so is normalised by a
+##     single `-log F_offspring(obs_time − T_onset[src])`, not the product
+##     of marginal Inc and δ CDFs.
 ##   - The NB mean for source `src` is thinned by `F_offspring(obs_time[src] -
 ##     T_onset[src])` to account for offspring whose `δ + Inc(sec)` chain
 ##     has not yet completed by the cut-off. The source's own incubation is
@@ -183,10 +188,14 @@ distributions, the GI > 0 reject and the offspring-completeness thinning.
                 lp += logpdf(inc.dist, inc_i)
                 lp += logpdf(delta.dist, δ_pair)
                 if realtime
-                    Δ_inc = d.obs_time[i]   - T_inf[i]
-                    Δ_δ   = d.obs_time[i]   - T_onset[src]
-                    lp -= logcdf(inc.dist, Δ_inc)
-                    lp -= logcdf(delta.dist, Δ_δ)
+                    # Joint truncation on the offspring pair (δ, Inc):
+                    # the observation event T_onset[i] ≤ obs_time is
+                    # equivalent to δ + Inc(sec) ≤ obs_time − T_onset[src],
+                    # i.e. a single F_offspring normaliser rather than the
+                    # product of marginal Inc and δ CDFs.
+                    Δ_offspring = d.obs_time[i] - T_onset[src]
+                    lp -= log(F_offspring(Δ_offspring, inc.dist, delta.dist;
+                                          alg = foffspring_alg))
                 end
             end
         end
