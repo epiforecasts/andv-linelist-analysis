@@ -143,6 +143,10 @@ The reporting follows the recommendations of:
 > epidemiological delay distributions of infectious diseases.* 2024.
 > [arXiv:2405.08841](https://arxiv.org/abs/2405.08841)
 
+## Authors
+
+Sebastian Funk, Sam Abbott — London School of Hygiene & Tropical Medicine.
+
 ## License
 
 MIT (see [LICENSE](LICENSE)).
