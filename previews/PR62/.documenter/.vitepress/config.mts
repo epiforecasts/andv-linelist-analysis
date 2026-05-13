@@ -1,8 +1,11 @@
 import { defineConfig } from 'vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
-import mathjax3 from "markdown-it-mathjax3";
+import { mathjaxPlugin } from './mathjax-plugin'
+import { juliaReplTransformer } from './julia-repl-transformer'
 import footnote from "markdown-it-footnote";
 import path from 'path'
+
+const mathjax = mathjaxPlugin()
 
 function getBaseRepository(base: string): string {
   if (!base || base === '/') return '/';
@@ -47,7 +50,22 @@ export default defineConfig({
     ['script', {src: `${baseTemp.base}siteinfo.js`}]
   ],
   
+  markdown: {
+    codeTransformers: [juliaReplTransformer()],
+    config(md) {
+      md.use(tabsMarkdownPlugin);
+      md.use(footnote);
+      mathjax.markdownConfig(md);
+    },
+    theme: {
+      light: "github-light",
+      dark: "github-dark"
+    },
+  },
   vite: {
+    plugins: [
+      mathjax.vitePlugin,
+    ],
     define: {
       __DEPLOY_ABSPATH__: JSON.stringify('/andv-linelist-analysis'),
     },
@@ -71,17 +89,6 @@ export default defineConfig({
       ], 
     },
   },
-  markdown: {
-    math: true,
-    config(md) {
-      md.use(tabsMarkdownPlugin),
-      md.use(mathjax3),
-      md.use(footnote)
-    },
-    theme: {
-      light: "github-light",
-      dark: "github-dark"}
-  },
   themeConfig: {
     outline: 'deep',
     
@@ -100,6 +107,7 @@ export default defineConfig({
 { text: 'API Reference', link: '/api' }
 ]
 ,
+    sidebarDrawer: false,
     editLink: { pattern: "https://github.com/epiforecasts/andv-linelist-analysis/edit/main/docs/src/:path" },
     socialLinks: [
       { icon: 'github', link: 'https://github.com/epiforecasts/andv-linelist-analysis' }
