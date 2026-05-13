@@ -35,10 +35,11 @@ function analyse(;
     progress = true,
 )
     ll = load_linelist(data)
-    model, d, _ = prepare_model(ll)
+    m  = joint_model(ll)
+    d  = m.d
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx)
 
-    chn = sample_fit(model;
+    chn = sample_fit(m.model;
         samples  = samples,
         chains   = chains,
         seed     = seed,

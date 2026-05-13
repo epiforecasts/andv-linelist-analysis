@@ -30,7 +30,6 @@ include("plots.jl")
 include("main.jl")
 
 export load_linelist, build_data, bin_edges_day, log_R_at, bin_labels
-export prepare_model
 export joint_model
 export diagnostics, diagnostics_table, summary_table
 export vector_chain, summarise, save_posterior
