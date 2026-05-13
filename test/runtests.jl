@@ -19,10 +19,7 @@ import TransmissionLinelist
     end
 
     @testset "Stale deps" begin
-        # CairoMakie is listed as a dep so users get a working Makie
-        # backend when they call plotting helpers; the package itself
-        # never does `using CairoMakie`, so Aqua flags it as stale.
-        Aqua.test_stale_deps(TransmissionLinelist; ignore = [:CairoMakie])
+        Aqua.test_stale_deps(TransmissionLinelist)
     end
 
     @testset "Deps compat" begin
