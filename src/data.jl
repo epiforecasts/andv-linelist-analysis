@@ -7,6 +7,33 @@ const FIGURES_DIR   = joinpath(pkgdir(@__MODULE__), "figures")
 # Weekly R(t) bin edges spanning the outbreak.
 const BIN_EDGES = collect(Date("2018-11-12"):Day(7):Date("2019-02-04"))
 
+"""
+$(TYPEDSIGNATURES)
+
+Load and clean the Epuyén line list from a CSV file.
+
+Reads the CSV at `path`, drops any duplicated rows with patient IDs ending
+in `_alt`, parses `exposure_lower`, `exposure_upper`, `onset_date`,
+`onset_lower`, and `onset_upper` as `Date`s (defaulting `onset_lower` and
+`onset_upper` to `onset_date` when absent), and sorts the rows by
+integer-valued `patient_id`. Used by [`build_data`](@ref) to produce the
+model input tuple.
+
+# Arguments
+- `path`: path to a line-list CSV. Defaults to the bundled
+  `data/linelist.csv` shipped with the package.
+
+# Returns
+A `DataFrame` with one row per case and parsed date columns ready for
+[`build_data`](@ref).
+
+# Examples
+```julia
+using Hantavirus
+ll = load_linelist()
+first(ll, 3)
+```
+"""
 function load_linelist(path = LINELIST_PATH)
     ll = CSV.read(path, DataFrame; missingstring = ["NA"],
                   types = Dict(:patient_id => String))
@@ -31,6 +58,31 @@ function _parse_source(s)
     return parse(Int, occursin("/", s) ? split(s, "/")[1] : s)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Build the model input from a line-list `DataFrame`.
+
+Anchors all times in days relative to `t0 = minimum(onset_date) - 60 d` and
+encodes interval-censored onset and exposure windows as `[lo, hi)` pairs.
+Resolves the `source_case` column to integer indices into the line list
+(`0` denotes a zoonotic index case with no human source) and reads
+observed offspring counts from the `Z` column.
+
+# Arguments
+- `ll`: a `DataFrame` returned by [`load_linelist`](@ref).
+
+# Returns
+A named tuple `(t0, onset_lo_day, onset_hi_day, exp_lo_day, exp_hi_day,
+source_idx, Zobs, N)` ready to pass to [`joint_model`](@ref).
+
+# Examples
+```julia
+ll = load_linelist()
+d  = build_data(ll)
+d.N
+```
+"""
 function build_data(ll)
     t0 = minimum(ll.onset_date) - Day(60)
 
@@ -50,6 +102,23 @@ function build_data(ll)
             source_idx, Zobs = Int.(ll.Z), N = nrow(ll))
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Return the weekly R(t) knot dates expressed as days relative to `t0`.
+
+The knots span the outbreak in weekly steps; combined with [`log_R_at`](@ref)
+this defines the piecewise-linear log R(t) trajectory used by
+[`joint_model`](@ref).
+
+# Arguments
+- `t0`: the model's time origin (the `t0` field of the tuple returned by
+  [`build_data`](@ref)).
+
+# Returns
+A `Vector{Float64}` of length `length(BIN_EDGES)` giving the knot positions
+in days.
+"""
 bin_edges_day(t0) = Float64[Dates.value(d - t0) for d in BIN_EDGES]
 
 """
@@ -68,6 +137,22 @@ end
 
 # Piecewise-linear interpolation: log_R[b] is the value at knot b, with
 # linear interpolation inside the knot range and clamping outside.
+"""
+$(TYPEDSIGNATURES)
+
+Piecewise-linear interpolation of `log R(t)` between weekly knots.
+
+Linearly interpolates `log_R` against `knots` at the time `t`, clamping to
+the endpoint values outside the knot range.
+
+# Arguments
+- `t`: time (in days from `t0`) at which to evaluate log R.
+- `knots`: knot positions in days, as returned by [`bin_edges_day`](@ref).
+- `log_R`: vector of log R values at each knot.
+
+# Returns
+The interpolated log R value at `t`.
+"""
 function log_R_at(t::Real, knots::AbstractVector{<:Real}, log_R)
     t <= knots[1]   && return log_R[1]
     t >= knots[end] && return log_R[end]
@@ -76,5 +161,15 @@ function log_R_at(t::Real, knots::AbstractVector{<:Real}, log_R)
     return (1 - w) * log_R[b] + w * log_R[b + 1]
 end
 
-# Knot date labels, one per log_R entry.
+"""
+$(TYPEDSIGNATURES)
+
+Return string labels for the weekly R(t) knots.
+
+One entry per `log_R` element. Used to label plots and posterior summaries
+produced by [`summarise`](@ref) and [`plot_rt`](@ref).
+
+# Returns
+A `Vector{String}` of ISO-format knot dates.
+"""
 bin_labels() = string.(BIN_EDGES)
