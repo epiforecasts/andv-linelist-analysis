@@ -39,11 +39,11 @@
     # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
     T = typeof(μ_inc)
 
-    # Non-centred random walk on log R(t): decouples σ_rw from log_R to
-    # avoid the funnel that diverges NUTS under the centred form.
-    n_bins = length(edges) + 1
+    # Non-centred random walk on log R(t) at the weekly knots. log_R[b] is
+    # the value at knot b; R(t) is linearly interpolated between knots.
+    n_knots = length(edges)
     log_R_init ~ Normal(log(1.5), 1.0)
-    ε ~ Turing.filldist(Normal(zero(T), one(T)), n_bins - 1)
+    ε ~ Turing.filldist(Normal(zero(T), one(T)), n_knots - 1)
     log_R := vcat(log_R_init, log_R_init .+ accumulate(+, σ_rw .* ε))
 
     inc_dist = LogNormal(μ_inc, σ_inc)
@@ -77,10 +77,7 @@
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
             end
         end
-        # `clamp` is a numerical guard against transient leapfrog overshoots
-        # producing `exp(log_R) = Inf` → `p = 0` and a NegativeBinomial domain
-        # error. Bounds are well outside the posterior support.
-        R_i = exp(clamp(log_R[which_bin(T_inf[i], edges)], -50.0, 50.0))
+        R_i = exp(log_R_at(T_inf[i], edges, log_R))
         d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
     end
 end

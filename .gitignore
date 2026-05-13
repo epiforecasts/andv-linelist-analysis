@@ -1,7 +1,9 @@
 # Third-party papers and outbreak reports (PDFs, supplements) — copyrighted;
 # consult sources directly.
 papers/
-docs/
+
+# Documenter build output
+docs/build/
 
 # Model outputs are regenerable from scripts/run.jl.
 output/
