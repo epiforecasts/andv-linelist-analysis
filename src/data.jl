@@ -7,6 +7,14 @@ const FIGURES_DIR   = joinpath(pkgdir(@__MODULE__), "figures")
 # Weekly R(t) bin edges spanning the outbreak.
 const BIN_EDGES = collect(Date("2018-11-12"):Day(7):Date("2019-02-04"))
 
+"""
+    load_linelist(path = LINELIST_PATH) -> DataFrame
+
+Load the Epuyén line-list CSV.
+
+Parses date columns, filters out alternative-source records (patient IDs
+ending in `_alt`), and returns rows sorted by patient ID.
+"""
 function load_linelist(path = LINELIST_PATH)
     ll = CSV.read(path, DataFrame; missingstring = ["NA"],
                   types = Dict(:patient_id => String))
@@ -31,6 +39,17 @@ function _parse_source(s)
     return parse(Int, occursin("/", s) ? split(s, "/")[1] : s)
 end
 
+"""
+    build_data(ll) -> NamedTuple
+
+Convert a line-list `DataFrame` into the named tuple consumed by
+`joint_model_def`.
+
+Onset and exposure dates are encoded as days since a reference `t0`
+(60 days before the first onset). `source_idx[i]` is the row index of
+case `i`'s transmission source, or `0` for index cases. `Zobs[i]` is
+the observed offspring count read from the `Z` column.
+"""
 function build_data(ll)
     t0 = minimum(ll.onset_date) - Day(60)
 
@@ -50,6 +69,11 @@ function build_data(ll)
             source_idx, Zobs = Int.(ll.Z), N = nrow(ll))
 end
 
+"""
+    bin_edges_day(t0) -> Vector{Float64}
+
+Convert the weekly R(t) knot dates to days since `t0`.
+"""
 bin_edges_day(t0) = Float64[Dates.value(d - t0) for d in BIN_EDGES]
 
 """
@@ -66,8 +90,14 @@ function joint_model(ll)
     return (; model = joint_model_def(d, edges), d, edges)
 end
 
-# Piecewise-linear interpolation: log_R[b] is the value at knot b, with
-# linear interpolation inside the knot range and clamping outside.
+"""
+    log_R_at(t, knots, log_R) -> Real
+
+Piecewise-linearly interpolate log R(t) at time `t`.
+
+`log_R[b]` is the value at knot `b`; values outside the knot range are
+clamped to the nearest endpoint.
+"""
 function log_R_at(t::Real, knots::AbstractVector{<:Real}, log_R)
     t <= knots[1]   && return log_R[1]
     t >= knots[end] && return log_R[end]
@@ -76,5 +106,9 @@ function log_R_at(t::Real, knots::AbstractVector{<:Real}, log_R)
     return (1 - w) * log_R[b] + w * log_R[b + 1]
 end
 
-# Knot date labels, one per log_R entry.
+"""
+    bin_labels() -> Vector{String}
+
+Return the knot date strings used as R(t) axis labels.
+"""
 bin_labels() = string.(BIN_EDGES)

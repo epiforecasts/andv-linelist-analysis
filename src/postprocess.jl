@@ -29,6 +29,16 @@ function _num_divergences(chn)
     return 0
 end
 
+"""
+    diagnostics(chn) -> NamedTuple
+
+Compute convergence diagnostics for an MCMC chain.
+
+Returns `(; rhat, ess, ndiv)`: maximum R̂, minimum bulk ESS, and total
+divergent transitions.
+
+See also [`diagnostics_table`](@ref).
+"""
 function diagnostics(chn)
     rhats = _scalar_stats(FlexiChains.rhat(chn))
     esses = _scalar_stats(FlexiChains.ess(chn; kind = :bulk))
@@ -39,8 +49,14 @@ end
 # Extracting vector parameters
 # ---------------------------------------------------------------------------
 
-# Returns a vector of pooled samples for each entry of a vector-valued
-# parameter (T_inf, offset, log_R, ...).
+"""
+    vector_chain(chn, name::Symbol) -> Vector{Vector{Float64}}
+
+Extract a vector-valued parameter from a chain as pooled samples.
+
+Returns one `Vector{Float64}` per element of the named parameter,
+each pooling all chains.
+"""
 function vector_chain(chn, name::Symbol)
     arr = chn[name, stack = true]
     N = size(arr, 3)
@@ -58,9 +74,17 @@ function _print_qci(label, x; fmt = "%.2f")
     @eval @printf $("  %-30s " * fmt * " (95%% CrI " * fmt * " – " * fmt * ")\n") $label $med $lo $hi
 end
 
-# Compute the named-tuple of posterior draws used downstream by
-# `save_posterior` and CLI printing. Also prints the headline summary table
-# from `summary_table(chn)` for terminal use.
+"""
+    summarise(chn) -> NamedTuple
+
+Print a posterior summary and return key posterior vectors.
+
+Prints the headline [`summary_table`](@ref), then returns a named tuple
+with fields `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`, `k`, `log_R_chain`,
+`mean_gi_si`, `sd_gi_si`, and `p_pre`.
+
+See also [`save_posterior`](@ref), [`diagnostics`](@ref).
+"""
 function summarise(chn)
     μ_inc = vec(collect(chn[:μ_inc])); σ_inc = vec(collect(chn[:σ_inc]))
     μ_δ   = vec(collect(chn[:μ_δ]));   σ_δ   = vec(collect(chn[:σ_δ]))
@@ -89,6 +113,15 @@ end
 # Persistence
 # ---------------------------------------------------------------------------
 
+"""
+    save_posterior(post, path)
+
+Write posterior samples to a CSV file at `path`.
+
+Saves population-level parameters, derived GI/SI moments, pre-onset
+transmission probabilities, and per-knot log R values.
+`post` is the named tuple returned by [`summarise`](@ref).
+"""
 function save_posterior(post, path)
     df = DataFrame(μ_inc = post.μ_inc, σ_inc = post.σ_inc,
                    μ_δ = post.μ_δ,     σ_δ = post.σ_δ,

@@ -25,6 +25,18 @@ function sample_fit(model;
     )
 end
 
+"""
+    analyse(; data=LINELIST_PATH, output=OUTPUT_DIR, figures=FIGURES_DIR,
+              samples=1000, chains=4, seed=20260508, progress=true,
+              plots=true) -> (chain, post)
+
+Run the full analysis pipeline.
+
+Loads the line list, fits the joint model via [`sample_fit`](@ref),
+prints a summary, saves the posterior CSV, and (when `plots=true`) writes
+all figures. Returns the raw chain and the named tuple from
+[`summarise`](@ref).
+"""
 function analyse(;
     data     = LINELIST_PATH,
     output   = OUTPUT_DIR,
@@ -86,6 +98,15 @@ function _save_makie_figure(fig, path)
     return path
 end
 
+"""
+    main(args)
+
+CLI entry point invoked by `julia -m Hantavirus`.
+
+Parses `--data`, `--output`, `--figures`, `--no-figures`, `--samples`,
+`--chains`, and `--seed` arguments and delegates to [`analyse`](@ref).
+Returns `0` on success.
+"""
 function (@main)(args)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
     @add_arg_table! s begin
