@@ -35,14 +35,14 @@ Random.TaskLocalRNG()
 `load_linelist` parses the bundled CSV and drops the `_alt` sensitivity rows. `build_data` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset); `bin_edges_day` returns the weekly R(t) knot dates as day offsets.
 
 ```julia
-ll    = load_linelist()
-d     = build_data(ll)
+ll = load_linelist()
+d = build_data(ll)
 edges = bin_edges_day(d.t0)
 model = joint_model(d, edges)
 
 @chain ll begin
     @select(:patient_id, :exposure_lower, :exposure_upper,
-            :onset_date, :source_case, :Z)
+        :onset_date, :source_case, :Z)
     first(8)
 end
 ```
@@ -64,15 +64,15 @@ plot_data(ll)
     # Population-level parameters
     μ_inc ~ Normal(3.0, 0.5)                       # log-mean Inc (≈ log 20 d)
     σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc
-    μ_δ   ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
-    σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
+    μ_δ ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
+    σ_δ ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
     # NB offspring dispersion via Stan's reciprocal-sqrt reparameterisation:
     # 1/√k is the SD multiplier in Var = μ + μ²·(1/√k)². Half-Normal(0, 1)
     # spans Poisson (1/√k → 0) to heavy super-spreader (1/√k ≈ 2)
     # symmetrically on the overdispersion scale.
     phi_inv_sqrt ~ truncated(Normal(0.0, 1.0); lower = 0)
     k := 1.0 / phi_inv_sqrt^2
-    σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD allows sharp R(t) swings under interventions
+    σ_rw ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD allows sharp R(t) swings under interventions
 
     # Concrete element type derived from a sampled scalar — avoids the
     # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
@@ -110,7 +110,7 @@ plot_data(ll)
             if T_inf[i] <= T_inf[src]
                 Turing.@addlogprob! -Inf
             else
-                inc_i  = T_onset[i] - T_inf[i]
+                inc_i = T_onset[i] - T_inf[i]
                 δ_pair = T_inf[i] - T_onset[src]
                 Turing.@addlogprob! logpdf(inc_dist, inc_i)
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
@@ -169,7 +169,7 @@ Maximum R̂, minimum bulk ESS, divergence count, and wall-clock sampling time (s
 diagnostics_table(chn)
 ```
 
-<div v-html="`&lt;div&gt;&lt;div style = &quot;float: left;&quot;&gt;&lt;span&gt;1×4 DataFrame&lt;/span&gt;&lt;/div&gt;&lt;div style = &quot;clear: both;&quot;&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class = &quot;data-frame&quot; style = &quot;overflow-x: scroll;&quot;&gt;&lt;table class = &quot;data-frame&quot; style = &quot;margin-bottom: 6px;&quot;&gt;&lt;thead&gt;&lt;tr class = &quot;columnLabelRow&quot;&gt;&lt;th class = &quot;stubheadLabel&quot; style = &quot;font-weight: bold; text-align: right;&quot;&gt;Row&lt;/th&gt;&lt;th style = &quot;text-align: left;&quot;&gt;rhat_max&lt;/th&gt;&lt;th style = &quot;text-align: left;&quot;&gt;ess_min&lt;/th&gt;&lt;th style = &quot;text-align: left;&quot;&gt;divergences&lt;/th&gt;&lt;th style = &quot;text-align: left;&quot;&gt;runtime_seconds&lt;/th&gt;&lt;/tr&gt;&lt;tr class = &quot;columnLabelRow&quot;&gt;&lt;th class = &quot;stubheadLabel&quot; style = &quot;font-weight: bold; text-align: right;&quot;&gt;&lt;/th&gt;&lt;th title = &quot;Float64&quot; style = &quot;text-align: left;&quot;&gt;Float64&lt;/th&gt;&lt;th title = &quot;Float64&quot; style = &quot;text-align: left;&quot;&gt;Float64&lt;/th&gt;&lt;th title = &quot;Int64&quot; style = &quot;text-align: left;&quot;&gt;Int64&lt;/th&gt;&lt;th title = &quot;Float64&quot; style = &quot;text-align: left;&quot;&gt;Float64&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr class = &quot;dataRow&quot;&gt;&lt;td class = &quot;rowLabel&quot; style = &quot;font-weight: bold; text-align: right;&quot;&gt;1&lt;/td&gt;&lt;td style = &quot;text-align: right;&quot;&gt;1.00464&lt;/td&gt;&lt;td style = &quot;text-align: right;&quot;&gt;2371.79&lt;/td&gt;&lt;td style = &quot;text-align: right;&quot;&gt;0&lt;/td&gt;&lt;td style = &quot;text-align: right;&quot;&gt;66.2063&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;`"></div>
+<div v-html="`&lt;div&gt;&lt;div style = &quot;float: left;&quot;&gt;&lt;span&gt;1×4 DataFrame&lt;/span&gt;&lt;/div&gt;&lt;div style = &quot;clear: both;&quot;&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class = &quot;data-frame&quot; style = &quot;overflow-x: scroll;&quot;&gt;&lt;table class = &quot;data-frame&quot; style = &quot;margin-bottom: 6px;&quot;&gt;&lt;thead&gt;&lt;tr class = &quot;columnLabelRow&quot;&gt;&lt;th class = &quot;stubheadLabel&quot; style = &quot;font-weight: bold; text-align: right;&quot;&gt;Row&lt;/th&gt;&lt;th style = &quot;text-align: left;&quot;&gt;rhat_max&lt;/th&gt;&lt;th style = &quot;text-align: left;&quot;&gt;ess_min&lt;/th&gt;&lt;th style = &quot;text-align: left;&quot;&gt;divergences&lt;/th&gt;&lt;th style = &quot;text-align: left;&quot;&gt;runtime_seconds&lt;/th&gt;&lt;/tr&gt;&lt;tr class = &quot;columnLabelRow&quot;&gt;&lt;th class = &quot;stubheadLabel&quot; style = &quot;font-weight: bold; text-align: right;&quot;&gt;&lt;/th&gt;&lt;th title = &quot;Float64&quot; style = &quot;text-align: left;&quot;&gt;Float64&lt;/th&gt;&lt;th title = &quot;Float64&quot; style = &quot;text-align: left;&quot;&gt;Float64&lt;/th&gt;&lt;th title = &quot;Int64&quot; style = &quot;text-align: left;&quot;&gt;Int64&lt;/th&gt;&lt;th title = &quot;Float64&quot; style = &quot;text-align: left;&quot;&gt;Float64&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr class = &quot;dataRow&quot;&gt;&lt;td class = &quot;rowLabel&quot; style = &quot;font-weight: bold; text-align: right;&quot;&gt;1&lt;/td&gt;&lt;td style = &quot;text-align: right;&quot;&gt;1.00464&lt;/td&gt;&lt;td style = &quot;text-align: right;&quot;&gt;2371.79&lt;/td&gt;&lt;td style = &quot;text-align: right;&quot;&gt;0&lt;/td&gt;&lt;td style = &quot;text-align: right;&quot;&gt;65.0548&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;`"></div>
 
 ## Key outputs {#Key-outputs}
 
