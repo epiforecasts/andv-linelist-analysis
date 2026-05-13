@@ -61,7 +61,8 @@ end
 
 function _f_offspring_integrand(δ::Real, p)
     w = pdf(p.δ_dist, δ)
-    return [cdf(p.inc_dist, p.ts[i] - δ) * w for i in eachindex(p.ts)]
+    return [(p.ts[i] - δ) > 0 ? cdf(p.inc_dist, p.ts[i] - δ) * w : zero(w)
+            for i in eachindex(p.ts)]
 end
 
 const _F_OFFSPRING_BOUNDS = (-30.0, 30.0)
@@ -87,21 +88,3 @@ function F_offspring(ts::AbstractVector, inc_dist, δ_dist;
     prob = IntegralProblem(_f_offspring_integrand, δ_bounds, p)
     return solve(prob, alg).u
 end
-
-"""
-    F_offspring(t::Real, inc_dist, δ_dist; kw...) -> Real
-
-Scalar-`t` form returning the value instead of a length-1 vector.
-"""
-F_offspring(t::Real, inc_dist, δ_dist; kw...) =
-    F_offspring([float(t)], inc_dist, δ_dist; kw...)[1]
-
-"""
-    F_offspring_vec(θ; alg = ...)
-
-AD-test wrapper: `θ = [t, μ_inc, σ_inc, μ_δ, σ_δ]`. Reconstructs
-`LogNormal` Inc and `Normal` δ from `θ` so `DifferentiationInterface`
-sees a flat real-valued input.
-"""
-F_offspring_vec(θ; alg = _F_OFFSPRING_ALG) =
-    F_offspring(θ[1], LogNormal(θ[2], θ[3]), Normal(θ[4], θ[5]); alg = alg)

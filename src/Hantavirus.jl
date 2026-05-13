@@ -40,7 +40,7 @@ include("main.jl")
 export load_linelist, build_data, bin_edges_day, log_R_at, bin_labels
 export joint_model, joint_model_def
 export incubation_model, transmission_delta_model, random_walk_rt_model
-export F_offspring, F_offspring_vec
+export F_offspring
 export filter_realtime, filter_by_exposure
 export diagnostics, diagnostics_table, summary_table
 export vector_chain, summarise, save_posterior
