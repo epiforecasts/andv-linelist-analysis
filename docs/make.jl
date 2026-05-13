@@ -30,7 +30,7 @@ makedocs(;
     ),
 )
 
-DocumenterVitepress.deploydocs(;
+deploydocs(;
     repo = "github.com/sbfnk/hantavirus",
     target = "build",
     branch = "gh-pages",
