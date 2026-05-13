@@ -16,7 +16,10 @@ using Hantavirus
     end
 
     @testset "Stale deps" begin
-        Aqua.test_stale_deps(Hantavirus)
+        # CairoMakie is listed as a dep so users get a working Makie
+        # backend when they call plotting helpers; the package itself
+        # never does `using CairoMakie`, so Aqua flags it as stale.
+        Aqua.test_stale_deps(Hantavirus; ignore = [:CairoMakie])
     end
 
     @testset "Deps compat" begin
