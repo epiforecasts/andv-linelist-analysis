@@ -27,8 +27,13 @@
     σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc
     μ_δ   ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
     σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
-    k     ~ truncated(Normal(0.3, 0.5); lower = 0) # NB offspring dispersion (centred low — known super-spreader pathogen)
-    σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD
+    # NB offspring dispersion via Stan's reciprocal-sqrt reparameterisation:
+    # 1/√k is the SD multiplier in Var = μ + μ²·(1/√k)². Half-Normal(0, 1)
+    # spans Poisson (1/√k → 0) to heavy super-spreader (1/√k ≈ 2)
+    # symmetrically on the overdispersion scale.
+    phi_inv_sqrt ~ truncated(Normal(0.0, 1.0); lower = 0)
+    k := 1.0 / phi_inv_sqrt^2
+    σ_rw  ~ truncated(Normal(0.0, 0.2); lower = 0) # log-R RW innovation SD (~5%/day typical, ~15%/day at prior 95th pct)
 
     # Concrete element type derived from a sampled scalar — avoids the
     # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
