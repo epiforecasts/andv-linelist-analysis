@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "00f63c3b724ec04afe4133b1306c0c90552933c6"
+project_hash = "e0b7b968d308ad611f3d2c5ffe4e77612a98ff99"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "bbc22a9a08a0ef6460041086d8a7b27940ed4ffd"
@@ -1123,7 +1123,7 @@ uuid = "42e2da0e-8278-4e71-bc24-59509adca0fe"
 version = "1.0.2"
 
 [[deps.Hantavirus]]
-deps = ["ADTypes", "AlgebraOfGraphics", "ArgParse", "CSV", "CairoMakie", "Chain", "DataFrames", "DataFramesMeta", "Dates", "Distributions", "Enzyme", "FlexiChains", "Makie", "PairPlots", "Printf", "Random", "Statistics", "Turing"]
+deps = ["ADTypes", "AlgebraOfGraphics", "ArgParse", "CSV", "CairoMakie", "Chain", "DataFrames", "DataFramesMeta", "Dates", "Distributions", "DocStringExtensions", "Enzyme", "FlexiChains", "Makie", "PairPlots", "Printf", "Random", "Statistics", "Turing"]
 path = "."
 uuid = "a3f8c2e1-4b7d-4a9e-8c3f-d5e2f1a0b6c4"
 version = "0.0.0"
