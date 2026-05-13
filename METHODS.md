@@ -1,7 +1,7 @@
 # Methods and limitations
 
 Detailed model description, prior choices, and known limitations for the
-Hantavirus.jl analysis of the Epuyén 2018–19 Andes hantavirus outbreak. See
+TransmissionLinelist.jl analysis of the Epuyén 2018–19 Andes hantavirus outbreak. See
 the [README](README.md) for headline results and how to run the analysis.
 
 ## Model

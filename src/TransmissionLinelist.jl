@@ -1,4 +1,4 @@
-module Hantavirus
+module TransmissionLinelist
 
 using ArgParse: ArgParseSettings, @add_arg_table!, parse_args
 using CSV: CSV

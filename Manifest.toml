@@ -959,7 +959,7 @@ git-tree-sha1 = "51059d23c8bb67911a2e6fd5130229113735fc7e"
 uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 version = "1.11.0"
 
-[[deps.Hantavirus]]
+[[deps.TransmissionLinelist]]
 deps = ["ADTypes", "ArgParse", "CSV", "DataFrames", "Dates", "Distributions", "Enzyme", "FlexiChains", "MCMCChains", "Plots", "Printf", "Random", "Statistics", "Turing"]
 path = "."
 uuid = "a3f8c2e1-4b7d-4a9e-8c3f-d5e2f1a0b6c4"

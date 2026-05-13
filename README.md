@@ -1,6 +1,6 @@
 # Andes virus — joint estimation of incubation, transmission timing, and R(t)
 
-[![Docs (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://sbfnk.github.io/hantavirus/dev)
+[![Docs (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://sbfnk.github.io/andv-linelist-analysis/dev)
 
 A Julia + Turing model fitted to the Epuyén 2018–19 Andes hantavirus outbreak
 ([Martínez et al. 2020, NEJM](https://doi.org/10.1056/NEJMoa2009040)).
@@ -72,7 +72,7 @@ incubation periods).
 
 ```
 src/
-  Hantavirus.jl    — module entry point and imports
+  TransmissionLinelist.jl    — module entry point and imports
   data.jl          — line list loading and bin definitions
   model.jl         — the joint Turing model (incubation, transmission timing, R(t))
   postprocess.jl   — diagnostics, summaries, CSV output, R(t) figure
@@ -98,7 +98,7 @@ transmission wave, observed offspring count `Z`, and free-text notes.
 ## Running
 
 ```
-julia --project=. -t auto -m Hantavirus
+julia --project=. -t auto -m TransmissionLinelist
 ```
 
 A few minutes on a laptop. Posterior saved to `output/posterior.csv` and
@@ -118,13 +118,13 @@ Options:
 Example:
 
 ```
-julia --project=. -t auto -m Hantavirus -- -n 500 -c 2 -o results/
+julia --project=. -t auto -m TransmissionLinelist -- -n 500 -c 2 -o results/
 ```
 
 ### From the REPL
 
 ```julia
-julia> using Hantavirus
+julia> using TransmissionLinelist
 julia> analyse()                                           # all defaults
 julia> analyse(chains=2, samples=500, output="results/")  # with options
 ```
