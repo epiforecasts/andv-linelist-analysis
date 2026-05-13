@@ -122,11 +122,21 @@ in days.
 bin_edges_day(t0) = Float64[Dates.value(d - t0) for d in BIN_EDGES]
 
 """
-    prepare_model(ll) -> (model, d, edges)
+$(TYPEDSIGNATURES)
 
-Build the joint model from a line-list `ll` (output of `load_linelist`).
-Returns the Turing model, the augmented data struct, and the weekly knot
-edges so the caller can plot R(t) against them.
+Build the joint model from a line-list `ll`.
+
+Wraps [`build_data`](@ref), [`bin_edges_day`](@ref), and
+[`joint_model`](@ref) into a single call so the analysis walkthrough
+and CLI share the same model construction code path.
+
+# Arguments
+- `ll`: a line-list `DataFrame` as returned by [`load_linelist`](@ref).
+
+# Returns
+A 3-tuple `(model, d, edges)`: the Turing model, the augmented data
+named tuple from [`build_data`](@ref), and the weekly knot edges from
+[`bin_edges_day`](@ref).
 """
 function prepare_model(ll)
     d     = build_data(ll)
