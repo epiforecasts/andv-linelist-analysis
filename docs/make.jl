@@ -24,14 +24,14 @@ makedocs(;
         "API Reference" => "api.md",
     ],
     format = DocumenterVitepress.MarkdownVitepress(;
-        repo = "github.com/sbfnk/andv-linelist-analysis",
+        repo = "github.com/epiforecasts/andv-linelist-analysis",
         devbranch = "main",
         devurl = "dev",
     ),
 )
 
-DocumenterVitepress.deploydocs(;
-    repo = "github.com/sbfnk/andv-linelist-analysis",
+deploydocs(;
+    repo = "github.com/epiforecasts/andv-linelist-analysis",
     target = "build",
     branch = "gh-pages",
     devbranch = "main",
