@@ -11,7 +11,7 @@ using Plots: plot, plot!, hline!, histogram, histogram!, vline!, scatter, savefi
 using Printf: @printf, @sprintf
 using Random: Random
 using Statistics: quantile
-using Turing: Turing, @model, NUTS, MCMCThreads, sample
+using Turing: Turing, @model, NUTS, MCMCThreads, sample, DynamicPPL
 using ADTypes: AutoEnzyme
 using Enzyme: Enzyme
 import FlexiChains

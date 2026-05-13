@@ -30,19 +30,16 @@
     k     ~ truncated(Normal(0.3, 0.5); lower = 0) # NB offspring dispersion (centred low — known super-spreader pathogen)
     σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD
 
-    # Concrete element type derived from a sampled scalar: stable Float64 on
-    # the forward pass and a stable Dual / tracked type under AD. Helps every
-    # backend (ForwardDiff, ReverseDiff, Mooncake, Enzyme) — replacing
-    # `Vector{Real}` removes a dynamic-dispatch tax inside the inner loop.
+    # Concrete element type derived from a sampled scalar — avoids the
+    # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
     T = typeof(μ_inc)
 
-    # Random walk on log R(t) across the time bins
+    # Non-centred random walk on log R(t): decouples σ_rw from log_R to
+    # avoid the funnel that diverges NUTS under the centred form.
     n_bins = length(edges) + 1
-    log_R = Vector{T}(undef, n_bins)
-    log_R[1] ~ Normal(log(1.5), 1.0)
-    for b in 2:n_bins
-        log_R[b] ~ Normal(log_R[b - 1], σ_rw)
-    end
+    log_R_init ~ Normal(log(1.5), 1.0)
+    ε ~ Turing.filldist(Normal(zero(T), one(T)), n_bins - 1)
+    log_R := vcat(log_R_init, log_R_init .+ accumulate(+, σ_rw .* ε))
 
     inc_dist = LogNormal(μ_inc, σ_inc)
 
@@ -75,7 +72,6 @@
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
             end
         end
-        # Offspring count for case i (observed number of attributed secondaries).
         R_i = exp(log_R[which_bin(T_inf[i], edges)])
         d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
     end
