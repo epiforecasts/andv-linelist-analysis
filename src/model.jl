@@ -21,7 +21,7 @@
 ## from δ and Inc. The per-pair constraint T_inf[secondary] > T_inf[source]
 ## is enforced via a -Inf reject in the likelihood to ensure GI > 0.
 
-@model function joint_model_def(d, edges)
+@model function joint_model(d, edges)
     # Population-level parameters
     μ_inc ~ Normal(3.0, 0.5)                       # log-mean Inc (≈ log 20 d)
     σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc

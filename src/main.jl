@@ -34,12 +34,12 @@ function analyse(;
     seed     = 20260508,
     progress = true,
 )
-    ll = load_linelist(data)
-    m  = joint_model(ll)
-    d  = m.d
+    ll    = load_linelist(data)
+    d     = build_data(ll)
+    edges = bin_edges_day(d.t0)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx)
 
-    chn = sample_fit(m.model;
+    chn = sample_fit(joint_model(d, edges);
         samples  = samples,
         chains   = chains,
         seed     = seed,

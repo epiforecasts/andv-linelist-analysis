@@ -29,10 +29,12 @@ Random.seed!(20260508)
 # ## Load the line list
 #
 # `load_linelist` parses the bundled CSV and drops the `_alt` sensitivity rows.
-# `joint_model` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset), builds the weekly R(t) knot dates, and returns a NamedTuple with the Turing model alongside the augmented data struct and the weekly knot edges.
+# `build_data` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset); `bin_edges_day` returns the weekly R(t) knot dates as day offsets.
 
-ll = load_linelist()
-(; model, d, edges) = joint_model(ll)
+ll    = load_linelist()
+d     = build_data(ll)
+edges = bin_edges_day(d.t0)
+model = joint_model(d, edges)
 
 @chain ll begin
     @select(:patient_id, :exposure_lower, :exposure_upper,
