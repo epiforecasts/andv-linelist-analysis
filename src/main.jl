@@ -1,7 +1,7 @@
 ## Package entry points.
 ## - `sample_fit(model; ...)` runs NUTS on any Turing model.
 ## - `analyse(; ...)` loads data, fits, summarises, and writes outputs.
-## - `(@main)(args)` is the CLI entry point invoked by `julia -m Hantavirus`.
+## - `main(args)` is the CLI entry point invoked by `julia -m Hantavirus`.
 
 """
     sample_fit(model; samples = 1000, chains = ..., target_accept = 0.95,
@@ -87,7 +87,7 @@ function _save_makie_figure(fig, path)
     return path
 end
 
-function (@main)(args)
+function main(args)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
     @add_arg_table! s begin
         "--data", "-d"
