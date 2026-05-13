@@ -154,9 +154,21 @@ distributions, the GI > 0 reject and the offspring-completeness thinning.
 
     realtime = d.obs_time !== nothing
 
+    # In realtime mode the same `F_offspring(obs_time − T_onset[src])`
+    # appears in two places — the NB thinning of source `src` (pass 2)
+    # and the joint right-truncation of every offspring whose recorded
+    # source is `src` (pass 1, sourced branch). Compute it once across
+    # all N cases via a single vector-valued solve so the 1-D
+    # Gauss-Hermite rule runs once instead of N+M times; both passes
+    # then index into the resulting vector.
+    thins = if realtime
+        F_offspring(d.obs_time .- T_onset, inc.dist, delta.dist;
+                    alg = foffspring_alg)
+    else
+        T[]
+    end
+
     # Pass 1: sample T_inf and accrue the incubation / δ logprobs.
-    # F_offspring is deferred to a single vectorised call so the 1-D
-    # Gauss-Hermite rule runs once across all cases instead of N times.
     # Per-case logprob contributions are accumulated locally into `lp`
     # and added in a single `@addlogprob!` at the loop end. Each
     # `@addlogprob!` goes through the DynamicPPL accumulator machinery
@@ -192,27 +204,26 @@ distributions, the GI > 0 reject and the offspring-completeness thinning.
                     # the observation event T_onset[i] ≤ obs_time is
                     # equivalent to δ + Inc(sec) ≤ obs_time − T_onset[src],
                     # i.e. a single F_offspring normaliser rather than the
-                    # product of marginal Inc and δ CDFs.
-                    Δ_offspring = d.obs_time[i] - T_onset[src]
-                    lp -= log(F_offspring(Δ_offspring, inc.dist, delta.dist;
-                                          alg = foffspring_alg))
+                    # product of marginal Inc and δ CDFs. Reuses the
+                    # pre-computed `thins[src]` so the quadrature is
+                    # shared with the pass-2 NB thinning. `floatmin`
+                    # guards against `log(0)` when `Δ_srcs[src]` lands
+                    # at or below zero on a NUTS step (T_onset[src] at
+                    # the upper end of its onset window) — the AD path
+                    # would otherwise hit a DomainError under Mooncake.
+                    lp -= log(max(thins[src], floatmin(T)))
                 end
             end
         end
     end
     Turing.@addlogprob! lp
 
-    # Pass 2: NB offspring likelihood. In realtime mode all N
-    # offspring-completeness probabilities share the same population
-    # distributions, so a single vector-valued F_offspring amortises the
-    # quadrature across cases. Profiling showed the quadrature dominates
-    # the per-eval cost; this collapses N solves into one. The reference
-    # point is the source's onset time (a sampled latent), not its
-    # infection time: the source's own incubation is already scored, so
-    # the remaining offspring delay is `δ + Inc(sec)`.
+    # Pass 2: NB offspring likelihood. The reference point for thinning
+    # is the source's onset time (a sampled latent), not its infection
+    # time: the source's own incubation is already scored, so the
+    # remaining offspring delay is `δ + Inc(sec)`. `thins` was computed
+    # above so it could be re-used for the per-offspring truncation.
     if realtime
-        Δ_srcs = d.obs_time .- T_onset
-        thins  = F_offspring(Δ_srcs, inc.dist, delta.dist; alg = foffspring_alg)
         for i in 1:d.N
             R_i   = exp(log_R[which_bin(T_inf[i], edges)])
             R_eff = R_i * thins[i]
