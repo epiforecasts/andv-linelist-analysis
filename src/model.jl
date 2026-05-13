@@ -21,6 +21,41 @@
 ## from δ and Inc. The per-pair constraint T_inf[secondary] > T_inf[source]
 ## is enforced via a -Inf reject in the likelihood to ensure GI > 0.
 
+"""
+$(TYPEDSIGNATURES)
+
+Joint Turing model for the Epuyén ANDV outbreak.
+
+Estimates the incubation period (LogNormal), the per-pair transmission
+timing `δ` relative to source onset (Normal), a weekly piecewise-linear
+log-R(t) random walk, and the offspring dispersion `k`, from interval-
+censored exposure and onset windows. Each case has continuous latent
+infection and onset times; the positive generation-interval constraint
+`T_inf[secondary] > T_inf[source]` is enforced via a `-Inf` reject in
+the likelihood. The model is described in `METHODS.md`.
+
+# Arguments
+- `d`: model data tuple as returned by [`build_data`](@ref), with fields
+  `t0`, `onset_lo_day`, `onset_hi_day`, `exp_lo_day`, `exp_hi_day`,
+  `source_idx`, `Zobs`, and `N`.
+- `edges`: knot positions in days from `t0`, as returned by
+  [`bin_edges_day`](@ref).
+
+# Returns
+A `DynamicPPL.Model` ready to pass to `Turing.sample`. The sampled chain
+contains the population parameters `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`,
+`phi_inv_sqrt`, `σ_rw`, the derived `k` and `log_R`, the random-walk
+innovations `ε` and initial value `log_R_init`, and the per-case latent
+vectors `T_onset` and `T_inf`.
+
+# Examples
+```julia
+ll    = load_linelist()
+d     = build_data(ll)
+edges = bin_edges_day(d.t0)
+m     = joint_model(d, edges)
+```
+"""
 @model function joint_model(d, edges)
     # Population-level parameters
     μ_inc ~ Normal(3.0, 0.5)                       # log-mean Inc (≈ log 20 d)
