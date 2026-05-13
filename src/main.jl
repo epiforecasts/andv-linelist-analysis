@@ -25,6 +25,13 @@ function sample_fit(model;
     )
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Load the line list, fit the joint model, save the posterior summary to
+`output/posterior.csv`, and (unless `plots = false`) write all figures
+into `figures/`. Returns `(chain, post)`.
+"""
 function analyse(;
         data = LINELIST_PATH,
         output = OUTPUT_DIR,

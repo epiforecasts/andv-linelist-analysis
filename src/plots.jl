@@ -536,6 +536,15 @@ function z_ppc_summary(chn, d;
     return DataFrame(rows)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Posterior-predictive check for the offspring count `Z`. For each draw,
+simulates `Z_rep[i] ~ NegativeBinomial(k, k/(k+R_i))` at the same draw's
+latents and overlays the replicated frequencies + test statistics
+(`sum(Z)`, `max(Z)`, `count(Z=0)`) on the observed values. Returns a
+Makie `Figure`.
+"""
 function plot_z_ppc(chn, d;
         rng = Random.MersenneTwister(1),
         edges = bin_edges_day(d.t0))
