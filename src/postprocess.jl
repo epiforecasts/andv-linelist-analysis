@@ -29,6 +29,13 @@ function _num_divergences(chn)
     return 0
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Return convergence diagnostics for `chn`: `(; rhat, ess, ndiv)` — the
+maximum `R̂` across scalar parameter entries, the minimum bulk ESS,
+and the divergent transition count.
+"""
 function diagnostics(chn)
     rhats = _scalar_stats(FlexiChains.rhat(chn))
     esses = _scalar_stats(FlexiChains.ess(chn; kind = :bulk))
@@ -39,8 +46,12 @@ end
 # Extracting vector parameters
 # ---------------------------------------------------------------------------
 
-# Returns a vector of pooled samples for each entry of a vector-valued
-# parameter (T_inf, offset, log_R, ...).
+"""
+$(TYPEDSIGNATURES)
+
+Return a vector of pooled posterior samples for each entry of a
+vector-valued parameter (e.g. `:T_inf`, `:log_R`).
+"""
 function vector_chain(chn, name::Symbol)
     arr = chn[name, stack = true]
     N = size(arr, 3)
@@ -58,9 +69,12 @@ function _print_qci(label, x; fmt = "%.2f")
     @eval @printf $("  %-30s " * fmt * " (95%% CrI " * fmt * " – " * fmt * ")\n") $label $med $lo $hi
 end
 
-# Compute the named-tuple of posterior draws used downstream by
-# `save_posterior` and CLI printing. Also prints the headline summary table
-# from `summary_table(chn)` for terminal use.
+"""
+$(TYPEDSIGNATURES)
+
+Build the named-tuple of posterior draws consumed by [`save_posterior`](@ref)
+and print the headline summary table via [`summary_table`](@ref).
+"""
 function summarise(chn)
     μ_inc = vec(collect(chn[:μ_inc])); σ_inc = vec(collect(chn[:σ_inc]))
     μ_δ   = vec(collect(chn[:μ_δ]));   σ_δ   = vec(collect(chn[:σ_δ]))
@@ -89,6 +103,13 @@ end
 # Persistence
 # ---------------------------------------------------------------------------
 
+"""
+$(TYPEDSIGNATURES)
+
+Write the posterior summary `post` (as returned by [`summarise`](@ref))
+to a CSV at `path`, one column per scalar parameter plus one column per
+`log_R` knot.
+"""
 function save_posterior(post, path)
     df = DataFrame(μ_inc = post.μ_inc, σ_inc = post.σ_inc,
                    μ_δ = post.μ_δ,     σ_δ = post.σ_δ,
