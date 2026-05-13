@@ -1,4 +1,4 @@
-## CLI entry point — called by `julia -m Hantavirus`.
+## CLI entry point — called by `julia -m TransmissionLinelist`.
 ## For interactive use, call analyse() directly with keyword arguments.
 
 """
@@ -73,7 +73,7 @@ summary tuple returned by [`summarise`](@ref).
 
 # Examples
 ```julia
-using Hantavirus
+using TransmissionLinelist
 chn, post = analyse(samples = 500, chains = 2)
 ```
 """
@@ -132,7 +132,7 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Command-line entry point invoked by `julia -m Hantavirus`.
+Command-line entry point invoked by `julia -m TransmissionLinelist`.
 
 Parses `args` (typically `ARGS`) with `ArgParse` and forwards the parsed
 options to [`analyse`](@ref). The `help=` strings here mirror the

@@ -2,7 +2,7 @@ using Test
 # Use `import` (not `using`) so the package's exported `main` function is
 # not brought into `Main`. Otherwise Julia's `(@main)` auto-invocation
 # would run the full `analyse()` pipeline at the end of the test script.
-import Hantavirus
+import TransmissionLinelist
 
 # Exported names that are not callable functions (skip from the meta-test).
 const NON_FUNCTION_EXPORTS = Symbol[]
@@ -29,12 +29,12 @@ function _docstring_text(f)
     return sprint(show, MIME("text/plain"), d)
 end
 
-@testset "Hantavirus.jl" begin
+@testset "TransmissionLinelist.jl" begin
     @testset "exported names have docstrings with argument sections" begin
-        for name in names(Hantavirus)
-            name === :Hantavirus && continue
+        for name in names(TransmissionLinelist)
+            name === :TransmissionLinelist && continue
             name in NON_FUNCTION_EXPORTS && continue
-            obj = getfield(Hantavirus, name)
+            obj = getfield(TransmissionLinelist, name)
             obj isa Function || continue
             text = _docstring_text(obj)
             # A docstring must exist — the no-docstring fallback message

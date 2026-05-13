@@ -1,6 +1,6 @@
 # Model
 
-The joint Turing model for the Hantavirus.jl analysis of the Epuyén 2018–19 Andes hantavirus outbreak.
+The joint Turing model for the TransmissionLinelist.jl analysis of the Epuyén 2018–19 Andes hantavirus outbreak.
 See the [README](https://github.com/sbfnk/hantavirus/blob/main/README.md) for headline results and [LIMITATIONS.md](https://github.com/sbfnk/hantavirus/blob/main/LIMITATIONS.md) for known caveats.
 
 Each case has two continuous latents.

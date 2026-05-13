@@ -29,7 +29,7 @@ A `DataFrame` with one row per case and parsed date columns ready for
 
 # Examples
 ```julia
-using Hantavirus
+using TransmissionLinelist
 ll = load_linelist()
 first(ll, 3)
 ```
