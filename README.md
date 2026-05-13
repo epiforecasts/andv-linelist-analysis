@@ -51,7 +51,7 @@ Per case the mean is `R(t)` evaluated at the case's infection time, and `k` is t
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
-| Dispersion `k` | 0.32 (0.14 – 0.90) |
+| Dispersion `k` | 0.37 (0.15 – 1.07) |
 
 ### Time-varying reproduction number R(t)
 
