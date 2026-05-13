@@ -3,7 +3,7 @@
 # The Epuyén 2018–19 outbreak in north-west Patagonia was the first cluster where person-to-person Andes hantavirus transmission was documented at scale.
 # The line list bundled with this package is hand-encoded from Table S2 of [Martínez et al. 2020](https://doi.org/10.1056/NEJMoa2009040) — 34 cases with exposure windows, symptom-onset dates, and attributed source cases.
 #
-# This page fits the joint model in `Hantavirus.jl` to that line list and renders the headline outputs.
+# This page fits the joint model in `TransmissionLinelist.jl` to that line list and renders the headline outputs.
 # Four quantities are estimated together: the incubation period, the transmission timing of each secondary relative to its source's symptom onset (δ), a weekly time-varying reproduction number R(t), and the offspring dispersion `k` of a Negative-Binomial.
 # Exposure and onset dates are interval-censored.
 # The model handles that by giving each case a continuous latent infection time and a continuous latent onset time, each sampled within its recorded window.
@@ -13,7 +13,7 @@
 # Priors, the data-augmentation construction, and per-pair GI > 0 constraint are detailed on the [Model](model.md) page.
 # Caveats around exposure encoding, late R(t) bins, and right-truncation are on the [Limitations](limitations.md) page.
 
-using Hantavirus
+using TransmissionLinelist
 using Chain
 using DataFrames
 using DataFramesMeta

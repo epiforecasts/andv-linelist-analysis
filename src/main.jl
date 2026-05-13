@@ -1,4 +1,4 @@
-## CLI entry point — called by `julia -m Hantavirus`.
+## CLI entry point — called by `julia -m TransmissionLinelist`.
 ## For interactive use, call analyse() directly with keyword arguments.
 
 """
