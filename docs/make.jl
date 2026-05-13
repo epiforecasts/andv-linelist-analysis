@@ -10,12 +10,6 @@ DocMeta.setdocmeta!(
     :(using Hantavirus); recursive = true
 )
 
-# Stage repo-root figures as vitepress public assets so the README's
-# `figures/...` image links resolve on the docs site (vitepress otherwise
-# treats them as rollup module imports and fails the build).
-cp(joinpath(@__DIR__, "..", "figures"),
-   joinpath(@__DIR__, "src", "public", "figures"); force = true)
-
 makedocs(;
     sitename = "Hantavirus.jl",
     authors = "Sebastian Funk, Sam Abbott, and contributors",
