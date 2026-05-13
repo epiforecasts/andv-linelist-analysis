@@ -5,7 +5,7 @@ using Chain: @chain
 using CSV: CSV
 using DataFrames: DataFrame, nrow, eachrow, passmissing, rename!, sort!
 using DataFramesMeta: @select, @transform, @subset, @combine, @by, @rtransform,
-                     @rsubset, @orderby, @rename
+                      @rsubset, @orderby, @rename
 using Dates: Dates, Date, Day, dayofweek
 using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
                      Uniform, logpdf, cdf, pdf
