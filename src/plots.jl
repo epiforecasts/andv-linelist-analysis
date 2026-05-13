@@ -544,6 +544,14 @@ simulates `Z_rep[i] ~ NegativeBinomial(k, k/(k+R_i))` at the same draw's
 latents and overlays the replicated frequencies + test statistics
 (`sum(Z)`, `max(Z)`, `count(Z=0)`) on the observed values. Returns a
 Makie `Figure`.
+
+# Arguments
+- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+- `d`: model data tuple from [`build_data`](@ref).
+
+# Keyword Arguments
+- `rng`: RNG used to draw replicated `Z_rep` per posterior draw.
+- `edges`: knot day offsets, defaults to [`bin_edges_day`](@ref)(`d.t0`).
 """
 function plot_z_ppc(chn, d;
         rng = Random.MersenneTwister(1),

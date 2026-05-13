@@ -31,6 +31,16 @@ $(TYPEDSIGNATURES)
 Load the line list, fit the joint model, save the posterior summary to
 `output/posterior.csv`, and (unless `plots = false`) write all figures
 into `figures/`. Returns `(chain, post)`.
+
+# Keyword Arguments
+- `data`: path to the line-list CSV.
+- `output`: directory for `posterior.csv`.
+- `figures`: directory for the figure PNGs.
+- `samples`: NUTS samples per chain.
+- `chains`: number of parallel chains.
+- `seed`: random seed.
+- `progress`: show a NUTS progress bar.
+- `plots`: skip all figure generation when `false`.
 """
 function analyse(;
         data = LINELIST_PATH,
