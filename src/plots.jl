@@ -3,14 +3,6 @@
 ## caller decides whether to render inline or write to disk. A Makie backend
 ## (e.g. CairoMakie) must be loaded at the call site to render or save
 ## figures.
-##
-## Mixed Makie / AlgebraOfGraphics usage. AoG is used where data is naturally
-## tidy and the plot is a clean `data(df) * mapping(...) * visual(...)` —
-## faceted histograms, per-draw spaghetti, simple histogram-plus-overlay
-## panels. Plots that need custom pointwise ribbons (`band!` from a matrix
-## of PDFs), rangebars-style rootograms, or numeric annotations stay on raw
-## Makie because reaching for an AoG idiom would add more boilerplate than
-## it removes. Each function notes which mode it uses.
 
 # Apply a consistent theme to every figure produced here without mutating
 # the user's global Makie theme.
@@ -288,11 +280,6 @@ Inc and δ panels overlay the parametric density (median PDF with a 95%
 pointwise ribbon across draws) and a histogram of one predictive sample
 per draw. GI and SI show the predictive-sample histogram only. Returns a
 `Makie.Figure`.
-
-Raw Makie rather than AlgebraOfGraphics: the parametric density ribbon
-is a pointwise quantile across a matrix of PDF values evaluated at fixed
-`xs`, which doesn't sit in a tidy per-row data frame, and AoG has no
-native ribbon-from-quantiles spec.
 """
 function plot_predictive_distributions(chn; rng = Random.MersenneTwister(1))
     samples = _ppc_frame(chn; rng)
@@ -402,10 +389,6 @@ Sense-check the per-pair posterior of δ against the fitted population
 `δ_pair = T_inf[secondary] − T_onset[source]` and reduce to its median; then
 plot the histogram of those per-pair medians with the population density
 overlaid. Returns a `Makie.Figure`.
-
-The histogram is drawn through AlgebraOfGraphics (one tidy `DataFrame`,
-`visual(Hist)`); the population PDF and the zero-vline stay on raw Makie
-since they don't come from per-row data.
 """
 function plot_delta_sense_check(chn, d)
     t_inf   = vector_chain(chn, :T_inf)
@@ -480,11 +463,6 @@ CrI, two-sided Bayesian posterior-predictive p-value) see the companion
 `z_ppc_summary`.
 
 Returns a `Makie.Figure`.
-
-Raw Makie rather than AlgebraOfGraphics: the rootogram combines bars,
-range bars, and a scatter on shared axes, and the three stacked
-histograms each carry their own colour and observed vline. Both are
-clearer one-axis-at-a-time than as AoG layers.
 """
 # Joint-draw posterior-predictive replication of Z. Returns an
 # `(n_draws × N)` matrix where each row is one replicated line list under
@@ -646,10 +624,6 @@ posterior of `inc_i = T_onset[i] − T_inf[i]` and reduces to its median;
 plots the histogram of those per-case medians with the median PDF (and
 95% pointwise ribbon) of the population LogNormal overlaid. Returns a
 `Makie.Figure`.
-
-Raw Makie rather than AlgebraOfGraphics: as in `plot_predictive_distributions`,
-the 95% pointwise ribbon is built from a matrix of per-draw PDF values
-and doesn't fit AoG's per-row data-frame model.
 """
 function plot_inc_sense_check(chn, data; n_density_draws::Int = 200)
     t_inf   = vector_chain(chn, :T_inf)
