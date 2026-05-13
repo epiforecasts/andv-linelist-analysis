@@ -11,10 +11,19 @@ _default_theme() = merge(theme_latexfonts(), Theme(fontsize = 12))
 _with_theme(f) = with_theme(f, _default_theme())
 
 """
-    plot_data(ll)
+$(TYPEDSIGNATURES)
 
-Two-panel view of the raw line list: epicurve by ISO week of onset (left)
-and exposure windows against onset dates (right). Returns a `Makie.Figure`.
+Two-panel view of the raw line list.
+
+Renders the epicurve by ISO week of onset on the left and exposure
+windows against onset dates on the right.
+
+# Arguments
+- `ll`: a line-list `DataFrame` as returned by [`load_linelist`](@ref).
+
+# Returns
+A `Makie.Figure`. A Makie backend (e.g. `CairoMakie`) must be loaded at
+the call site to render or save the figure.
 """
 function plot_data(ll)
     weekly = @chain DataFrame(week = ll.onset_date) begin
@@ -91,12 +100,19 @@ end
 _draws(chn, name::Symbol) = vec(collect(chn[name]))
 
 """
-    summary_table(chn)
+$(TYPEDSIGNATURES)
 
-Posterior summary `DataFrame` for the headline quantities: incubation mean,
-95th and 99th percentiles, transmission timing μ_δ / σ_δ, GI / SI mean and
-SD, and Negative-Binomial dispersion k. Columns: `quantity`, `median`,
-`lower_95`, `upper_95`.
+Posterior summary `DataFrame` of the headline quantities.
+
+Reports the incubation mean and 95th / 99th percentiles, transmission
+timing `μ_δ` / `σ_δ`, GI / SI mean and SD, and the Negative-Binomial
+dispersion `k`.
+
+# Arguments
+- `chn`: a chain returned by `Turing.sample`, e.g. from [`joint_model`](@ref).
+
+# Returns
+A `DataFrame` with columns `quantity`, `median`, `lower_95`, `upper_95`.
 """
 function summary_table(chn)
     μ_inc = _draws(chn, :μ_inc)
@@ -139,13 +155,21 @@ function summary_table(chn)
 end
 
 """
-    diagnostics_table(chn)
+$(TYPEDSIGNATURES)
 
-Single-row `DataFrame` summarising sampler diagnostics: maximum R̂, minimum
-bulk ESS, divergence count, and wall-clock sampling time in seconds. The
-runtime is read from FlexiChains' per-chain `sampling_time` metadata; under
-`MCMCThreads` chains run in parallel so the wall clock is approximated by
-the maximum over chains. Returns `missing` for the runtime if the chain
+Single-row `DataFrame` summarising sampler diagnostics.
+
+Reports maximum R̂, minimum bulk ESS, divergence count, and wall-clock
+sampling time in seconds. The runtime is read from FlexiChains'
+per-chain `sampling_time` metadata; under `MCMCThreads` chains run in
+parallel so the wall clock is approximated by the maximum over chains.
+
+# Arguments
+- `chn`: a chain returned by `Turing.sample`.
+
+# Returns
+A `DataFrame` with columns `rhat_max`, `ess_min`, `divergences`, and
+`runtime_seconds`. The `runtime_seconds` is `missing` when the chain
 carries no timing metadata.
 """
 function diagnostics_table(chn)
@@ -161,11 +185,20 @@ function diagnostics_table(chn)
 end
 
 """
-    plot_pair(chn; thin = 2)
+$(TYPEDSIGNATURES)
 
 Corner plot of the population scalars `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`, `k`
-via PairPlots.jl. Returns a Makie `Figure` (requires a Makie backend such
-as CairoMakie loaded at the call site).
+via PairPlots.jl.
+
+# Arguments
+- `chn`: a chain returned by `Turing.sample`.
+
+# Keyword Arguments
+- `thin`: keep every `thin`-th draw. Defaults to `2`.
+
+# Returns
+A `Makie.Figure` (requires a Makie backend such as `CairoMakie` loaded at
+the call site).
 """
 function plot_pair(chn; thin::Int = 2)
     tbl = @chain DataFrame(
@@ -234,14 +267,24 @@ function _pp_panel_hist_only!(ax, samples; bins = 50)
 end
 
 """
-    plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
+$(TYPEDSIGNATURES)
 
-Two-by-two panel of posterior-predictive distributions for incubation
-period, transmission timing δ, generation interval, and serial interval.
-Inc and δ panels overlay the posterior over the parametric density
-(median PDF with a 95% pointwise ribbon across draws) and a histogram of
-one predictive sample per draw. GI and SI show the predictive-sample
-histogram only. Returns a `Makie.Figure`.
+Posterior-predictive panel for incubation, δ, GI, and SI.
+
+Two-by-two layout. Inc and δ panels overlay the posterior over the
+parametric density (median PDF with a 95% pointwise ribbon across draws)
+and a histogram of one predictive sample per draw. GI and SI show the
+predictive-sample histogram only.
+
+# Arguments
+- `chn`: a chain returned by `Turing.sample`.
+
+# Keyword Arguments
+- `rng`: random number generator for the predictive sampling. Defaults
+  to `Random.MersenneTwister(1)`.
+
+# Returns
+A `Makie.Figure`.
 """
 function plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
     samples = _ppc_frame(chn; rng)
@@ -293,11 +336,23 @@ function plot_posterior_predictive(chn; rng = Random.MersenneTwister(1))
 end
 
 """
-    plot_rt(chn; n_draws_plot = 100, ymax = 4.0)
+$(TYPEDSIGNATURES)
 
-Spaghetti plot of R(t) over the weekly knots. Each thinned posterior draw
-is a piecewise-linear trajectory through `(knot_date[b], exp(log_R[b]))`.
-Knot dates come from `BIN_EDGES` (data.jl). Returns a `Makie.Figure`.
+Spaghetti plot of R(t) over the weekly knots.
+
+Each thinned posterior draw is rendered as a piecewise-linear trajectory
+through `(knot_date[b], exp(log_R[b]))`. Knot dates come from `BIN_EDGES`
+in `data.jl`.
+
+# Arguments
+- `chn`: a chain returned by `Turing.sample`, e.g. from [`joint_model`](@ref).
+
+# Keyword Arguments
+- `n_draws_plot`: maximum number of draws to plot. Defaults to `100`.
+- `ymax`: upper y-axis limit. Defaults to `4.0`.
+
+# Returns
+A `Makie.Figure`.
 """
 function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
     log_R = vector_chain(chn, :log_R)
@@ -332,13 +387,21 @@ function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
 end
 
 """
-    plot_delta_sense_check(chn, data)
+$(TYPEDSIGNATURES)
 
-Sense-check the per-pair posterior of δ against the fitted population
-`Normal(μ_δ, σ_δ)`. For each sourced pair, take the posterior of
-`δ_pair = T_inf[secondary] − T_onset[source]` and reduce to its median; then
-plot the histogram of those per-pair medians with the population density
-overlaid. Returns a `Makie.Figure`.
+Sense-check the per-pair posterior of `δ` against the fitted population
+`Normal(μ_δ, σ_δ)`.
+
+For each sourced pair, computes the posterior median of
+`δ_pair = T_inf[secondary] − T_onset[source]`, then plots the histogram of
+those per-pair medians with the population density overlaid.
+
+# Arguments
+- `chn`: a chain returned by `Turing.sample`.
+- `data`: the model data tuple from [`build_data`](@ref).
+
+# Returns
+A `Makie.Figure`.
 """
 function plot_delta_sense_check(chn, data)
     t_inf   = vector_chain(chn, :T_inf)
@@ -381,11 +444,17 @@ function plot_delta_sense_check(chn, data)
 end
 
 """
-    plot_prior_predictives(; n = 5000, rng = Random.MersenneTwister(0))
+$(TYPEDSIGNATURES)
 
-Prior-predictive panel: histograms of Inc, δ, and GI/SI drawn from the
-package's independent priors on `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`. Returns a
-`Makie.Figure`.
+Prior-predictive panel: histograms of Inc, δ, and GI / SI drawn from the
+package's independent priors on `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`.
+
+# Keyword Arguments
+- `n`: number of prior draws. Defaults to `5000`.
+- `rng`: random number generator. Defaults to `Random.MersenneTwister(0)`.
+
+# Returns
+A `Makie.Figure`.
 """
 function plot_prior_predictives(; n::Int = 5000,
                                   rng = Random.MersenneTwister(0))
