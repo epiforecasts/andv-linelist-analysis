@@ -1,6 +1,30 @@
 ## CLI entry point — called by `julia -m TransmissionLinelist`.
 ## For interactive use, call analyse() directly with keyword arguments.
 
+"""
+    sample_fit(model; samples=1000, chains=4, target_accept=0.95,
+               seed=20260508, progress=false)
+
+Run NUTS on `model` using the package's default Enzyme AD backend and
+`InitFromPrior()` chain initialisation. Returns the FlexiChain.
+"""
+function sample_fit(model;
+    samples       = 1000,
+    chains        = 4,
+    target_accept = 0.95,
+    seed          = 20260508,
+    progress      = false,
+)
+    Random.seed!(seed)
+    adtype = AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
+    return sample(
+        model,
+        NUTS(target_accept; adtype), MCMCThreads(), samples, chains;
+        initial_params = fill(DynamicPPL.InitFromPrior(), chains),
+        progress = progress,
+    )
+end
+
 function analyse(;
     data     = LINELIST_PATH,
     output   = OUTPUT_DIR,
@@ -10,28 +34,30 @@ function analyse(;
     seed     = 20260508,
     progress = true,
 )
-    Random.seed!(seed)
-
     ll    = load_linelist(data)
     d     = build_data(ll)
     edges = bin_edges_day(d.t0)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx)
 
-    adtype = AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
-    chn = sample(
-        joint_model(d, edges),
-        NUTS(0.95; adtype), MCMCThreads(), samples, chains;
-        initial_params = fill(DynamicPPL.InitFromPrior(), chains),
+    chn = sample_fit(joint_model(d, edges);
+        samples  = samples,
+        chains   = chains,
+        seed     = seed,
         progress = progress,
     )
 
     post = summarise(chn)
     save_posterior(post, joinpath(output, "posterior.csv"))
-    plot_rt(post, joinpath(figures, "Rt.png"))
-    plot_delta_sense_check(chn, d, joinpath(figures, "delta_sense_check.png"))
-    plot_pairplot(post, joinpath(figures, "pairplot.png"))
-    plot_prior_predictives(joinpath(figures, "prior_predictives.png"))
-    plot_posterior_predictions(chn, d, joinpath(figures, "posterior_predictions.png"))
+
+    mkpath(figures)
+    _save_makie_figure(plot_rt(chn),                       joinpath(figures, "Rt.png"))
+    _save_makie_figure(plot_delta_sense_check(chn, d),     joinpath(figures, "delta_sense_check.png"))
+    _save_makie_figure(plot_inc_sense_check(chn, d),       joinpath(figures, "inc_sense_check.png"))
+    _save_makie_figure(plot_z_ppc(chn, d),                 joinpath(figures, "z_ppc.png"))
+    _save_makie_figure(plot_prior_predictives(),           joinpath(figures, "prior_predictives.png"))
+    _save_makie_figure(plot_predictive_distributions(chn), joinpath(figures, "predictive_distributions.png"))
+    _save_makie_figure(plot_pair(chn),                     joinpath(figures, "pairplot.png"))
+
     return chn, post
 end
 

@@ -51,7 +51,7 @@ Per case the mean is `R(t)` evaluated at the case's infection time, and `k` is t
 
 | Quantity | Posterior median (95% CrI) |
 |---|---|
-| Dispersion `k` | 0.32 (0.14 – 0.90) |
+| Dispersion `k` | 0.37 (0.15 – 1.07) |
 
 ### Time-varying reproduction number R(t)
 
@@ -61,12 +61,8 @@ Weekly bins; shaded band is the 95% credible interval.
 
 ## Methods and limitations
 
-The model is described in detail in [METHODS.md](METHODS.md), including
-priors, the data-augmentation handling of double interval censoring, the
-positive-generation-interval constraint, and known limitations
-(within-day exposure encoding pinning σ_δ, late-bin R(t) reverting to its
-prior, the data-thin posterior on `k`, and right-truncation of long
-incubation periods).
+Model description and priors are in [MODEL.md](MODEL.md).
+Known caveats are in [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Repository layout
 
