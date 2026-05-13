@@ -64,12 +64,6 @@ plot_prior_predictives()
 
 chn = sample_fit(model)
 
-# ## Sampler output
-
-chn
-
-# ## Diagnostics
-
 diagnostics_table(chn)
 
 # ## Key outputs
