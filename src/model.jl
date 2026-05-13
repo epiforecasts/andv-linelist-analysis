@@ -60,15 +60,15 @@ m     = joint_model(d, edges)
     # Population-level parameters
     μ_inc ~ Normal(3.0, 0.5)                       # log-mean Inc (≈ log 20 d)
     σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0) # log-SD Inc
-    μ_δ   ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
-    σ_δ   ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
+    μ_δ ~ Normal(0.0, 5.0)                       # population mean transmission timing (d from source onset)
+    σ_δ ~ truncated(Normal(0.0, 1.0); lower = 0) # population SD of transmission timing (d)
     # NB offspring dispersion via Stan's reciprocal-sqrt reparameterisation:
     # 1/√k is the SD multiplier in Var = μ + μ²·(1/√k)². Half-Normal(0, 1)
     # spans Poisson (1/√k → 0) to heavy super-spreader (1/√k ≈ 2)
     # symmetrically on the overdispersion scale.
     phi_inv_sqrt ~ truncated(Normal(0.0, 1.0); lower = 0)
     k := 1.0 / phi_inv_sqrt^2
-    σ_rw  ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD allows sharp R(t) swings under interventions
+    σ_rw ~ truncated(Normal(0.0, 0.5); lower = 0) # log-R RW innovation SD allows sharp R(t) swings under interventions
 
     # Concrete element type derived from a sampled scalar — avoids the
     # dynamic-dispatch tax that `Vector{Real}` imposes on AD backends.
@@ -106,7 +106,7 @@ m     = joint_model(d, edges)
             if T_inf[i] <= T_inf[src]
                 Turing.@addlogprob! -Inf
             else
-                inc_i  = T_onset[i] - T_inf[i]
+                inc_i = T_onset[i] - T_inf[i]
                 δ_pair = T_inf[i] - T_onset[src]
                 Turing.@addlogprob! logpdf(inc_dist, inc_i)
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)

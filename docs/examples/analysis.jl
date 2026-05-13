@@ -31,14 +31,14 @@ Random.seed!(20260508)
 # `load_linelist` parses the bundled CSV and drops the `_alt` sensitivity rows.
 # `build_data` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset); `bin_edges_day` returns the weekly R(t) knot dates as day offsets.
 
-ll    = load_linelist()
-d     = build_data(ll)
+ll = load_linelist()
+d = build_data(ll)
 edges = bin_edges_day(d.t0)
 model = joint_model(d, edges)
 
 @chain ll begin
     @select(:patient_id, :exposure_lower, :exposure_upper,
-            :onset_date, :source_case, :Z)
+        :onset_date, :source_case, :Z)
     first(8)
 end
 
