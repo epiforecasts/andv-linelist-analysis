@@ -146,7 +146,12 @@ for the default contracts.
             Turing.@addlogprob! logpdf(inc.dist, T_onset[i] - T_inf[i])
             realtime && Turing.@addlogprob! -logcdf(inc.dist, d.obs_time[i] - T_inf[i])
         else
-            T_inf[i] ~ Uniform(d.exp_lo_day[i], d.exp_hi_day[i])
+            # Upper bound at `T_onset[i] - 1e-6` so the prior's support
+            # is exactly where the LogNormal Inc likelihood is finite —
+            # mirrors the index-case prior. Avoids InitFromPrior failures
+            # from random draws that put `T_inf[i] > T_onset[i]`.
+            T_inf[i] ~ Uniform(d.exp_lo_day[i],
+                               min(d.exp_hi_day[i], T_onset[i] - 1e-6))
             if T_inf[i] <= T_inf[src]
                 Turing.@addlogprob! oftype(zero(T), -Inf)
             else
