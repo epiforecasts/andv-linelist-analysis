@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "681c2adda7f67fa66b653fbf0528826f7bbbfe51"
+project_hash = "a4045b8a42b32c1ecbaad4000d728858f1982ece"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "bbc22a9a08a0ef6460041086d8a7b27940ed4ffd"
@@ -2603,7 +2603,7 @@ uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.11.3"
 
 [[deps.TransmissionLinelist]]
-deps = ["ADTypes", "AlgebraOfGraphics", "ArgParse", "CSV", "CairoMakie", "Chain", "DataFrames", "DataFramesMeta", "Dates", "Distributions", "Enzyme", "FlexiChains", "Makie", "PairPlots", "Printf", "Random", "Statistics", "Turing"]
+deps = ["ADTypes", "AlgebraOfGraphics", "ArgParse", "CSV", "CairoMakie", "Chain", "DataFrames", "DataFramesMeta", "Dates", "Distributions", "DocStringExtensions", "Enzyme", "FlexiChains", "Makie", "PairPlots", "Printf", "Random", "Statistics", "Turing"]
 path = "."
 uuid = "a3f8c2e1-4b7d-4a9e-8c3f-d5e2f1a0b6c4"
 version = "0.0.0"
