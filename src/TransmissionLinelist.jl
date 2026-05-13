@@ -26,6 +26,6 @@ export joint_model
 export diagnostics, vector_chain, summarise, save_posterior
 export plot_rt, plot_delta_sense_check, plot_pairplot
 export plot_prior_predictives, plot_posterior_predictions
-export analyse, main
+export analyse
 
 end

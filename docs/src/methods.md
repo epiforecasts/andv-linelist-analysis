@@ -4,5 +4,9 @@ EditURL = "https://github.com/epiforecasts/andv-linelist-analysis/blob/main/METH
 
 ```@eval
 using Markdown
-Markdown.parse(read(joinpath(@__DIR__, "..", "..", "METHODS.md"), String))
+raw = read(joinpath(@__DIR__, "..", "..", "METHODS.md"), String)
+# METHODS.md links back to README.md (a repo-relative path); on the docs site
+# that's the home page at /.
+rewritten = replace(raw, "[README](README.md)" => "[README](/)")
+Markdown.parse(rewritten)
 ```
