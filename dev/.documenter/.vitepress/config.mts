@@ -38,7 +38,7 @@ const nav = [
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   base: '/andv-linelist-analysis/dev/',// TODO: replace this in makedocs!
-  title: 'TransmissionLinelist.jl',
+  title: 'Andes virus — joint estimation of incubation, transmission timing, and R(t)',
   description: 'Documentation for andv-linelist-analysis',
   lastUpdated: true,
   cleanUrls: true,

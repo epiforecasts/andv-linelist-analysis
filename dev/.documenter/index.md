@@ -1,7 +1,7 @@
 
 
 
-# TransmissionLinelist.jl {#TransmissionLinelist.jl}
+# Andes virus — joint estimation of incubation, transmission timing, and R(t) {#Andes-virus-—-joint-estimation-of-incubation,-transmission-timing,-and-Rt}
 
 A Julia + Turing model fitted to the Epuyén 2018–19 Andes hantavirus outbreak ([Martínez et al. 2020, NEJM](https://doi.org/10.1056/NEJMoa2009040)).
 
