@@ -115,6 +115,53 @@ safe_nb(k, R) = NegativeBinomial(k, max(k / (k + R), eps(typeof(k))))
 """
 $(TYPEDSIGNATURES)
 
+Deterministic submodel computing the per-case offspring-completeness
+vector `p_i = F_offspring(Δ_i; inc_dist, δ_dist)`. Returns `(; p)`.
+
+# Arguments
+- `Δ`: vector of `obs_time − T_onset[i]` values per case (empty in
+  retrospective mode).
+- `inc_dist`: incubation period distribution from the incubation submodel.
+- `δ_dist`: transmission-timing distribution from the transmission submodel.
+
+# Keyword Arguments
+- `foffspring_alg`: quadrature algorithm passed to `F_offspring`.
+  Defaults to `_F_OFFSPRING_ALG`.
+"""
+@model function combined_delay_model(Δ, inc_dist, δ_dist;
+        foffspring_alg = _F_OFFSPRING_ALG)
+    p = F_offspring(Δ, inc_dist, δ_dist; alg = foffspring_alg)
+    return (; p)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Per-case negative binomial likelihood for offspring counts `Z`, thinned
+by the per-case offspring-completeness `p` in real-time mode. Pass an
+empty `p` for retrospective mode.
+
+# Arguments
+- `Z`: vector of observed offspring counts per case.
+- `T_onset`: vector of per-case onset times used to index `log_R`.
+- `edges`: vector of knot dates at which `log_R` is defined.
+- `log_R`: vector of log R(t) values at the knot dates.
+- `k`: negative binomial dispersion.
+- `p`: vector of per-case offspring-completeness values, or empty for
+  retrospective mode.
+"""
+@model function case_model(Z, T_onset, edges, log_R, k, p)
+    realtime = !isempty(p)
+    for i in eachindex(Z)
+        R_i = exp(log_R_at(T_onset[i], edges, log_R))
+        R_eff = realtime ? R_i * p[i] : R_i
+        Z[i] ~ safe_nb(k, R_eff)
+    end
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Joint Bayesian model over incubation, transmission timing, and the
 weekly random walk on log R(t) at the knot dates.
 The three population components are passed in as Turing submodels so
@@ -150,12 +197,11 @@ function.
     delta ~ to_submodel(transmission, false)
     _log_R ~ to_submodel(rt, false)
     disp ~ to_submodel(dispersion, false)
-    k := disp.k
 
+    k := disp.k
     log_R := _log_R
 
     T = typeof(inc.μ)
-
     T_onset = Vector{T}(undef, d.N)
     for i in 1:d.N
         T_onset[i] ~ Uniform(d.onset_lo_day[i], d.onset_hi_day[i])
@@ -163,12 +209,11 @@ function.
 
     realtime = d.obs_time !== nothing
 
-    # F_offspring(obs_time − T_onset[src]) is the joint right-truncation
-    # for an observed sourced pair and the binomial thinning factor for
-    # source `src`'s offspring count.
-    thins = realtime ?
-            F_offspring(d.obs_time .- T_onset, inc.dist, delta.dist;
-        alg = foffspring_alg) : T[]
+    Δ = realtime ? d.obs_time .- T_onset : T[]
+    delays ~ to_submodel(
+        combined_delay_model(Δ, inc.dist, delta.dist;
+            foffspring_alg = foffspring_alg), false)
+    thins = delays.p
 
     T_inf = Vector{T}(undef, d.N)
     for i in 1:d.N
@@ -192,14 +237,6 @@ function.
         end
     end
 
-    # Case reproduction number indexed by source onset (per PR #66): the
-    # transmission delay δ centres near zero, so a case's offspring are
-    # infected within roughly a day of the case becoming symptomatic.
-    # Clamp log R(t) so p = k/(k+R) stays strictly in (0, 1) during NUTS
-    # exploration; `safe_nb` floors p as a belt-and-braces fallback.
-    for i in 1:d.N
-        R_i = exp(clamp(log_R_at(T_onset[i], edges, log_R), -50.0, 50.0))
-        R_eff = realtime ? R_i * thins[i] : R_i
-        d.Zobs[i] ~ safe_nb(k, R_eff)
-    end
+    cases ~ to_submodel(
+        case_model(d.Zobs, T_onset, edges, log_R, k, thins), false)
 end
