@@ -24,9 +24,9 @@ using CairoMakie
 # Both views condition on the same set of cases (those known to have been infected by `obs_date`) but only the corrected real-time fit needs to recover the full incubation and transmission distributions from right-truncated observations.
 # If the corrections work, the two posteriors should agree.
 #
-# A single full retrospective fit on the closed-out outbreak is shared across all three cut-offs and shown for scientific interest.
+# A single full retrospective fit on the closed-out outbreak is shared across both cut-offs and shown for scientific interest.
 
-obs_dates = [Date("2018-12-15"), Date("2018-12-31"), Date("2019-01-07")]
+obs_dates = [Date("2018-12-31"), Date("2019-01-07")]
 ll = load_linelist()
 t0_ref = minimum(ll.onset_date) - Day(60)
 seed = 20260512
