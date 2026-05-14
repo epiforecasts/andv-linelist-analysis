@@ -57,7 +57,7 @@ makedocs(;
     )
 )
 
-deploydocs(;
+DocumenterVitepress.deploydocs(;
     repo = "github.com/epiforecasts/andv-linelist-analysis",
     target = "build",
     branch = "gh-pages",
