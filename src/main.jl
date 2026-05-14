@@ -25,13 +25,13 @@ initialisation. Override `adtype` to swap backends (e.g. Enzyme).
 """
 function sample_fit(model;
         samples::Integer = 1000,
-        chains::Integer = max(2, min(Threads.nthreads(), 4)),
+        chains::Integer = 4,
         target_accept::Real = 0.95,
-        seed::Union{Nothing, Integer} = nothing,
+        seed::Integer = 20260508,
         progress::Bool = false,
         adtype = AutoMooncake(; config = Mooncake.Config())
 )
-    seed === nothing || Random.seed!(seed)
+    Random.seed!(seed)
     return sample(
         model,
         NUTS(target_accept; adtype), MCMCThreads(), samples, chains;
@@ -69,7 +69,7 @@ function analyse(;
         output = OUTPUT_DIR,
         figures = FIGURES_DIR,
         samples = 1000,
-        chains = max(2, min(Threads.nthreads(), 4)),
+        chains = 4,
         seed = 20260508,
         progress = true,
         plots = true,
@@ -164,9 +164,9 @@ function main(args)
         arg_type = Int
         default = 1000
         "--chains", "-c"
-        help = "number of parallel chains (default: clamp(Threads.nthreads(), 2, 4))"
+        help = "number of parallel chains"
         arg_type = Int
-        default = max(2, min(Threads.nthreads(), 4))
+        default = 4
         "--seed", "-s"
         help = "random seed"
         arg_type = Int

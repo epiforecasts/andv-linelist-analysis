@@ -11,12 +11,11 @@ using DataFramesMeta: @select, @transform, @subset, @combine, @by, @rtransform,
                       @rsubset, @orderby, @rename
 using Dates: Dates, Date, Day, dayofweek
 using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
-                     Uniform, logpdf, logcdf, cdf, pdf
+                     Uniform, Gamma, Poisson, logpdf, logcdf, cdf, pdf
 using DocStringExtensions: TYPEDSIGNATURES
 using Enzyme: Enzyme
 using Integrals: IntegralProblem, GaussLegendre, solve
 import FastGaussQuadrature  # activates Integrals' GaussLegendre node extension
-using MCMCChains: MCMCChains
 using Mooncake: Mooncake
 using PairPlots: PairPlots, pairplot
 using Makie: Makie, Figure, Axis, Legend, Theme, Auto, BarPlot, Hist,
@@ -41,9 +40,10 @@ include("main.jl")
 
 export load_linelist, build_data, bin_edges_day, log_R_at, bin_labels
 export joint_model, joint_model_def
-export incubation_model, transmission_delta_model, random_walk_rt_model
+export incubation_model, transmission_delta_model, random_walk_rt_model,
+       nb_dispersion_model
 export F_offspring
-export filter_realtime, filter_by_exposure
+export filter_realtime, filter_by_exposure, predict_controlled_outbreak
 export diagnostics, diagnostics_table, summary_table
 export vector_chain, summarise, save_posterior
 export plot_data, plot_rt, plot_pair, plot_predictive_distributions

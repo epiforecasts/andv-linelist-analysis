@@ -113,3 +113,94 @@ function F_offspring(ts::AbstractVector, inc_dist, δ_dist;
     prob = IntegralProblem(_f_offspring_integrand, δ_bounds, p)
     return solve(prob, alg).u
 end
+
+"""
+$(TYPEDSIGNATURES)
+
+Controlled-outbreak counterfactual: for each posterior draw, sum the
+predicted future onsets across observed sources, assuming no further
+transmission after `obs_time`. Each observed source contributes a
+`Poisson(λ_i · (1 − p_i))` term where `λ_i | Z_obs[i], k, R_i, p_i`
+follows the conjugate Gamma posterior of the NB-binomial-thinning
+model: `Gamma(k + Z_obs[i], R_i / (k + R_i · p_i))` (scale form),
+with `p_i = F_offspring(obs_time − T_onset[i])`. Conditioning on each
+source's observed offspring count `Z_obs[i]` sharpens the prediction
+relative to the naive marginal NB(k, R_i (1 − p_i)).
+
+Also returns the count of cases with onset strictly after `obs_time`
+in the supplied (full) line list, as a comparator for the
+counterfactual: the realised count lies below the predicted band if
+control were achieved at the cut-off, above if transmission continued.
+
+# Arguments
+- `chn`: chain from a real-time `analyse(; obs_time, ...)` fit.
+- `post`: posterior summary returned by `summarise(chn)` (or
+  the second return value of `analyse`).
+- `ll`: full line-list `DataFrame` (not the obs_time-filtered subset).
+- `obs_time`: cut-off `Date` used to fit `chn`.
+- `t0`: time origin `Date` used to fit `chn`.
+
+# Keyword Arguments
+- `foffspring_alg`: quadrature rule for `F_offspring`. Defaults to
+  `GaussLegendre(; n = 80)`.
+- `inc_dist`: two-argument constructor for the incubation period
+  distribution, called as `inc_dist(μ_inc, σ_inc)` per posterior draw.
+  Defaults to `LogNormal`; override to match an alternative incubation
+  parameterisation in the joint model.
+- `delta_dist`: two-argument constructor for the transmission timing
+  distribution, called as `delta_dist(μ_δ, σ_δ)`. Defaults to `Normal`.
+- `rng`: RNG used for posterior-predictive draws.
+"""
+function predict_controlled_outbreak(chn, post, ll,
+        obs_time::Date, t0::Date;
+        foffspring_alg = _F_OFFSPRING_ALG,
+        inc_dist = LogNormal,
+        delta_dist = Normal,
+        rng = Random.MersenneTwister(2026))
+    ll_rt = filter_realtime(ll, obs_time)
+    d = build_data(ll_rt; obs_time = obs_time, t0 = t0)
+    edges = bin_edges_day(d.t0)
+    T = eltype(edges)
+    obs_offset = T(Dates.value(obs_time - d.t0))
+    edges = edges[edges .<= obs_offset]
+    if isempty(edges) || edges[end] < obs_offset
+        push!(edges, obs_offset)
+    end
+
+    (; μ_inc, σ_inc, μ_δ, σ_δ, k) = post
+    log_R = post.log_R_chain
+    T_on = vector_chain(chn, :T_onset)
+
+    n_draws = length(k)
+    N = d.N
+    Z_obs = d.Zobs
+    future_total = Vector{Int}(undef, n_draws)
+
+    for d_idx in 1:n_draws
+        inc = inc_dist(μ_inc[d_idx], σ_inc[d_idx])
+        δd = delta_dist(μ_δ[d_idx], σ_δ[d_idx])
+        k_d = k[d_idx]
+        logR_d = [log_R[b][d_idx] for b in eachindex(log_R)]
+        T_d = [T_on[i][d_idx] for i in 1:N]
+
+        Δ = [obs_offset - T_d[i] for i in 1:N]
+        p_vec = F_offspring(Δ, inc, δd; alg = foffspring_alg)
+
+        zsum = 0
+        for i in 1:N
+            R_i = exp(clamp(log_R_at(T_d[i], edges, logR_d),
+                -T(50), T(50)))
+            p_i = p_vec[i]
+            shape_post = k_d + Z_obs[i]
+            scale_post = R_i / (k_d + R_i * p_i)
+            λ_i = rand(rng, Gamma(shape_post, scale_post))
+            zsum += rand(rng, Poisson(λ_i * (one(T) - p_i)))
+        end
+        future_total[d_idx] = zsum
+    end
+
+    actual_future = sum(ll.onset_date .> obs_time)
+    return (; future_samples = future_total,
+        actual_future,
+        n_obs = N)
+end

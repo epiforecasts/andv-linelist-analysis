@@ -26,8 +26,7 @@ include("test_recovery.jl")
     end
 
     @testset "Stale deps" begin
-        Aqua.test_stale_deps(TransmissionLinelist;
-            ignore = [:CairoMakie])
+        Aqua.test_stale_deps(TransmissionLinelist)
     end
 
     @testset "Deps compat" begin

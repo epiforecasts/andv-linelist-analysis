@@ -51,10 +51,10 @@ Returns `(dist = Normal(μ_δ, σ_δ), μ, σ)`.
 - `μ_prior`: prior on the population mean `μ_δ`. Defaults to
   `Normal(0.0, 5.0)`.
 - `σ_prior`: prior on the population SD `σ_δ`, constrained positive.
-  Defaults to `truncated(Normal(1.0, 1.0); lower = 0)`.
+  Defaults to `truncated(Normal(1.0, 0.5); lower = 0)`.
 """
 @model function transmission_delta_model(μ_prior = Normal(0.0, 5.0),
-        σ_prior = truncated(Normal(1.0, 1.0); lower = 0))
+        σ_prior = truncated(Normal(1.0, 0.5); lower = 0))
     μ_δ ~ μ_prior
     σ_δ ~ σ_prior
     return (; dist = Normal(μ_δ, σ_δ), μ = μ_δ, σ = σ_δ)
@@ -72,18 +72,35 @@ Returns the length-`n_knots` `log_R` vector evaluated at the knot dates;
 
 # Keyword Arguments
 - `init_prior`: prior on the initial log R(t) value `log_R_init`. Defaults
-  to `Normal(log(1.5), 1.0)`.
+  to `Normal(log(1.5), 0.5)`.
 - `sigma_prior`: prior on the random walk step SD `σ_rw`, constrained
-  positive. Defaults to `truncated(Normal(0.0, 0.2); lower = 0)`.
+  positive. Defaults to `truncated(Normal(0.0, 0.5); lower = 0)`.
 """
 @model function random_walk_rt_model(n_knots::Integer;
-        init_prior = Normal(log(1.5), 1.0),
-        sigma_prior = truncated(Normal(0.0, 0.2); lower = 0))
+        init_prior = Normal(log(1.5), 0.5),
+        sigma_prior = truncated(Normal(0.0, 0.5); lower = 0))
     σ_rw ~ sigma_prior
     log_R_init ~ init_prior
     T = typeof(log_R_init)
     ε ~ Turing.filldist(Normal(zero(T), one(T)), n_knots - 1)
     return vcat(log_R_init, log_R_init .+ accumulate(+, σ_rw .* ε))
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Model for the negative binomial dispersion `k` using the Stan-default
+`1/√k` reparameterisation. Samples `phi_inv_sqrt` from `phi_prior` and
+returns `(; k = 1 / phi_inv_sqrt^2, phi_inv_sqrt)`.
+
+# Arguments
+- `phi_prior`: prior on `1/√k`, constrained positive. Defaults to
+  `truncated(Normal(0.0, 1.0); lower = 0)`.
+"""
+@model function nb_dispersion_model(
+        phi_prior = truncated(Normal(0.0, 1.0); lower = 0))
+    phi_inv_sqrt ~ phi_prior
+    return (; k = 1.0 / phi_inv_sqrt^2, phi_inv_sqrt)
 end
 
 """
@@ -120,18 +137,20 @@ function.
   Defaults to `transmission_delta_model()`.
 - `rt`: Turing submodel for the log R(t) random walk. Defaults to
   `random_walk_rt_model(length(edges))`.
-- `k_prior`: prior on the negative binomial dispersion `k`, constrained
-  positive. Defaults to `truncated(Normal(0.3, 0.5); lower = 0)`.
+- `dispersion`: Turing submodel for the NB dispersion `k` (via the
+  Stan-default `1/√k` reparameterisation). Defaults to
+  `nb_dispersion_model()`; swap to plug in a different `phi_prior`.
 """
 @model function joint_model_def(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
         incubation = incubation_model(),
         transmission = transmission_delta_model(),
         rt = random_walk_rt_model(length(edges)),
-        k_prior = truncated(Normal(0.3, 0.5); lower = 0))
+        dispersion = nb_dispersion_model())
     inc ~ to_submodel(incubation, false)
     delta ~ to_submodel(transmission, false)
     _log_R ~ to_submodel(rt, false)
-    k ~ k_prior
+    disp ~ to_submodel(dispersion, false)
+    k := disp.k
 
     log_R := _log_R
 

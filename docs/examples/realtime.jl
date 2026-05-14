@@ -164,6 +164,50 @@ let
     fig
 end
 
+# ## Controlled-outbreak projection
+#
+# At each `obs_date`, conditional on the corrected real-time posterior, the number of future symptomatic cases assuming **no further transmission** after the cut-off.
+# This is the "what if control is achieved now" forecast: secondaries already infected by `obs_time` continue to complete their incubation and become symptomatic, but no new infections occur.
+# Each observed source contributes `Z_future[i] ~ Poisson(λ_i (1 − F_off_i))` where `λ_i | Z_obs[i]` follows the conjugate Gamma posterior of the NB-binomial-thinning model, sharpening the prediction by conditioning on the source's already-observed offspring count.
+# The realised count of cases with onset strictly after each cut-off is overlaid as a vertical reference; values above the predicted band imply transmission continued past the cut-off in the actual outbreak, values below imply it stalled.
+
+controlled = map(fits_by_date) do fit
+    res = predict_controlled_outbreak(
+        fit.chn_rt, fit.post_rt, ll, fit.obs_date, t0_ref)
+    (; fit.obs_date, fit.n_rt, res.future_samples, res.actual_future)
+end
+
+controlled_df = DataFrame(
+    obs_date = [c.obs_date for c in controlled],
+    n_obs = [c.n_rt for c in controlled],
+    actual_future = [c.actual_future for c in controlled],
+    pred_median = [Int(round(median(c.future_samples)))
+                   for c in controlled],
+    pred_lo10 = [Int(round(quantile(c.future_samples, 0.10)))
+                 for c in controlled],
+    pred_hi90 = [Int(round(quantile(c.future_samples, 0.90)))
+                 for c in controlled])
+show(stdout, MIME"text/plain"(), controlled_df)
+
+let
+    fig = Figure(; size = (1500, 400))
+    for (j, c) in enumerate(controlled)
+        ax = Axis(fig[1, j];
+            xlabel = "Future cases (controlled counterfactual)",
+            ylabel = "Density",
+            title = "obs_date = $(c.obs_date)  (n_obs=$(c.n_rt))")
+        hist!(ax, c.future_samples;
+            bins = 30, normalization = :pdf,
+            color = (:steelblue, 0.4),
+            strokecolor = :steelblue, strokewidth = 1)
+        vlines!(ax, [c.actual_future];
+            color = :darkorange, linewidth = 3,
+            label = "actual = $(c.actual_future)")
+        axislegend(ax; position = :rt)
+    end
+    fig
+end
+
 # ## Reading the figures
 #
 # If the corrected real-time fit reproduces the counterfactual retro posteriors at each cut-off, the corrections are doing their job — the bias from observing only short delays and incomplete clusters has been removed.
