@@ -21,7 +21,7 @@ DocMeta.setdocmeta!(
 # @example / explicit include without going through Vue's MDX parser,
 # which trips on bare `{T}` in the Julia code.
 let ll = load_linelist()
-    d   = build_data(ll)
+    d = build_data(ll)
     src = @code_string TransmissionLinelist.joint_model(d, bin_edges_day(d.t0))
     write(joinpath(@__DIR__, "examples", "joint_model_source.jl"), src)
 end
@@ -31,9 +31,9 @@ end
 const LITERATE_SRC = joinpath(@__DIR__, "examples", "analysis.jl")
 const LITERATE_OUT = joinpath(@__DIR__, "src")
 Literate.markdown(LITERATE_SRC, LITERATE_OUT;
-                  name = "analysis",
-                  flavor = Literate.DocumenterFlavor(),
-                  mdstrings = true, credit = false)
+    name = "analysis",
+    flavor = Literate.DocumenterFlavor(),
+    mdstrings = true, credit = false)
 
 makedocs(;
     sitename = "TransmissionLinelist.jl",
@@ -48,13 +48,13 @@ makedocs(;
         "Model" => "model.md",
         "Limitations" => "limitations.md",
         "Analysis walkthrough" => "analysis.md",
-        "API Reference" => "api.md",
+        "API Reference" => "api.md"
     ],
     format = DocumenterVitepress.MarkdownVitepress(;
         repo = "github.com/epiforecasts/andv-linelist-analysis",
         devbranch = "main",
-        devurl = "dev",
-    ),
+        devurl = "dev"
+    )
 )
 
 deploydocs(;
@@ -62,5 +62,5 @@ deploydocs(;
     target = "build",
     branch = "gh-pages",
     devbranch = "main",
-    push_preview = true,
+    push_preview = true
 )
