@@ -27,34 +27,35 @@ using CairoMakie
 # A single full retrospective fit on the closed-out outbreak is shared across all three cut-offs and shown for scientific interest.
 
 obs_dates = [Date("2018-12-15"), Date("2018-12-31"), Date("2019-01-07")]
-ll        = load_linelist()
-t0_ref    = minimum(ll.onset_date) - Day(60)
-seed      = 20260512
-tmp       = (output = mktempdir(), figures = mktempdir())
+ll = load_linelist()
+t0_ref = minimum(ll.onset_date) - Day(60)
+seed = 20260512
+tmp = (output = mktempdir(), figures = mktempdir())
 
 # Full retrospective fit (independent of `obs_date`, fit once).
 
-chn_retro, post_retro = analyse(; data = ll, t0 = t0_ref, seed, tmp...,)
+chn_retro, post_retro = analyse(; data = ll, t0 = t0_ref, seed, tmp...)
 
 # At each cut-off, fit the counterfactual retrospective (exposure-filtered, no `obs_time`) and the corrected real-time view (whole line list, `obs_time = obs_date`).
 
 fits_by_date = map(obs_dates) do obs_date
     ll_truth = filter_by_exposure(ll, obs_date)
-    ll_rt    = filter_realtime(ll, obs_date)
-    chn_truth, post_truth = analyse(;
-        data = ll_truth, t0 = t0_ref, seed, tmp...,)
-    chn_rt,    post_rt    = analyse(;
-        data = ll, obs_time = obs_date, t0 = t0_ref, seed, tmp...,)
+    ll_rt = filter_realtime(ll, obs_date)
+    chn_truth,
+    post_truth = analyse(;
+        data = ll_truth, t0 = t0_ref, seed, tmp...)
+    chn_rt,
+    post_rt = analyse(;
+        data = ll, obs_time = obs_date, t0 = t0_ref, seed, tmp...)
     (; obs_date,
-       n_truth = nrow(ll_truth), n_rt = nrow(ll_rt),
-       chn_truth, post_truth, chn_rt, post_rt)
+        n_truth = nrow(ll_truth), n_rt = nrow(ll_rt),
+        chn_truth, post_truth, chn_rt, post_rt)
 end
 
-# All fits share R(t) bin edges by pinning `t0` to `t0_ref` so `bin_edges_day(d.t0)` returns identical edges across fits.
-
-@assert length(post_retro.log_R_chain) ==
-        length(fits_by_date[1].post_truth.log_R_chain) ==
-        length(fits_by_date[1].post_rt.log_R_chain)
+# Retrospective fits share `t0_ref`, so their knots are aligned.
+# Corrected real-time fits truncate the bin edges at `obs_date`, so their
+# `log_R_chain` is shorter (no knots past the cut-off); panels below
+# overlay each fit on its own bin index range.
 
 # ## Sampler diagnostics per fit
 #
@@ -63,24 +64,24 @@ end
 
 function _diag_row(chn, obs_date, fit_kind, n_cases)
     d = diagnostics_table(chn)
-    return (obs_date    = obs_date,
-            fit_kind    = fit_kind,
-            N_cases     = n_cases,
-            rhat_max    = d.rhat_max[1],
-            n_divergent = d.divergences[1],
-            wall_sec    = d.runtime_seconds[1])
+    return (obs_date = obs_date,
+        fit_kind = fit_kind,
+        N_cases = n_cases,
+        rhat_max = d.rhat_max[1],
+        n_divergent = d.divergences[1],
+        wall_sec = d.runtime_seconds[1])
 end
 
 diag_rows = NamedTuple[]
 push!(diag_rows,
-      _diag_row(chn_retro, missing, "full retro", nrow(ll)))
+    _diag_row(chn_retro, missing, "full retro", nrow(ll)))
 for fit in fits_by_date
     push!(diag_rows,
-          _diag_row(fit.chn_truth, fit.obs_date, "retro",
-                    fit.n_truth))
+        _diag_row(fit.chn_truth, fit.obs_date, "retro",
+            fit.n_truth))
     push!(diag_rows,
-          _diag_row(fit.chn_rt, fit.obs_date, "realtime",
-                    fit.n_rt))
+        _diag_row(fit.chn_rt, fit.obs_date, "realtime",
+            fit.n_rt))
 end
 diag_df = DataFrame(diag_rows)
 show(stdout, MIME"text/plain"(), diag_df)
@@ -91,12 +92,13 @@ show(stdout, MIME"text/plain"(), diag_df)
 # Posterior medians with 80% CrI ribbons; bin indices are comparable across panels because `t0_ref` is shared.
 
 function rt_quantiles(post)
-    return (lo  = [quantile(exp.(post.log_R_chain[b]), 0.10)
-                   for b in eachindex(post.log_R_chain)],
-            med = [quantile(exp.(post.log_R_chain[b]), 0.50)
-                   for b in eachindex(post.log_R_chain)],
-            hi  = [quantile(exp.(post.log_R_chain[b]), 0.90)
-                   for b in eachindex(post.log_R_chain)])
+    return (
+        lo = [quantile(exp.(post.log_R_chain[b]), 0.10)
+              for b in eachindex(post.log_R_chain)],
+        med = [quantile(exp.(post.log_R_chain[b]), 0.50)
+               for b in eachindex(post.log_R_chain)],
+        hi = [quantile(exp.(post.log_R_chain[b]), 0.90)
+              for b in eachindex(post.log_R_chain)])
 end
 
 let
@@ -104,20 +106,20 @@ let
     fig = Figure(; size = (1500, 500))
     for (j, fit) in enumerate(fits_by_date)
         ax = Axis(fig[1, j];
-                  xlabel = "Bin index", ylabel = "R(t) (80% CrI)",
-                  title  = "obs_date = $(fit.obs_date)",
-                  limits = (nothing, (0.0, 4.0)))
+            xlabel = "Bin index", ylabel = "R(t) (80% CrI)",
+            title = "obs_date = $(fit.obs_date)",
+            limits = (nothing, (0.0, 4.0)))
         panel_fits = [
             ("counterfactual retro", fit.post_truth),
-            ("corrected real-time",  fit.post_rt),
-            ("full retrospective",   post_retro),
+            ("corrected real-time", fit.post_rt),
+            ("full retrospective", post_retro)
         ]
         for (i, (name, post)) in enumerate(panel_fits)
             q = rt_quantiles(post)
             b = collect(1:length(q.med))
             band!(ax, b, q.lo, q.hi; color = (colours[i], 0.2))
             lines!(ax, b, q.med; color = colours[i], linewidth = 2,
-                   label = name)
+                label = name)
         end
         hlines!(ax, [1.0]; color = :grey, linestyle = :dash)
         j == 1 && axislegend(ax; position = :rt)
@@ -133,28 +135,28 @@ end
 
 let
     params = [(:μ_inc, "μ_inc"), (:σ_inc, "σ_inc"),
-              (:μ_δ, "μ_δ"),     (:σ_δ, "σ_δ"),
-              (:k,   "k")]
+        (:μ_δ, "μ_δ"), (:σ_δ, "σ_δ"),
+        (:k, "k")]
     colours = [:steelblue, :darkorange, :seagreen]
 
     fig = Figure(; size = (1500, 900))
     for (r, fit) in enumerate(fits_by_date)
         row_fits = [
             ("counterfactual retro", fit.post_truth),
-            ("corrected real-time",  fit.post_rt),
-            ("full retrospective",   post_retro),
+            ("corrected real-time", fit.post_rt),
+            ("full retrospective", post_retro)
         ]
         for (c, (key, label)) in enumerate(params)
             ax = Axis(fig[r, c];
-                      xlabel = label, ylabel = "density",
-                      title  = c == 1 ?
-                               "obs_date = $(fit.obs_date)" : "")
+                xlabel = label, ylabel = "density",
+                title = c == 1 ?
+                        "obs_date = $(fit.obs_date)" : "")
             for (i, (name, post)) in enumerate(row_fits)
                 hist!(ax, getproperty(post, key);
-                      bins = 30, normalization = :pdf,
-                      color = (colours[i], 0.3),
-                      strokecolor = colours[i], strokewidth = 1,
-                      label = name)
+                    bins = 30, normalization = :pdf,
+                    color = (colours[i], 0.3),
+                    strokecolor = colours[i], strokewidth = 1,
+                    label = name)
             end
             r == 1 && c == 1 && axislegend(ax; position = :rt)
         end

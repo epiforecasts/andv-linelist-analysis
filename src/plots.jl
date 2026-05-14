@@ -505,12 +505,15 @@ Returns a `Makie.Figure`.
 # the model's Negative-Binomial likelihood, using the same draw of
 # `(T_inf, log_R, k)`.
 function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
-        edges = bin_edges_day(d.t0))
+        edges = nothing)
     k_draws = _draws(chn, :k)
     log_R = vector_chain(chn, :log_R)
     t_onset = vector_chain(chn, :T_onset)
     n_draws = length(k_draws)
     N = d.N
+
+    knots = edges === nothing ?
+            bin_edges_day(d.t0)[1:length(log_R)] : edges
 
     Z_rep = Matrix{Int}(undef, n_draws, N)
     for d_idx in 1:n_draws
@@ -518,7 +521,7 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
         k_d = k_draws[d_idx]
         for i in 1:N
             t_i = t_onset[i][d_idx]
-            lr = log_R_at(t_i, edges, logR_d)
+            lr = log_R_at(t_i, knots, logR_d)
             R_i = exp(clamp(lr, -50.0, 50.0))
             p = k_d / (k_d + R_i)
             Z_rep[d_idx, i] = rand(rng, NegativeBinomial(k_d, p))
@@ -548,7 +551,7 @@ Bayesian posterior-predictive p-value.
 """
 function z_ppc_summary(chn, d;
         rng = Random.MersenneTwister(1),
-        edges = bin_edges_day(d.t0))
+        edges = nothing)
     Z_rep = _z_ppc_replicate(chn, d; rng, edges)
     n_draws = size(Z_rep, 1)
     Zobs = d.Zobs
@@ -594,7 +597,7 @@ observed counts per case.
 """
 function plot_z_ppc(chn, d;
         rng = Random.MersenneTwister(1),
-        edges = bin_edges_day(d.t0))
+        edges = nothing)
     N = d.N
     Z_rep = _z_ppc_replicate(chn, d; rng, edges)
     n_draws = size(Z_rep, 1)
