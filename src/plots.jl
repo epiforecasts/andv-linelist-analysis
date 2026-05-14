@@ -391,12 +391,12 @@ function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
     return _with_theme() do
         fig = Figure(; size = (1000, 500))
         spec = data(df) *
-               mapping(:t => "Date",
+               mapping(:t => "Date of symptom onset",
                    :R => "R(t)",
                    group = :draw => nonnumeric) *
                visual(Lines, color = (:steelblue, 0.25), linewidth = 1.6)
         ag = draw!(fig[1, 1], spec;
-            axis = (title = "Time-varying reproduction number (weekly knots)",
+            axis = (title = "Case reproduction number (weekly knots)",
                 limits = (nothing, (0.0, ymax))))
         ax = only(ag).axis
         hlines!(ax, [1.0]; color = :grey, linestyle = :dash)
@@ -477,12 +477,12 @@ end
 Posterior-predictive check for the observed offspring counts `Zobs`. For
 each posterior draw `d` and each case `i`, samples a replicated offspring
 count `Z_rep[i, d] ~ NegativeBinomial(k[d], k[d]/(k[d] + R_i))`, where
-`R_i = exp(clamp(log_R_at(T_inf[i, d], edges, log_R[:, d]), -50, 50))`.
+`R_i = exp(clamp(log_R_at(T_onset[i, d], edges, log_R[:, d]), -50, 50))`.
 The clamp matches the model's likelihood.
 
-Joint-draw: `T_inf[i]`, `log_R[:]`, and `k` are taken from the same
+Joint-draw: `T_onset[i]`, `log_R[:]`, and `k` are taken from the same
 posterior draw, so the PPC reflects full posterior uncertainty in case
-infection times alongside the time-varying R(t) and dispersion.
+onset times alongside the time-varying R(t) and dispersion.
 
 Compares the count of cases at each `Z` value (0, 1, 2, …) between the
 observed line list and the replicated distribution.
@@ -506,7 +506,7 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
         edges = bin_edges_day(d.t0))
     k_draws = _draws(chn, :k)
     log_R = vector_chain(chn, :log_R)
-    t_inf = vector_chain(chn, :T_inf)
+    t_onset = vector_chain(chn, :T_onset)
     n_draws = length(k_draws)
     N = d.N
 
@@ -515,7 +515,7 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
         logR_d = [log_R[b][d_idx] for b in eachindex(log_R)]
         k_d = k_draws[d_idx]
         for i in 1:N
-            t_i = t_inf[i][d_idx]
+            t_i = t_onset[i][d_idx]
             lr = log_R_at(t_i, edges, logR_d)
             R_i = exp(clamp(lr, -50.0, 50.0))
             p = k_d / (k_d + R_i)
