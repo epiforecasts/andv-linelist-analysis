@@ -36,7 +36,10 @@ Literate.markdown(LITERATE_SRC, LITERATE_OUT;
     mdstrings = true, credit = false)
 
 makedocs(;
-    sitename = "Andes virus — joint estimation of incubation, transmission timing, and R(t)",
+    # Short label for the rendered Vitepress sidebar header and browser tab.
+    # The full descriptive title lives as the h1 of `docs/src/index.md`, so
+    # the rendered landing page still leads with the long form.
+    sitename = "ANDV linelist analysis",
     authors = "Sebastian Funk, Sam Abbott, and contributors",
     clean = true,
     doctest = false,

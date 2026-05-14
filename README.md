@@ -2,6 +2,9 @@
 
 [![Docs (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://epiforecasts.github.io/andv-linelist-analysis/dev)
 
+Full documentation — model description, analysis walkthrough, API reference — at
+<https://epiforecasts.github.io/andv-linelist-analysis/dev>.
+
 A Julia + Turing model fitted to the Epuyén 2018–19 Andes hantavirus outbreak
 ([Martínez et al. 2020, NEJM](https://doi.org/10.1056/NEJMoa2009040)).
 
@@ -141,7 +144,7 @@ The reporting follows the recommendations of:
 
 ## Authors
 
-Sebastian Funk, Sam Abbott — London School of Hygiene & Tropical Medicine.
+Sebastian Funk, Sam Abbott (London School of Hygiene & Tropical Medicine).
 
 ## License
 
