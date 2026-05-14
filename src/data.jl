@@ -99,8 +99,9 @@ d  = build_data(ll)
 d.N
 ```
 """
-function build_data(ll; obs_time::Union{Nothing,Date,AbstractVector} = nothing,
-                    t0::Union{Nothing,Date} = nothing)
+function build_data(
+        ll; obs_time::Union{Nothing, Date, AbstractVector} = nothing,
+        t0::Union{Nothing, Date} = nothing)
     t0 = t0 === nothing ? minimum(ll.onset_date) - Day(60) : t0
 
     onset_lo_day = Float64.(Dates.value.(ll.onset_lower .- t0))
@@ -120,8 +121,8 @@ function build_data(ll; obs_time::Union{Nothing,Date,AbstractVector} = nothing,
     # secondaries in the line list attributed to i as their source. Read
     # directly from the Z column of the line list.
     return (; t0, onset_lo_day, onset_hi_day, exp_lo_day, exp_hi_day,
-            source_idx, Zobs = Int.(ll.Z), N = nrow(ll),
-            obs_time = obs_time_day)
+        source_idx, Zobs = Int.(ll.Z), N = nrow(ll),
+        obs_time = obs_time_day)
 end
 
 # Encode the optional per-case observation cut-off into days since `t0`.
@@ -138,7 +139,8 @@ function _encode_obs_time(dates::AbstractVector, t0, N, exp_hi_day)
     out = Vector{Float64}(undef, N)
     for i in 1:N
         d = dates[i]
-        ismissing(d) && error("obs_time[$i] is missing; supply a Date for every case")
+        ismissing(d) &&
+            error("obs_time[$i] is missing; supply a Date for every case")
         out[i] = Float64(Dates.value(d - t0))
         if !ismissing(exp_hi_day[i]) && out[i] < exp_hi_day[i]
             error("obs_time[$i] ($(d)) precedes the upper exposure bound for that case")
@@ -184,7 +186,7 @@ named tuple from [`build_data`](@ref), and the weekly knot edges from
 [`bin_edges_day`](@ref).
 """
 function joint_model(ll)
-    d     = build_data(ll)
+    d = build_data(ll)
     edges = bin_edges_day(d.t0)
     return (; model = joint_model_def(d, edges), d, edges)
 end

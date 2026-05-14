@@ -14,7 +14,8 @@ function _f_offspring_mc(t, μ_inc, σ_inc, μ_δ, σ_δ; n = 100_000, seed = 42
     del = Normal(μ_δ, σ_δ)
     hits = 0
     for _ in 1:n
-        y = rand(rng, del); x2 = rand(rng, inc)
+        y = rand(rng, del);
+        x2 = rand(rng, inc)
         y + x2 <= t && (hits += 1)
     end
     return hits / n
@@ -22,9 +23,9 @@ end
 
 @testset "F_offspring: value tracks a Monte Carlo reference" begin
     cases = [
-        (30.0, 3.0, 0.5, 0.0,  1.0),
-        (50.0, 3.0, 0.5, 1.0,  2.0),
-        (80.0, 3.0, 0.6, -2.0, 1.5),
+        (30.0, 3.0, 0.5, 0.0, 1.0),
+        (50.0, 3.0, 0.5, 1.0, 2.0),
+        (80.0, 3.0, 0.6, -2.0, 1.5)
     ]
     for (t, μ_inc, σ_inc, μ_δ, σ_δ) in cases
         v_qr = F_offspring([t], LogNormal(μ_inc, σ_inc), Normal(μ_δ, σ_δ))[1]
@@ -38,10 +39,10 @@ end
     inc = LogNormal(3.0, 0.5)
     del = Normal(0.0, 1.0)
     F(t) = F_offspring([t], inc, del)[1]
-    @test F(0.0)   <= 1e-6
+    @test F(0.0) <= 1e-6
     @test F(-50.0) <= 1e-10
-    @test F(1.0)   < F(10.0)
-    @test F(10.0)  < F(80.0)
+    @test F(1.0) < F(10.0)
+    @test F(10.0) < F(80.0)
     @test F(300.0) > 0.999
 end
 

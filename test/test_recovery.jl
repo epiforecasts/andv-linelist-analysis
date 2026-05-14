@@ -51,7 +51,8 @@ end
     y = rand(Normal(μ_true, σ_true), N)
 
     @model function wrap_delta(y)
-        del ~ to_submodel(TransmissionLinelist.transmission_delta_model(), false)
+        del ~
+        to_submodel(TransmissionLinelist.transmission_delta_model(), false)
         Turing.@addlogprob! sum(logpdf.(del.dist, y))
     end
 
@@ -73,7 +74,7 @@ end
     # Smooth truth: gentle decline in log-R over the knots.
     σ_rw_true = 0.15
     log_R_true = cumsum(vcat(log(1.4),
-                             σ_rw_true .* randn(n_knots - 1) .- 0.05))
+        σ_rw_true .* randn(n_knots - 1) .- 0.05))
     R_true = exp.(log_R_true)
 
     # Per-knot NB offspring counts: many cases per bin so the bin-level
@@ -81,7 +82,7 @@ end
     k_nb = 5.0
     cases_per_bin = 60
     Zobs = [rand(NegativeBinomial(k_nb,
-                                  k_nb / (k_nb + R_true[b])))
+                k_nb / (k_nb + R_true[b])))
             for b in 1:n_knots, _ in 1:cases_per_bin]
     counts = vec(sum(Zobs, dims = 2))   # length n_knots
     n_per_bin = fill(cases_per_bin, n_knots)
@@ -93,12 +94,12 @@ end
             R = exp(clamp(log_R[b], -50.0, 50.0))
             # Sum of n iid NB(k, p) is NB(n*k, p).
             counts[b] ~ NegativeBinomial(n_per_bin[b] * k_nb,
-                                         k_nb / (k_nb + R))
+                k_nb / (k_nb + R))
         end
     end
 
     chn = sample(wrap_rt(counts, n_per_bin, k_nb), NUTS(), 500;
-                 progress = false)
+        progress = false)
 
     # Reconstruct log_R draws from σ_rw, log_R_init, ε.
     σ_rw = _chain_vec(chn, :σ_rw)
@@ -113,7 +114,7 @@ end
         ch = ((d - 1) ÷ n_iters) + 1
         ε_d = [ε_stack[it, ch, j] for j in 1:(n_knots - 1)]
         log_R_draws[d, :] = vcat(logR0[d],
-                                 logR0[d] .+ accumulate(+, σ_rw[d] .* ε_d))
+            logR0[d] .+ accumulate(+, σ_rw[d] .* ε_d))
     end
 
     covered = 0
@@ -129,7 +130,7 @@ end
 @testset "F_offspring: matches QuadGKJL high-precision reference" begin
     inc = LogNormal(3.0, 0.5)
     del = Normal(0.0, 1.0)
-    t   = 30.0
+    t = 30.0
 
     # Same integrand layout as `_f_offspring_integrand` but for a scalar
     # `t`, so we can run an adaptive QuadGK reference (gold-standard for
@@ -138,9 +139,9 @@ end
     f_scalar(δ, p) = (t - δ) > 0 ?
                      cdf(p.inc, t - δ) * pdf(p.del, δ) : 0.0
     prob = IntegralProblem(f_scalar, (-30.0, 30.0),
-                           (; inc = inc, del = del))
+        (; inc = inc, del = del))
     v_ref = solve(prob, QuadGKJL(); reltol = 1e-12, abstol = 1e-14).u
-    v_gl  = F_offspring([t], inc, del)[1]
+    v_gl = F_offspring([t], inc, del)[1]
     # Production uses GaussLegendre(n=80), whose absolute error on this
     # integrand is ~1e-6 at t=30. Use a 5e-6 absolute tolerance — tight
     # enough to detect any regression in node count or bounds, loose

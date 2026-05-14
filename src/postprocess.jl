@@ -90,14 +90,16 @@ and print the headline summary table via [`summary_table`](@ref).
 - `chn`: FlexiChain returned by [`sample_fit`](@ref).
 """
 function summarise(chn)
-    μ_inc = vec(collect(chn[:μ_inc])); σ_inc = vec(collect(chn[:σ_inc]))
-    μ_δ   = vec(collect(chn[:μ_δ]));   σ_δ   = vec(collect(chn[:σ_δ]))
-    k_s   = vec(collect(chn[:k]))
+    μ_inc = vec(collect(chn[:μ_inc]));
+    σ_inc = vec(collect(chn[:σ_inc]))
+    μ_δ = vec(collect(chn[:μ_δ]));
+    σ_δ = vec(collect(chn[:σ_δ]))
+    k_s = vec(collect(chn[:k]))
 
     mean_inc = exp.(μ_inc .+ σ_inc .^ 2 ./ 2)
-    var_inc  = exp.(2μ_inc .+ σ_inc .^ 2) .* (exp.(σ_inc .^ 2) .- 1)
+    var_inc = exp.(2μ_inc .+ σ_inc .^ 2) .* (exp.(σ_inc .^ 2) .- 1)
     mean_gi_si = μ_δ .+ mean_inc
-    sd_gi_si   = sqrt.(σ_δ .^ 2 .+ var_inc)
+    sd_gi_si = sqrt.(σ_δ .^ 2 .+ var_inc)
 
     p_pre = Dict{Float64, Vector{Float64}}()
     for τ in (0.0, -1.0, -2.0)
