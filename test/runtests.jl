@@ -5,7 +5,8 @@ using Aqua
 # would run the full `analyse()` pipeline at the end of the test script.
 import TransmissionLinelist
 using TransmissionLinelist: F_offspring
-using DifferentiationInterface: AutoMooncake, AutoForwardDiff, value_and_gradient
+using DifferentiationInterface: AutoMooncake, AutoForwardDiff,
+                                value_and_gradient
 using Mooncake: Mooncake
 
 include("test_realtime.jl")
@@ -25,7 +26,8 @@ include("test_recovery.jl")
     end
 
     @testset "Stale deps" begin
-        Aqua.test_stale_deps(TransmissionLinelist)
+        Aqua.test_stale_deps(TransmissionLinelist;
+            ignore = [:CairoMakie])
     end
 
     @testset "Deps compat" begin

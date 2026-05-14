@@ -28,7 +28,7 @@ Model sampling the log-mean `μ_inc` and log-SD `σ_inc` of a LogNormal
 incubation period. Returns `(dist = LogNormal(μ_inc, σ_inc), μ, σ)`.
 """
 @model function incubation_model(μ_prior = Normal(3.0, 0.5),
-                                 σ_prior = truncated(Normal(0.0, 0.5); lower = 0))
+        σ_prior = truncated(Normal(0.0, 0.5); lower = 0))
     μ_inc ~ μ_prior
     σ_inc ~ σ_prior
     return (; dist = LogNormal(μ_inc, σ_inc), μ = μ_inc, σ = σ_inc)
@@ -41,7 +41,7 @@ Model for the population mean `μ_δ` and SD `σ_δ` of the per-pair
 transmission timing. Returns `(dist = Normal(μ_δ, σ_δ), μ, σ)`.
 """
 @model function transmission_delta_model(μ_prior = Normal(0.0, 5.0),
-                                         σ_prior = truncated(Normal(0.0, 1.0); lower = 0))
+        σ_prior = truncated(Normal(1.0, 1.0); lower = 0))
     μ_δ ~ μ_prior
     σ_δ ~ σ_prior
     return (; dist = Normal(μ_δ, σ_δ), μ = μ_δ, σ = σ_δ)
@@ -57,9 +57,9 @@ the length-`n_knots` `log_R` vector evaluated at the knot dates;
 `log_R_at` linearly interpolates between knots.
 """
 @model function random_walk_rt_model(n_knots::Integer;
-                                     init_prior  = Normal(log(1.5), 1.0),
-                                     sigma_prior = truncated(Normal(0.0, 0.2); lower = 0))
-    σ_rw       ~ sigma_prior
+        init_prior = Normal(log(1.5), 1.0),
+        sigma_prior = truncated(Normal(0.0, 0.2); lower = 0))
+    σ_rw ~ sigma_prior
     log_R_init ~ init_prior
     T = typeof(log_R_init)
     ε ~ Turing.filldist(Normal(zero(T), one(T)), n_knots - 1)
@@ -88,14 +88,14 @@ components are passed in as Turing submodels so priors and structural
 choices can be swapped without editing this function.
 """
 @model function joint_model_def(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
-                                incubation   = incubation_model(),
-                                transmission = transmission_delta_model(),
-                                rt           = random_walk_rt_model(length(edges)),
-                                k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
-    inc    ~ to_submodel(incubation, false)
-    delta  ~ to_submodel(transmission, false)
+        incubation = incubation_model(),
+        transmission = transmission_delta_model(),
+        rt = random_walk_rt_model(length(edges)),
+        k_prior = truncated(Normal(0.3, 0.5); lower = 0))
+    inc ~ to_submodel(incubation, false)
+    delta ~ to_submodel(transmission, false)
     _log_R ~ to_submodel(rt, false)
-    k      ~ k_prior
+    k ~ k_prior
 
     log_R := _log_R
 
@@ -112,8 +112,8 @@ choices can be swapped without editing this function.
     # for an observed sourced pair and the binomial thinning factor for
     # source `src`'s offspring count.
     thins = realtime ?
-        F_offspring(d.obs_time .- T_onset, inc.dist, delta.dist;
-                    alg = foffspring_alg) : T[]
+            F_offspring(d.obs_time .- T_onset, inc.dist, delta.dist;
+        alg = foffspring_alg) : T[]
 
     T_inf = Vector{T}(undef, d.N)
     for i in 1:d.N
@@ -121,16 +121,18 @@ choices can be swapped without editing this function.
         if src == 0
             T_inf[i] ~ Uniform(d.onset_lo_day[i] - 80.0, T_onset[i] - 1e-6)
             Turing.@addlogprob! logpdf(inc.dist, T_onset[i] - T_inf[i])
-            realtime && Turing.@addlogprob! -logcdf(inc.dist, d.obs_time[i] - T_inf[i])
+            realtime &&
+                Turing.@addlogprob! -logcdf(inc.dist, d.obs_time[i] - T_inf[i])
         else
             T_inf[i] ~ Uniform(d.exp_lo_day[i],
-                               min(d.exp_hi_day[i], T_onset[i] - 1e-6))
+                min(d.exp_hi_day[i], T_onset[i] - 1e-6))
             if T_inf[i] <= T_inf[src]
                 Turing.@addlogprob! oftype(zero(T), -Inf)
             else
-                Turing.@addlogprob! logpdf(inc.dist,   T_onset[i] - T_inf[i])
-                Turing.@addlogprob! logpdf(delta.dist, T_inf[i]   - T_onset[src])
-                realtime && Turing.@addlogprob! -log(max(thins[src], floatmin(T)))
+                Turing.@addlogprob! logpdf(inc.dist, T_onset[i] - T_inf[i])
+                Turing.@addlogprob! logpdf(delta.dist, T_inf[i] - T_onset[src])
+                realtime &&
+                    Turing.@addlogprob! -log(max(thins[src], floatmin(T)))
             end
         end
     end
@@ -138,7 +140,7 @@ choices can be swapped without editing this function.
     # Clamp log R(t) so p = k/(k+R) stays strictly in (0, 1) during NUTS
     # exploration; `safe_nb` floors p as a belt-and-braces fallback.
     for i in 1:d.N
-        R_i   = exp(clamp(log_R_at(T_inf[i], edges, log_R), -50.0, 50.0))
+        R_i = exp(clamp(log_R_at(T_inf[i], edges, log_R), -50.0, 50.0))
         R_eff = realtime ? R_i * thins[i] : R_i
         d.Zobs[i] ~ safe_nb(k, R_eff)
     end

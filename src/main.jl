@@ -24,19 +24,19 @@ initialisation. Override `adtype` to swap backends (e.g. Enzyme).
   `AutoMooncake(; config = Mooncake.Config())`.
 """
 function sample_fit(model;
-    samples::Integer       = 1000,
-    chains::Integer        = max(2, min(Threads.nthreads(), 4)),
-    target_accept::Real    = 0.95,
-    seed::Union{Nothing,Integer} = nothing,
-    progress::Bool         = false,
-    adtype = AutoMooncake(; config = Mooncake.Config()),
+        samples::Integer = 1000,
+        chains::Integer = max(2, min(Threads.nthreads(), 4)),
+        target_accept::Real = 0.95,
+        seed::Union{Nothing, Integer} = nothing,
+        progress::Bool = false,
+        adtype = AutoMooncake(; config = Mooncake.Config())
 )
     seed === nothing || Random.seed!(seed)
     return sample(
         model,
         NUTS(target_accept; adtype), MCMCThreads(), samples, chains;
         initial_params = fill(DynamicPPL.InitFromPrior(), chains),
-        progress = progress,
+        progress = progress
     )
 end
 
@@ -63,23 +63,23 @@ into `figures/`. Returns `(chain, post)`.
   real-time mode.
 """
 function analyse(;
-    data     = LINELIST_PATH,
-    obs_time::Union{Nothing,Date} = nothing,
-    t0::Union{Nothing,Date}       = nothing,
-    output   = OUTPUT_DIR,
-    figures  = FIGURES_DIR,
-    samples  = 1000,
-    chains   = max(2, min(Threads.nthreads(), 4)),
-    seed     = 20260508,
-    progress = true,
-    plots    = true,
-    foffspring_alg = _F_OFFSPRING_ALG,
+        data = LINELIST_PATH,
+        obs_time::Union{Nothing, Date} = nothing,
+        t0::Union{Nothing, Date} = nothing,
+        output = OUTPUT_DIR,
+        figures = FIGURES_DIR,
+        samples = 1000,
+        chains = max(2, min(Threads.nthreads(), 4)),
+        seed = 20260508,
+        progress = true,
+        plots = true,
+        foffspring_alg = _F_OFFSPRING_ALG
 )
     ll = data isa DataFrame ? data : load_linelist(data)
     if obs_time !== nothing
         ll = filter_realtime(ll, obs_time)
     end
-    d     = build_data(ll; obs_time = obs_time, t0 = t0)
+    d = build_data(ll; obs_time = obs_time, t0 = t0)
     edges = bin_edges_day(d.t0)
     if obs_time !== nothing
         obs_offset = Float64(Dates.value(obs_time - d.t0))
@@ -91,7 +91,7 @@ function analyse(;
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time n_knots=length(edges)
 
     chn = sample_fit(joint_model_def(d, edges, foffspring_alg);
-                     samples, chains, seed, progress)
+        samples, chains, seed, progress)
 
     post = summarise(chn)
     save_posterior(post, joinpath(output, "posterior.csv"))
@@ -101,13 +101,16 @@ function analyse(;
     end
     if plots
         mkpath(figures)
-        _save_makie_figure(plot_rt(chn),                       joinpath(figures, "Rt.png"))
-        _save_makie_figure(plot_delta_sense_check(chn, d),     joinpath(figures, "delta_sense_check.png"))
-        _save_makie_figure(plot_inc_sense_check(chn, d),       joinpath(figures, "inc_sense_check.png"))
-        _save_makie_figure(plot_z_ppc(chn, d),                 joinpath(figures, "z_ppc.png"))
-        _save_makie_figure(plot_prior_predictives(),           joinpath(figures, "prior_predictives.png"))
-        _save_makie_figure(plot_predictive_distributions(chn), joinpath(figures, "predictive_distributions.png"))
-        _save_makie_figure(plot_pair(chn),                     joinpath(figures, "pairplot.png"))
+        _save_makie_figure(plot_rt(chn), joinpath(figures, "Rt.png"))
+        _save_makie_figure(plot_delta_sense_check(chn, d),
+            joinpath(figures, "delta_sense_check.png"))
+        _save_makie_figure(plot_inc_sense_check(chn, d),
+            joinpath(figures, "inc_sense_check.png"))
+        _save_makie_figure(plot_z_ppc(chn, d), joinpath(figures, "z_ppc.png"))
+        _save_makie_figure(plot_prior_predictives(), joinpath(figures, "prior_predictives.png"))
+        _save_makie_figure(plot_predictive_distributions(chn),
+            joinpath(figures, "predictive_distributions.png"))
+        _save_makie_figure(plot_pair(chn), joinpath(figures, "pairplot.png"))
     end
 
     return chn, post
@@ -132,6 +135,15 @@ function _save_makie_figure(fig, path)
     return path
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+CLI entry point invoked by `julia -m TransmissionLinelist`. Parses
+command-line arguments and forwards them to [`analyse`](@ref).
+
+# Arguments
+- `args`: vector of command-line argument strings.
+"""
 function main(args)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
     @add_arg_table! s begin
@@ -152,30 +164,30 @@ function main(args)
         arg_type = Int
         default = 1000
         "--chains", "-c"
-        help     = "number of parallel chains (default: clamp(Threads.nthreads(), 2, 4))"
+        help = "number of parallel chains (default: clamp(Threads.nthreads(), 2, 4))"
         arg_type = Int
-        default  = max(2, min(Threads.nthreads(), 4))
+        default = max(2, min(Threads.nthreads(), 4))
         "--seed", "-s"
-        help     = "random seed"
+        help = "random seed"
         arg_type = Int
-        default  = 20260508
+        default = 20260508
         "--obs-time"
-        help    = "real-time cut-off date (ISO format, e.g. 2018-12-31); " *
-                  "omit for a retrospective fit"
+        help = "real-time cut-off date (ISO format, e.g. 2018-12-31); " *
+               "omit for a retrospective fit"
         default = nothing
     end
     p = parse_args(args, s)
     obs_time = p["obs-time"] === nothing ? nothing : Date(p["obs-time"])
     analyse(;
-        data     = p["data"],
+        data = p["data"],
         obs_time = obs_time,
-        output   = p["output"],
-        figures  = p["figures"],
-        samples  = p["samples"],
-        chains   = p["chains"],
-        seed     = p["seed"],
+        output = p["output"],
+        figures = p["figures"],
+        samples = p["samples"],
+        chains = p["chains"],
+        seed = p["seed"],
         progress = false,
-        plots    = !p["no-figures"]
+        plots = !p["no-figures"]
     )
     return 0
 end
