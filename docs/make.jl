@@ -36,7 +36,7 @@ Literate.markdown(LITERATE_SRC, LITERATE_OUT;
     mdstrings = true, credit = false)
 
 makedocs(;
-    sitename = "TransmissionLinelist.jl",
+    sitename = "Andes virus — joint estimation of incubation, transmission timing, and R(t)",
     authors = "Sebastian Funk, Sam Abbott, and contributors",
     clean = true,
     doctest = false,
