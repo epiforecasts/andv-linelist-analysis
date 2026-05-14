@@ -1,6 +1,6 @@
-module Hantavirus
+module TransmissionLinelist
 
-using ADTypes: AutoMooncake, AutoForwardDiff
+using ADTypes: AutoEnzyme, AutoMooncake, AutoForwardDiff
 using AlgebraOfGraphics: AlgebraOfGraphics, data, mapping, visual, draw!,
                          nonnumeric
 using ArgParse: ArgParseSettings, @add_arg_table!, parse_args
@@ -8,21 +8,23 @@ using Chain: @chain
 using CSV: CSV
 using DataFrames: DataFrame, nrow, eachrow, passmissing, rename!, sort!
 using DataFramesMeta: @select, @transform, @subset, @combine, @by, @rtransform,
-                     @rsubset, @orderby, @rename
+                      @rsubset, @orderby, @rename
 using Dates: Dates, Date, Day, dayofweek
 using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
                      Uniform, logpdf, logcdf, cdf, pdf
+using DocStringExtensions: TYPEDSIGNATURES
+using Enzyme: Enzyme
 using Integrals: IntegralProblem, GaussLegendre, solve
 import FastGaussQuadrature  # activates Integrals' GaussLegendre node extension
+using MCMCChains: MCMCChains
+using Mooncake: Mooncake
+using PairPlots: PairPlots, pairplot
 using Makie: Makie, Figure, Axis, Legend, Theme, Auto, BarPlot, Hist,
              Lines, Scatter, MarkerElement, PolyElement, GridLayout,
              theme_latexfonts, with_theme,
              lines!, scatter!, hist!, hlines!, vlines!, band!,
              barplot!, rangebars!,
              axislegend, rowsize!, colsize!
-using MCMCChains: MCMCChains
-using Mooncake: Mooncake
-using PairPlots: PairPlots, pairplot
 using Printf: @printf, @sprintf
 using Random: Random
 using Statistics: quantile, mean, std

@@ -1,0 +1,22 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: Manifest\.toml
+      - id: end-of-file-fixer
+        exclude: Manifest\.toml
+      - id: check-yaml
+      - id: check-toml
+        exclude: Manifest\.toml
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+  - repo: local
+    hooks:
+      - id: julia-formatter
+        name: JuliaFormatter
+        language: system
+        entry: julia -e 'using JuliaFormatter; format.(ARGS)'
+        types: [julia]
+        pass_filenames: true

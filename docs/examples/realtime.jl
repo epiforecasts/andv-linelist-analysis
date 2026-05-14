@@ -12,7 +12,7 @@
 # The argument is `obs_time − T_onset[src]`, not `obs_time − T_inf[src]` — the source's own incubation is a sampled latent already scored, so the offspring delay reduces to `δ + Inc(sec)`.
 # This page validates the corrections by fitting the same outbreak at three real-time cut-offs and overlaying the resulting R(t) posteriors against a counterfactual retrospective and the full closed-out fit.
 
-using Hantavirus
+using TransmissionLinelist
 using DataFrames: nrow
 using Dates: Date, Day
 using Statistics: quantile

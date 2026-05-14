@@ -1,7 +1,7 @@
 # Limitations
 
 Known caveats of the joint model fit to the Epuyén 2018–19 Andes hantavirus outbreak.
-See [MODEL.md](https://github.com/sbfnk/hantavirus/blob/main/MODEL.md) for the model description.
+See [MODEL.md](https://github.com/epiforecasts/andv-linelist-analysis/blob/main/MODEL.md) for the model description.
 
 ## Exposure encoding pins transmission-timing variability
 

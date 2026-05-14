@@ -1,14 +1,27 @@
 ## Package entry points.
 ## - `sample_fit(model; ...)` runs NUTS on any Turing model.
 ## - `analyse(; ...)` loads data, fits, summarises, and writes outputs.
-## - `main(args)` is the CLI entry point invoked by `julia -m Hantavirus`.
+## - `main(args)` is the CLI entry point invoked by `julia -m TransmissionLinelist`.
 
 """
-    sample_fit(model; samples = 1000, chains = ..., target_accept = 0.95,
-               seed = nothing, progress = false,
-               adtype = AutoMooncake(; config = Mooncake.Config()))
+$(TYPEDSIGNATURES)
 
-Run NUTS on `model` and return the `MCMCChains.Chains` object.
+Run NUTS on `model` and return the sampled chain.
+
+Uses Mooncake as the default AD backend and `InitFromPrior()` chain
+initialisation. Override `adtype` to swap backends (e.g. Enzyme).
+
+# Arguments
+- `model`: a Turing model, e.g. from [`joint_model_def`](@ref).
+
+# Keyword Arguments
+- `samples`: NUTS samples per chain.
+- `chains`: number of parallel chains.
+- `target_accept`: NUTS acceptance target.
+- `seed`: optional random seed.
+- `progress`: show a NUTS progress bar.
+- `adtype`: AD backend for NUTS. Defaults to
+  `AutoMooncake(; config = Mooncake.Config())`.
 """
 function sample_fit(model;
     samples::Integer       = 1000,
@@ -27,6 +40,28 @@ function sample_fit(model;
     )
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Load the line list, fit the joint model, save the posterior summary to
+`output/posterior.csv`, and (unless `plots = false`) write all figures
+into `figures/`. Returns `(chain, post)`.
+
+# Keyword Arguments
+- `data`: path to the line-list CSV, or a pre-loaded `DataFrame`.
+- `obs_time`: optional real-time cut-off `Date`; omit for a retrospective fit.
+- `t0`: optional explicit time origin (`Date`); defaults to
+  `minimum(onset_date) - 60 d`.
+- `output`: directory for `posterior.csv`.
+- `figures`: directory for the figure PNGs.
+- `samples`: NUTS samples per chain.
+- `chains`: number of parallel chains.
+- `seed`: random seed.
+- `progress`: show a NUTS progress bar.
+- `plots`: skip all figure generation when `false`.
+- `foffspring_alg`: integration algorithm used for `F_offspring` in
+  real-time mode.
+"""
 function analyse(;
     data     = LINELIST_PATH,
     obs_time::Union{Nothing,Date} = nothing,
@@ -37,6 +72,7 @@ function analyse(;
     chains   = max(2, min(Threads.nthreads(), 4)),
     seed     = 20260508,
     progress = true,
+    plots    = true,
     foffspring_alg = _F_OFFSPRING_ALG,
 )
     ll = data isa DataFrame ? data : load_linelist(data)
@@ -53,14 +89,19 @@ function analyse(;
     post = summarise(chn)
     save_posterior(post, joinpath(output, "posterior.csv"))
 
-    mkpath(figures)
-    _save_makie_figure(plot_rt(chn),                       joinpath(figures, "Rt.png"))
-    _save_makie_figure(plot_delta_sense_check(chn, d),     joinpath(figures, "delta_sense_check.png"))
-    _save_makie_figure(plot_inc_sense_check(chn, d),       joinpath(figures, "inc_sense_check.png"))
-    _save_makie_figure(plot_z_ppc(chn, d),                 joinpath(figures, "z_ppc.png"))
-    _save_makie_figure(plot_prior_predictives(),           joinpath(figures, "prior_predictives.png"))
-    _save_makie_figure(plot_predictive_distributions(chn), joinpath(figures, "predictive_distributions.png"))
-    _save_makie_figure(plot_pair(chn),                     joinpath(figures, "pairplot.png"))
+    if !plots && figures != FIGURES_DIR
+        @warn "plots=false; --figures path ignored" figures
+    end
+    if plots
+        mkpath(figures)
+        _save_makie_figure(plot_rt(chn),                       joinpath(figures, "Rt.png"))
+        _save_makie_figure(plot_delta_sense_check(chn, d),     joinpath(figures, "delta_sense_check.png"))
+        _save_makie_figure(plot_inc_sense_check(chn, d),       joinpath(figures, "inc_sense_check.png"))
+        _save_makie_figure(plot_z_ppc(chn, d),                 joinpath(figures, "z_ppc.png"))
+        _save_makie_figure(plot_prior_predictives(),           joinpath(figures, "prior_predictives.png"))
+        _save_makie_figure(plot_predictive_distributions(chn), joinpath(figures, "predictive_distributions.png"))
+        _save_makie_figure(plot_pair(chn),                     joinpath(figures, "pairplot.png"))
+    end
 
     return chn, post
 end
@@ -88,30 +129,33 @@ function main(args)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
     @add_arg_table! s begin
         "--data", "-d"
-            help    = "path to linelist CSV"
-            default = LINELIST_PATH
+        help = "path to linelist CSV"
+        default = LINELIST_PATH
         "--output", "-o"
-            help    = "output directory for posterior.csv"
-            default = OUTPUT_DIR
+        help = "output directory for posterior.csv"
+        default = OUTPUT_DIR
         "--figures", "-f"
-            help    = "directory for figures"
-            default = FIGURES_DIR
+        help = "directory for figures"
+        default = FIGURES_DIR
+        "--no-figures"
+        help = "skip all figure generation"
+        action = :store_true
         "--samples", "-n"
-            help     = "NUTS samples per chain"
-            arg_type = Int
-            default  = 1000
+        help = "NUTS samples per chain"
+        arg_type = Int
+        default = 1000
         "--chains", "-c"
-            help     = "number of parallel chains (default: clamp(Threads.nthreads(), 2, 4))"
-            arg_type = Int
-            default  = max(2, min(Threads.nthreads(), 4))
+        help     = "number of parallel chains (default: clamp(Threads.nthreads(), 2, 4))"
+        arg_type = Int
+        default  = max(2, min(Threads.nthreads(), 4))
         "--seed", "-s"
-            help     = "random seed"
-            arg_type = Int
-            default  = 20260508
+        help     = "random seed"
+        arg_type = Int
+        default  = 20260508
         "--obs-time"
-            help    = "real-time cut-off date (ISO format, e.g. 2018-12-31); " *
-                      "omit for a retrospective fit"
-            default = nothing
+        help    = "real-time cut-off date (ISO format, e.g. 2018-12-31); " *
+                  "omit for a retrospective fit"
+        default = nothing
     end
     p = parse_args(args, s)
     obs_time = p["obs-time"] === nothing ? nothing : Date(p["obs-time"])
@@ -124,6 +168,7 @@ function main(args)
         chains   = p["chains"],
         seed     = p["seed"],
         progress = false,
+        plots    = !p["no-figures"]
     )
     return 0
 end

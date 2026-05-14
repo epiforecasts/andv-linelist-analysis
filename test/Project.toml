@@ -1,0 +1,16 @@
+[deps]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+TransmissionLinelist = "a3f8c2e1-4b7d-4a9e-8c3f-d5e2f1a0b6c4"
+
+[sources]
+TransmissionLinelist = {path = ".."}
+
+[compat]
+Aqua = "0.8"
+DifferentiationInterface = "0.7.18"
+Distributions = "0.25"
+Mooncake = "0.4, 0.5"
