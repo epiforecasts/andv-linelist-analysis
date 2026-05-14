@@ -10,6 +10,12 @@ They are computed from the fitted incubation period and transmission timing dist
 
 See the [README](https://github.com/epiforecasts/andv-linelist-analysis/blob/main/README.md) for headline results and [LIMITATIONS.md](https://github.com/epiforecasts/andv-linelist-analysis/blob/main/LIMITATIONS.md) for known caveats.
 
+## Reproduction number
+
+The `R(t)` reported here is the case reproduction number indexed by source symptom onset: the expected number of secondary infections produced by a case whose onset is at time `t`.
+Onset is the natural choice for these data: fitted transmission timing is tightly clustered around source onset (`μ_δ ≈ 0`, `σ_δ ≈ 0.6 d`), so a case's offspring are infected within roughly a day of the case becoming symptomatic.
+Because transmission is so concentrated at onset, this mostly coincides with the instantaneous reproduction number indexed by infection date.
+
 ## Latent variables and priors
 
 Each case has two continuous latent variables.

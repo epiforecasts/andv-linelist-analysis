@@ -21,7 +21,7 @@ DocMeta.setdocmeta!(
 # @example / explicit include without going through Vue's MDX parser,
 # which trips on bare `{T}` in the Julia code.
 let ll = load_linelist()
-    d   = build_data(ll)
+    d = build_data(ll)
     src = @code_string TransmissionLinelist.joint_model_def(d, bin_edges_day(d.t0))
     write(joinpath(@__DIR__, "examples", "joint_model_source.jl"), src)
 end
@@ -31,19 +31,22 @@ end
 const LITERATE_OUT = joinpath(@__DIR__, "src")
 
 Literate.markdown(joinpath(@__DIR__, "examples", "analysis.jl"),
-                  LITERATE_OUT;
-                  name = "analysis",
-                  flavor = Literate.DocumenterFlavor(),
-                  mdstrings = true, credit = false)
+    LITERATE_OUT;
+    name = "analysis",
+    flavor = Literate.DocumenterFlavor(),
+    mdstrings = true, credit = false)
 
 Literate.markdown(joinpath(@__DIR__, "examples", "realtime.jl"),
-                  LITERATE_OUT;
-                  name = "realtime",
-                  flavor = Literate.DocumenterFlavor(),
-                  mdstrings = true, credit = false)
+    LITERATE_OUT;
+    name = "realtime",
+    flavor = Literate.DocumenterFlavor(),
+    mdstrings = true, credit = false)
 
 makedocs(;
-    sitename = "Andes virus — joint estimation of incubation, transmission timing, and R(t)",
+    # Short label for the rendered Vitepress sidebar header and browser tab.
+    # The full descriptive title lives as the h1 of `docs/src/index.md`, so
+    # the rendered landing page still leads with the long form.
+    sitename = "ANDV linelist analysis",
     authors = "Sebastian Funk, Sam Abbott, and contributors",
     clean = true,
     doctest = false,
@@ -56,7 +59,7 @@ makedocs(;
         "Limitations" => "limitations.md",
         "Analysis walkthrough" => "analysis.md",
         "Real-time monitoring" => "realtime.md",
-        "API Reference" => "api.md",
+        "API Reference" => "api.md"
     ],
     format = DocumenterVitepress.MarkdownVitepress(;
         repo = "github.com/epiforecasts/andv-linelist-analysis",
@@ -65,7 +68,7 @@ makedocs(;
     )
 )
 
-deploydocs(;
+DocumenterVitepress.deploydocs(;
     repo = "github.com/epiforecasts/andv-linelist-analysis",
     target = "build",
     branch = "gh-pages",

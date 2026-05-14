@@ -137,10 +137,13 @@ choices can be swapped without editing this function.
         end
     end
 
+    # Case reproduction number indexed by source onset (per PR #66): the
+    # transmission delay δ centres near zero, so a case's offspring are
+    # infected within roughly a day of the case becoming symptomatic.
     # Clamp log R(t) so p = k/(k+R) stays strictly in (0, 1) during NUTS
     # exploration; `safe_nb` floors p as a belt-and-braces fallback.
     for i in 1:d.N
-        R_i = exp(clamp(log_R_at(T_inf[i], edges, log_R), -50.0, 50.0))
+        R_i = exp(clamp(log_R_at(T_onset[i], edges, log_R), -50.0, 50.0))
         R_eff = realtime ? R_i * thins[i] : R_i
         d.Zobs[i] ~ safe_nb(k, R_eff)
     end
