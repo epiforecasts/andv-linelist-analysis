@@ -22,10 +22,16 @@
 ##     truncation, so a single vectorised `F_offspring` call serves both.
 
 """
-    incubation_model(μ_prior, σ_prior)
+$(TYPEDSIGNATURES)
 
 Model sampling the log-mean `μ_inc` and log-SD `σ_inc` of a LogNormal
-incubation period. Returns `(dist = LogNormal(μ_inc, σ_inc), μ, σ)`.
+incubation period.
+Returns `(dist = LogNormal(μ_inc, σ_inc), μ, σ)`.
+
+# Arguments
+- `μ_prior`: prior on the log-mean `μ_inc`. Defaults to `Normal(3.0, 0.5)`.
+- `σ_prior`: prior on the log-SD `σ_inc`, constrained positive. Defaults to
+  `truncated(Normal(0.0, 0.5); lower = 0)`.
 """
 @model function incubation_model(μ_prior = Normal(3.0, 0.5),
         σ_prior = truncated(Normal(0.0, 0.5); lower = 0))
@@ -35,10 +41,17 @@ incubation period. Returns `(dist = LogNormal(μ_inc, σ_inc), μ, σ)`.
 end
 
 """
-    transmission_delta_model(μ_prior, σ_prior)
+$(TYPEDSIGNATURES)
 
 Model for the population mean `μ_δ` and SD `σ_δ` of the per-pair
-transmission timing. Returns `(dist = Normal(μ_δ, σ_δ), μ, σ)`.
+transmission timing.
+Returns `(dist = Normal(μ_δ, σ_δ), μ, σ)`.
+
+# Arguments
+- `μ_prior`: prior on the population mean `μ_δ`. Defaults to
+  `Normal(0.0, 5.0)`.
+- `σ_prior`: prior on the population SD `σ_δ`, constrained positive.
+  Defaults to `truncated(Normal(1.0, 1.0); lower = 0)`.
 """
 @model function transmission_delta_model(μ_prior = Normal(0.0, 5.0),
         σ_prior = truncated(Normal(1.0, 1.0); lower = 0))
@@ -48,13 +61,20 @@ transmission timing. Returns `(dist = Normal(μ_δ, σ_δ), μ, σ)`.
 end
 
 """
-    random_walk_rt_model(n_knots;
-                         init_prior  = Normal(log(1.5), 1.0),
-                         sigma_prior = truncated(Normal(0.0, 0.2); lower = 0))
+$(TYPEDSIGNATURES)
 
-Non-centred weekly random walk on log R(t) at `n_knots` knots. Returns
-the length-`n_knots` `log_R` vector evaluated at the knot dates;
+Non-centred weekly random walk on log R(t) at `n_knots` knots.
+Returns the length-`n_knots` `log_R` vector evaluated at the knot dates;
 `log_R_at` linearly interpolates between knots.
+
+# Arguments
+- `n_knots`: number of weekly knot points at which `log_R` is evaluated.
+
+# Keyword Arguments
+- `init_prior`: prior on the initial log R(t) value `log_R_init`. Defaults
+  to `Normal(log(1.5), 1.0)`.
+- `sigma_prior`: prior on the random walk step SD `σ_rw`, constrained
+  positive. Defaults to `truncated(Normal(0.0, 0.2); lower = 0)`.
 """
 @model function random_walk_rt_model(n_knots::Integer;
         init_prior = Normal(log(1.5), 1.0),
@@ -76,16 +96,32 @@ to `Inf`.
 safe_nb(k, R) = NegativeBinomial(k, max(k / (k + R), eps(typeof(k))))
 
 """
-    joint_model_def(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
-                    incubation   = incubation_model(),
-                    transmission = transmission_delta_model(),
-                    rt           = random_walk_rt_model(length(edges)),
-                    k_prior      = truncated(Normal(0.3, 0.5); lower = 0))
+$(TYPEDSIGNATURES)
 
 Joint Bayesian model over incubation, transmission timing, and the
-weekly random walk on log R(t) at the knot dates. The three population
-components are passed in as Turing submodels so priors and structural
-choices can be swapped without editing this function.
+weekly random walk on log R(t) at the knot dates.
+The three population components are passed in as Turing submodels so
+priors and structural choices can be swapped without editing this
+function.
+
+# Arguments
+- `d`: structured line-list data as returned by `build_data`, including
+  per-case onset bounds, exposure bounds, source indices, offspring counts
+  `Zobs`, and optional `obs_time` for real-time fits.
+- `edges`: vector of knot dates (as day numbers) at which `log_R` is
+  defined.
+- `foffspring_alg`: quadrature algorithm passed to `F_offspring` for the
+  real-time offspring-completeness integral.
+
+# Keyword Arguments
+- `incubation`: Turing submodel for the incubation period. Defaults to
+  `incubation_model()`.
+- `transmission`: Turing submodel for the transmission timing `δ`.
+  Defaults to `transmission_delta_model()`.
+- `rt`: Turing submodel for the log R(t) random walk. Defaults to
+  `random_walk_rt_model(length(edges))`.
+- `k_prior`: prior on the negative binomial dispersion `k`, constrained
+  positive. Defaults to `truncated(Normal(0.3, 0.5); lower = 0)`.
 """
 @model function joint_model_def(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
         incubation = incubation_model(),
