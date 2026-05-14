@@ -112,7 +112,10 @@ m     = joint_model(d, edges)
                 Turing.@addlogprob! logpdf(Normal(μ_δ, σ_δ), δ_pair)
             end
         end
-        R_i = exp(log_R_at(T_inf[i], edges, log_R))
+        # Case reproduction number indexed by source onset: μ_δ ≈ 0,
+        # σ_δ ≈ 0.6 d, so a case's offspring are infected within ~1 d of
+        # the case becoming symptomatic.
+        R_i = exp(log_R_at(T_onset[i], edges, log_R))
         d.Zobs[i] ~ NegativeBinomial(k, k / (k + R_i))
     end
 end
