@@ -135,7 +135,8 @@ function _encode_obs_time(d::Date, t0, N, exp_hi_day)
     return _encode_obs_time(fill(d, N), t0, N, exp_hi_day)
 end
 function _encode_obs_time(dates::AbstractVector, t0, N, exp_hi_day)
-    length(dates) == N || error("obs_time length $(length(dates)) ≠ N=$N")
+    length(dates) == N ||
+        error("obs_time length $(length(dates)) != N=$N")
     out = Vector{Float64}(undef, N)
     for i in 1:N
         d = dates[i]

@@ -285,39 +285,58 @@ end
 
 # ## Controlled-outbreak projection
 #
-# At each `obs_date`, conditional on the corrected real-time posterior,
-# the number of future symptomatic cases assuming **no further
-# transmission** after the cut-off.
-# This is the "what if control is achieved now" forecast: secondaries
-# already infected by `obs_time` continue to complete their incubation
-# and become symptomatic, but no new infections occur.
-# Each observed source contributes `Z_future[i] ~ Poisson(λ_i (1 − p_i))`
-# where `p_i = cdf(ConvolvedDelays, obs_time − T_onset[i])` is the
-# probability that an offspring's chain has completed by the cut-off
-# and `λ_i | Z_obs[i]` follows the conjugate Gamma posterior of the
-# NB-binomial-thinning model, sharpening the prediction by conditioning
-# on the source's already-observed offspring count.
+# At each `obs_date`, two counterfactual predictions for the number of
+# future symptomatic cases:
+#
+# - **Controlled** (`predict_controlled_outbreak`): transmission stops
+#   at `obs_time`.
+#   Only people already infected (chain started, in incubation) can go
+#   on to have onset.
+#   Per source `i`, future onsets `~ Poisson(λ_i · (q_i − p_i))` where
+#   `q_i = cdf(δ_dist, obs_time − T_onset[i])` is the probability
+#   transmission happened by `obs_time` and `p_i =
+#   cdf(ConvolvedDelays(inc, δ), obs_time − T_onset[i])` is the
+#   probability the chain has completed.
+# - **Natural chain** (`predict_natural_chain_outbreak`): current
+#   sources keep transmitting at their existing rate, but no second-
+#   generation chains form from those new offspring.
+#   Per source `i`, future onsets `~ Poisson(λ_i · (1 − p_i))`.
+#
+# Both share the same Gamma posterior on `λ_i`:
+# `λ_i | Z_obs[i], k, R_i, p_i ~ Gamma(k + Z_obs[i], R_i / (k + R_i ·
+# p_i))` (scale form).
 # The realised count of cases with onset strictly after each cut-off is
-# overlaid as a vertical reference; values above the predicted band
-# imply transmission continued past the cut-off in the actual outbreak,
-# values below imply it stalled.
+# overlaid as a vertical reference; values above the natural-chain band
+# imply transmission continued past the cut-off, values below imply it
+# stalled.
 
 controlled = map(joint_fits) do fit
-    res = predict_controlled_outbreak(
+    strict = predict_controlled_outbreak(
         fit.chn_rt, fit.post_rt, ll, fit.obs_date, t0_ref)
-    (; fit.obs_date, fit.n_rt, res.future_samples, res.actual_future)
+    natural = predict_natural_chain_outbreak(
+        fit.chn_rt, fit.post_rt, ll, fit.obs_date, t0_ref)
+    (; fit.obs_date, fit.n_rt,
+        strict_samples = strict.future_samples,
+        natural_samples = natural.future_samples,
+        actual_future = strict.actual_future)
 end;
 
 controlled_df = DataFrame(
     obs_date = [c.obs_date for c in controlled],
     n_obs = [c.n_rt for c in controlled],
     actual_future = [c.actual_future for c in controlled],
-    pred_median = [Int(round(median(c.future_samples)))
+    strict_median = [Int(round(median(c.strict_samples)))
+                     for c in controlled],
+    strict_lo10 = [Int(round(quantile(c.strict_samples, 0.10)))
                    for c in controlled],
-    pred_lo10 = [Int(round(quantile(c.future_samples, 0.10)))
-                 for c in controlled],
-    pred_hi90 = [Int(round(quantile(c.future_samples, 0.90)))
-                 for c in controlled])
+    strict_hi90 = [Int(round(quantile(c.strict_samples, 0.90)))
+                   for c in controlled],
+    natural_median = [Int(round(median(c.natural_samples)))
+                      for c in controlled],
+    natural_lo10 = [Int(round(quantile(c.natural_samples, 0.10)))
+                    for c in controlled],
+    natural_hi90 = [Int(round(quantile(c.natural_samples, 0.90)))
+                    for c in controlled])
 
 #-
 
@@ -325,17 +344,22 @@ let
     fig = Figure(; size = (1500, 400))
     for (j, c) in enumerate(controlled)
         ax = Axis(fig[1, j];
-            xlabel = "Future cases (controlled counterfactual)",
-            ylabel = "Density",
+            xlabel = "Future cases", ylabel = "Density",
             title = "obs_date = $(c.obs_date)  (n_obs=$(c.n_rt))")
-        hist!(ax, c.future_samples;
+        hist!(ax, c.strict_samples;
             bins = 30, normalization = :pdf,
             color = (:steelblue, 0.4),
-            strokecolor = :steelblue, strokewidth = 1)
+            strokecolor = :steelblue, strokewidth = 1,
+            label = "controlled (strict)")
+        hist!(ax, c.natural_samples;
+            bins = 30, normalization = :pdf,
+            color = (:seagreen, 0.3),
+            strokecolor = :seagreen, strokewidth = 1,
+            label = "natural chain")
         vlines!(ax, [c.actual_future];
             color = :darkorange, linewidth = 3,
             label = "actual = $(c.actual_future)")
-        axislegend(ax; position = :rt)
+        j == 1 && axislegend(ax; position = :rt)
     end
     fig
 end

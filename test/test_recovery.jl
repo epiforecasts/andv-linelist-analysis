@@ -12,7 +12,7 @@
 using Random: Random, MersenneTwister
 using Distributions: LogNormal, Normal, NegativeBinomial,
                      logpdf, pdf, cdf
-using Dates: Date, Day
+using Dates: Dates, Date, Day
 using Statistics: median, std, quantile, mean
 using Turing: Turing, @model, NUTS, sample, to_submodel
 using Integrals: IntegralProblem, QuadGKJL, solve
@@ -167,4 +167,33 @@ end
         @test diag.rhat_max[1] < 1.1
         @test diag.divergences[1] / (2 * 200) < 0.05
     end
+end
+
+@testset "predict_*_outbreak: shapes + strict ≤ natural" begin
+    # Smoke test for both real-time predictors. Strict counterfactual
+    # (no further transmission) should sit below the natural-chain one
+    # in expectation: the per-source probability `q_i − p_i` ≤ `1 − p_i`.
+    ll = TransmissionLinelist.load_linelist()
+    t0 = minimum(ll.onset_date) - Day(60)
+    obs_date = Date("2018-12-31")
+    ll_rt = TransmissionLinelist.filter_realtime(ll, obs_date)
+    d_rt = TransmissionLinelist.build_data(ll_rt;
+        obs_time = obs_date, t0 = t0)
+    edges = TransmissionLinelist.bin_edges_day(t0)
+    obs_offset = Float64(Dates.value(obs_date - t0))
+    edges = edges[edges .<= obs_offset]
+    isempty(edges) || edges[end] < obs_offset && push!(edges, obs_offset)
+    chn = TransmissionLinelist.sample_fit(
+        TransmissionLinelist.joint_model(d_rt, edges);
+        samples = 200, chains = 2, seed = 20260512, progress = false)
+    post = TransmissionLinelist.summarise(chn)
+    strict = TransmissionLinelist.predict_controlled_outbreak(
+        chn, post, ll, obs_date, t0)
+    natural = TransmissionLinelist.predict_natural_chain_outbreak(
+        chn, post, ll, obs_date, t0)
+    @test length(strict.future_samples) == length(natural.future_samples)
+    @test all(>=(0), strict.future_samples)
+    @test all(>=(0), natural.future_samples)
+    @test strict.actual_future >= 0
+    @test mean(strict.future_samples) <= mean(natural.future_samples) + 1
 end

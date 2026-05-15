@@ -1,6 +1,6 @@
 module TransmissionLinelist
 
-using ADTypes: AutoEnzyme, AutoMooncake, AutoForwardDiff
+using ADTypes: AutoMooncake
 using AlgebraOfGraphics: AlgebraOfGraphics, data, mapping, visual, draw!,
                          nonnumeric
 using ArgParse: ArgParseSettings, @add_arg_table!, parse_args
@@ -15,7 +15,6 @@ using Distributions: Distributions, Normal, LogNormal, truncated,
                      ContinuousUnivariateDistribution,
                      logpdf, logcdf, cdf, pdf, partype
 using DocStringExtensions: TYPEDSIGNATURES
-using Enzyme: Enzyme
 using Integrals: IntegralProblem, GaussLegendre, solve
 import FastGaussQuadrature  # activates Integrals' GaussLegendre node extension
 using Mooncake: Mooncake

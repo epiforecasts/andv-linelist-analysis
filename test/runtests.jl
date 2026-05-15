@@ -1,8 +1,7 @@
 using Test
 using Aqua
-# Use `import` (not `using`) so the package's exported `main` function is
-# not brought into `Main`. Otherwise Julia's `(@main)` auto-invocation
-# would run the full `analyse()` pipeline at the end of the test script.
+# Use `import` so the package's exported `main` does not shadow
+# downstream uses inside the testset bodies.
 import TransmissionLinelist
 using TransmissionLinelist: ConvolvedDelays
 using DifferentiationInterface: AutoMooncake, AutoForwardDiff,
