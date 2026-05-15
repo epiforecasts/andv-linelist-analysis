@@ -1,6 +1,7 @@
 ## Real-time extension utilities.
 
 import FastGaussQuadrature
+using Integrals: IntegralProblem, GaussLegendre, solve
 
 """
 $(TYPEDSIGNATURES)
@@ -68,18 +69,25 @@ end
 # cdf(d, Δ) = P(δ + Inc(sec) ≤ Δ)
 #           = ∫ cdf(d.inc, Δ − δ) · pdf(d.δ, δ) dδ
 #
-# Implemented as a manual GaussLegendre sum over the fixed reference
-# interval (-1, 1), with the parametric integration bounds appearing
-# only inside the integrand. This keeps Mooncake reverse-mode AD
-# happy: AD flows through smooth scalar ops (sum, mul, cdf, pdf), not
-# through Integrals.jl's parameter-dependent bounds dispatch.
-# Integration spans `mean(d.δ) ± K·std(d.δ)` so the 80 nodes always
-# cluster on the meaningful support of `d.δ`.
+# Implemented through Integrals.jl's `IntegralProblem` with a fixed
+# reference domain `(-1, 1)` and the parametric integration bounds
+# (`mean(d.δ) ± K·std(d.δ)`) passed via the `params` field. Change of
+# variable `δ = μ + halfwidth · u` lives inside the integrand. This
+# keeps the IntegralsMooncakeExt rrule on the supported `p`-tangent
+# path (bounds-tangents in Integrals.jl are Zygote-only), while still
+# routing through Integrals.jl so the choice of GL nodes/weights and
+# any future algorithm swap stays a library concern.
 
-const _CONVOLVED_DELAYS_N = 80
+const _CONVOLVED_DELAYS_ALG = GaussLegendre(; n = 80)
 const _CONVOLVED_DELAYS_K = 20
-const _CONVOLVED_DELAYS_NODES,
-_CONVOLVED_DELAYS_WEIGHTS = FastGaussQuadrature.gausslegendre(_CONVOLVED_DELAYS_N)
+
+function _convolved_delays_integrand(u::Real, p)
+    δ = p.μ + p.halfwidth * u
+    return [(x_i - δ) > 0 ?
+            cdf(p.inc_dist, x_i - δ) * pdf(p.δ_dist, δ) :
+            zero(p.halfwidth)
+            for x_i in p.x]
+end
 
 """
 $(TYPEDSIGNATURES)
@@ -91,8 +99,8 @@ distribution for sourced offspring at a real-time cut-off.
 Two `cdf` methods are provided. The scalar form `cdf(d, x::Real)` is
 the standard `Distributions` interface. The vector form
 `cdf(d, xs::AbstractVector)` evaluates the CDF at every `x ∈ xs` in a
-single GaussLegendre sum. Prefer the vector form when evaluating at
-many points: `cdf.(d, xs)` would otherwise repeat the node loop per
+single GaussLegendre solve. Prefer the vector form when evaluating at
+many points: `cdf.(d, xs)` would otherwise trigger one solve per
 element.
 
 # Fields
@@ -108,15 +116,9 @@ Distributions.cdf(d::ConvolvedDelays, x::Real) = cdf(d, [x])[1]
 function Distributions.cdf(d::ConvolvedDelays, x::AbstractVector)
     μ = mean(d.δ)
     halfwidth = _CONVOLVED_DELAYS_K * std(d.δ)
-    return [halfwidth * sum(
-                _CONVOLVED_DELAYS_WEIGHTS[j] *
-                let δ_j = μ + halfwidth * _CONVOLVED_DELAYS_NODES[j]
-                    (x_i - δ_j) > 0 ?
-                    cdf(d.inc, x_i - δ_j) * pdf(d.δ, δ_j) :
-                    zero(halfwidth)
-                end
-            for j in eachindex(_CONVOLVED_DELAYS_NODES))
-            for x_i in x]
+    params = (; μ, halfwidth, x, inc_dist = d.inc, δ_dist = d.δ)
+    prob = IntegralProblem(_convolved_delays_integrand, (-1.0, 1.0), params)
+    return halfwidth .* solve(prob, _CONVOLVED_DELAYS_ALG).u
 end
 Distributions.minimum(::ConvolvedDelays) = -Inf
 Distributions.maximum(::ConvolvedDelays) = Inf
