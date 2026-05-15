@@ -26,27 +26,23 @@ using Dates: Dates, Date, Day
 using Statistics: quantile, median
 using Random
 using CairoMakie
+using Logging: Logging
 
 Random.seed!(20260512)
+# Silence the NUTS "Found initial step size" Info logs that would
+# otherwise clutter the rendered example output.
+Logging.disable_logging(Logging.Info)
 
 # ## Setup
 #
 # Two cut-offs are used: 31 December 2018 (about three weeks into the
-# outbreak) and 7 January 2019 (one week later, by which point the
-# joint fit becomes harder to sample).
+# outbreak) and 7 January 2019.
 
 obs_dates = [Date("2018-12-31"), Date("2019-01-07")]
 ll = load_linelist();
 t0_ref = minimum(ll.onset_date) - Day(60)
 edges_ref = bin_edges_day(t0_ref)
 seed = 20260512
-
-# Sampler settings are kept modest (2 chains, 500 samples) to keep the
-# documentation build cost low. The package defaults (4 chains, 1000
-# samples) are recommended for production use.
-
-n_chains = 2
-n_samples = 500
 
 # ## Data preparation per cut-off
 #
@@ -61,7 +57,7 @@ n_samples = 500
 # at the cut-off so the R(t) posterior does not extend past the
 # observation window.
 
-function _prepare_at(ll, obs_date)
+function prepare_at(ll, obs_date)
     ll_truth = filter_by_exposure(ll, obs_date)
     ll_rt = filter_realtime(ll, obs_date)
     d_truth = build_data(ll_truth; t0 = t0_ref)
@@ -75,7 +71,7 @@ function _prepare_at(ll, obs_date)
         n_truth = nrow(ll_truth), n_rt = nrow(ll_rt))
 end
 
-preps = [_prepare_at(ll, obs_date) for obs_date in obs_dates];
+preps = [prepare_at(ll, obs_date) for obs_date in obs_dates];
 
 # ## Delays-only fits
 #
@@ -87,11 +83,10 @@ preps = [_prepare_at(ll, obs_date) for obs_date in obs_dates];
 # no chance.
 
 delays_fits = map(preps) do prep
-    @info "Delays-only at cut-off" prep.obs_date
     chn_dly_truth = sample_fit(delays_only_model(prep.d_truth);
-        samples = n_samples, chains = n_chains, seed = seed)
+        seed = seed)
     chn_dly_rt = sample_fit(delays_only_model(prep.d_rt);
-        samples = n_samples, chains = n_chains, seed = seed)
+        seed = seed)
     merge(prep, (; chn_dly_truth, chn_dly_rt))
 end;
 
@@ -101,9 +96,7 @@ end;
 # fits at each cut-off, one row per `obs_date`. If the corrected
 # real-time density tracks the counterfactual retro density on each
 # panel, the right-truncation on Inc and δ alone is enough to recover
-# the population delays from the truncated observations — and any
-# pathology in the corresponding joint fit lives in the R(t) /
-# `case_model` half rather than in the delay submodels.
+# the population delays from the truncated observations.
 
 let
     params = [(:μ_inc, "μ_inc"), (:σ_inc, "σ_inc"),
@@ -147,15 +140,14 @@ end
 
 d_retro = build_data(ll; t0 = t0_ref);
 chn_retro_full = sample_fit(joint_model(d_retro, edges_ref);
-    samples = n_samples, chains = n_chains, seed = seed);
+    seed = seed);
 post_retro_full = summarise(chn_retro_full);
 
 joint_fits = map(delays_fits) do prep
-    @info "Joint at cut-off" prep.obs_date
     chn_truth = sample_fit(joint_model(prep.d_truth, prep.edges_rt);
-        samples = n_samples, chains = n_chains, seed = seed)
+        seed = seed)
     chn_rt = sample_fit(joint_model(prep.d_rt, prep.edges_rt);
-        samples = n_samples, chains = n_chains, seed = seed)
+        seed = seed)
     merge(prep,
         (; chn_truth, chn_rt,
             post_truth = summarise(chn_truth),
@@ -171,7 +163,7 @@ end;
 # submodels are not to blame and the pathology is in the R(t) /
 # `case_model` half of the likelihood.
 
-function _diag_row(chn, obs_date, fit_kind, n_cases)
+function diag_row(chn, obs_date, fit_kind, n_cases)
     d = diagnostics_table(chn)
     return (obs_date = obs_date,
         fit_kind = fit_kind,
@@ -184,20 +176,20 @@ end
 diag_df = let
     rows = NamedTuple[]
     push!(rows,
-        _diag_row(chn_retro_full, missing,
+        diag_row(chn_retro_full, missing,
             "full retro (joint)", nrow(ll)))
     for (dly, jnt) in zip(delays_fits, joint_fits)
         push!(rows,
-            _diag_row(dly.chn_dly_truth, dly.obs_date,
+            diag_row(dly.chn_dly_truth, dly.obs_date,
                 "retro (delays only)", dly.n_truth))
         push!(rows,
-            _diag_row(dly.chn_dly_rt, dly.obs_date,
+            diag_row(dly.chn_dly_rt, dly.obs_date,
                 "realtime (delays only)", dly.n_rt))
         push!(rows,
-            _diag_row(jnt.chn_truth, jnt.obs_date,
+            diag_row(jnt.chn_truth, jnt.obs_date,
                 "retro (joint)", jnt.n_truth))
         push!(rows,
-            _diag_row(jnt.chn_rt, jnt.obs_date,
+            diag_row(jnt.chn_rt, jnt.obs_date,
                 "realtime (joint)", jnt.n_rt))
     end
     DataFrame(rows)
