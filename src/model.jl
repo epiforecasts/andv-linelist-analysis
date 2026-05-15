@@ -78,12 +78,12 @@ Returns the length-`n_knots` `log_R` vector evaluated at the knot dates;
 
 # Keyword Arguments
 - `init_prior`: prior on the initial log R(t) value `log_R_init`. Defaults
-  to `Normal(log(1.5), 0.5)`.
+  to `Normal(log(1.5), 1.0)`.
 - `sigma_prior`: prior on the random walk step SD `σ_rw`, constrained
   positive. Defaults to `truncated(Normal(0.0, 0.5); lower = 0)`.
 """
 @model function random_walk_rt_model(n_knots::Integer;
-        init_prior = Normal(log(1.5), 0.5),
+        init_prior = Normal(log(1.5), 1.0),
         sigma_prior = truncated(Normal(0.0, 0.5); lower = 0))
     σ_rw ~ sigma_prior
     log_R_init ~ init_prior
