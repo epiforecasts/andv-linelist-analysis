@@ -28,3 +28,24 @@ The effect on Negative-Binomial dispersion `k` depends on whether dropped events
 
 There are very few cases after early January 2019, and the random walk on `log R(t)` reverts to its prior in those bins.
 The wide credible intervals on the right of the R(t) figure show this.
+
+## Real-time fitting caveats
+
+The real-time corrections handle three specific biases — long-incubation cases, late transmissions, and incomplete clusters.
+Not corrected:
+
+- geographic / severity / surveillance reporting biases,
+- the onset-to-report delay (only chain completion is modelled),
+- general under-ascertainment,
+- incomplete source attribution,
+- pre-symptomatic transmission with an unobserved source,
+- ongoing zoonosis.
+
+**Pre-symptomatic transmission with an unobserved source.**
+When `δ < −Inc[src]`, a source's onset can be later than its secondary's onset.
+At an `obs_time` cut-off the secondary can be in the line list while the source isn't; `filter_realtime` then drops the source attribution and the secondary looks like an apparent index.
+Probably small for ANDV (δ averages near zero with σ_δ ≈ 1) but a real selection effect the current implementation doesn't correct for.
+
+**Ongoing zoonosis.**
+The model treats index (zoonotic) cases as a small starter set; cluster-completeness only thins observed sources, it doesn't add back population members whose Inc hasn't completed yet.
+The current implementation is fine for an outbreak with a few initial zoonotic cases and no ongoing zoonosis (the Epuyén pattern); it would under-count cases if zoonosis continued throughout the outbreak.
