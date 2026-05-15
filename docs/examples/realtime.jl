@@ -12,6 +12,10 @@
 # The argument is `obs_time − T_onset[src]`, not `obs_time − T_inf[src]` — the source's own incubation is a sampled latent already scored, so the offspring delay reduces to `δ + Inc(sec)`.
 # This page validates the corrections by fitting the same outbreak at two real-time cut-offs and overlaying the resulting R(t) posteriors and population marginals against a counterfactual retrospective and the full closed-out fit.
 # It also runs a **delays-only diagnostic** at each cut-off — fitting just the incubation and δ submodels — so that if the full joint fit collapses, we can tell whether the pathology lives in the delay submodels or in the R(t) / `case_model` half of the likelihood.
+#
+# The workflow is sequenced so the delays-only fits at both cut-offs are inspected first.
+# If the delay submodels diverge at a cut-off, the joint fit is hopeless and the reader can stop there.
+# Only once the delay parameters look well-identified does the page move on to the joint fits and their downstream diagnostics, R(t) overlays, population marginals, posterior-predictive checks, and controlled-outbreak projection.
 
 using TransmissionLinelist
 using DataFrames: DataFrame, nrow
@@ -34,56 +38,25 @@ t0_ref = minimum(ll.onset_date) - Day(60)
 edges_ref = bin_edges_day(t0_ref)
 seed = 20260512
 
-# Sampler settings match the package defaults (4 chains, 1000 samples)
-# so the real-time posterior is stable enough for the controlled-
-# outbreak projection downstream.
+# Sampler settings are kept modest (2 chains, 500 samples) to keep the
+# documentation build cost low. The package defaults (4 chains, 1000
+# samples) are recommended for production use.
 
-n_chains = 4
-n_samples = 1000
+n_chains = 2
+n_samples = 500
 
-# ## Full retrospective fit
+# ## Data preparation per cut-off
 #
-# Fit the joint model once on the closed-out line list using `t0_ref` so
-# the weekly R(t) knots align with every cut-off below.
-
-d_retro = build_data(ll; t0 = t0_ref)
-model_retro = joint_model(d_retro, edges_ref)
-chn_retro = sample_fit(model_retro;
-    samples = n_samples, chains = n_chains, seed = seed)
-post_retro = summarise(chn_retro)
-
-# ### Diagnostics
-
-diagnostics_table(chn_retro)
-
-# ### Headline summary
-
-summary_table(chn_retro)
-
-# ### Data and R(t)
-
-plot_data(ll)
-
-#-
-
-plot_rt(chn_retro)
-
-# ## Per cut-off fits
-#
-# For each `obs_date` we build three views of the line list:
+# For each `obs_date` we build two views of the line list:
 #
 # - the **counterfactual retrospective** (filtered by exposure: cases
 #   known to have been infected by `obs_date`),
 # - the **real-time** view (filtered by onset: what an analyst sees at
-#   `obs_date`),
-# - and run two model variants on each: a *delays-only* fit
-#   (incubation + δ only, no R(t) / NB likelihood) and the full
-#   *joint* fit.
+#   `obs_date`).
 #
-# The delays-only fit is the new diagnostic step. If it converges
-# cleanly at both cut-offs but the joint fit collapses at the later
-# cut-off, the pathology is in the R(t) / `case_model` loop rather
-# than in the delay parameters.
+# Each cut-off also gets its own weekly knot grid `edges_rt` truncated
+# at the cut-off so the R(t) posterior does not extend past the
+# observation window.
 
 function _prepare_at(ll, obs_date)
     ll_truth = filter_by_exposure(ll, obs_date)
@@ -99,38 +72,37 @@ function _prepare_at(ll, obs_date)
         n_truth = nrow(ll_truth), n_rt = nrow(ll_rt))
 end
 
+preps = [_prepare_at(ll, obs_date) for obs_date in obs_dates]
+
+# ## Delays-only fits
+#
+# Fit `delays_only_model` on both the counterfactual retrospective and
+# the real-time views at each cut-off. These fits drop the R(t) /
+# `case_model` NB likelihood and condition on only the incubation and
+# δ submodels (plus their truncation in the real-time case). If the
+# delay parameters diverge here, the joint fit at the same cut-off has
+# no chance.
+
 function _fit_delays(d)
     return sample_fit(delays_only_model(d);
         samples = n_samples, chains = n_chains, seed = seed)
 end
 
-function _fit_joint(d, edges)
-    return sample_fit(joint_model(d, edges);
-        samples = n_samples, chains = n_chains, seed = seed)
-end
-
-fits_by_date = map(obs_dates) do obs_date
-    @info "Cut-off" obs_date
-    prep = _prepare_at(ll, obs_date)
-    @info "  delays-only retro fit"
+delays_fits = map(preps) do prep
+    @info "Delays-only at cut-off" prep.obs_date
     chn_dly_truth = _fit_delays(prep.d_truth)
-    @info "  delays-only real-time fit"
     chn_dly_rt = _fit_delays(prep.d_rt)
-    @info "  joint retro fit"
-    chn_truth = _fit_joint(prep.d_truth, edges_ref)
-    @info "  joint real-time fit"
-    chn_rt = _fit_joint(prep.d_rt, prep.edges_rt)
     merge(prep,
-        (; chn_dly_truth, chn_dly_rt, chn_truth, chn_rt,
-            post_truth = summarise(chn_truth),
-            post_rt = summarise(chn_rt)))
+        (; chn_dly_truth, chn_dly_rt,
+            post_dly_truth = summarise(chn_dly_truth),
+            post_dly_rt = summarise(chn_dly_rt)))
 end
 
-# ## Sampler diagnostics across fits
+# ## Delays-only diagnostics
 #
-# One row per fit. Compare the *delays-only* rows against the *joint*
-# rows for the same `obs_date`: if R̂ blows up only on the joint rows,
-# the delay submodels are not to blame.
+# One row per delays-only fit. If R̂ blows up here, the delay submodels
+# alone cannot identify the population delays at that cut-off and the
+# corresponding joint fit will not save it.
 
 function _diag_row(chn, obs_date, fit_kind, n_cases)
     d = diagnostics_table(chn)
@@ -142,33 +114,21 @@ function _diag_row(chn, obs_date, fit_kind, n_cases)
         wall_sec = d.runtime_seconds[1])
 end
 
-diag_rows = NamedTuple[]
-push!(diag_rows,
-    _diag_row(chn_retro, missing, "full retro (joint)", nrow(ll)))
-for fit in fits_by_date
-    push!(diag_rows,
+delays_diag_rows = NamedTuple[]
+for fit in delays_fits
+    push!(delays_diag_rows,
         _diag_row(fit.chn_dly_truth, fit.obs_date,
             "retro (delays only)", fit.n_truth))
-    push!(diag_rows,
+    push!(delays_diag_rows,
         _diag_row(fit.chn_dly_rt, fit.obs_date,
             "realtime (delays only)", fit.n_rt))
-    push!(diag_rows,
-        _diag_row(fit.chn_truth, fit.obs_date,
-            "retro (joint)", fit.n_truth))
-    push!(diag_rows,
-        _diag_row(fit.chn_rt, fit.obs_date,
-            "realtime (joint)", fit.n_rt))
 end
-diag_df = DataFrame(diag_rows)
+delays_diag_df = DataFrame(delays_diag_rows)
 
-# ## Delay-parameter posteriors across all fits
-#
-# For each of the five quantities the model has a prior on, compare
-# posterior medians and 95% CrIs across the eight delay fits (two
-# cut-offs × two filterings × two model variants). Stable medians
-# across the delays-only and joint columns mean adding the R(t) /
-# `case_model` likelihood does not move the delay parameters; large
-# moves point to identifiability problems in the joint fit.
+# Posterior medians and 95% CrIs for the four delay parameters across
+# the delays-only fits. Stable medians across the retro and real-time
+# columns at a given cut-off mean the right-truncation correction is
+# recovering the population from the truncated observations.
 
 function _q3(x)
     return (med = quantile(x, 0.5),
@@ -187,76 +147,114 @@ function _delay_rows(chn, obs_date, fit_kind, n_cases)
     return rows
 end
 
-delay_rows = NamedTuple[]
-for fit in fits_by_date
-    append!(delay_rows,
+delays_param_rows = NamedTuple[]
+for fit in delays_fits
+    append!(delays_param_rows,
         _delay_rows(fit.chn_dly_truth, fit.obs_date,
             "retro (delays only)", fit.n_truth))
-    append!(delay_rows,
+    append!(delays_param_rows,
         _delay_rows(fit.chn_dly_rt, fit.obs_date,
             "realtime (delays only)", fit.n_rt))
-    append!(delay_rows,
-        _delay_rows(fit.chn_truth, fit.obs_date,
-            "retro (joint)", fit.n_truth))
-    append!(delay_rows,
-        _delay_rows(fit.chn_rt, fit.obs_date,
-            "realtime (joint)", fit.n_rt))
 end
-delay_df = DataFrame(delay_rows)
+delays_param_df = DataFrame(delays_param_rows)
 
-# ## Dec 31 cut-off illustrative panels
-#
-# Showing one full set of panels for the first cut-off rather than for
-# every fit; the cross-cut-off comparison tables and overlays below do
-# the rest. The delays-only fits inherit `T_inf` and `T_onset` latents
-# from the same submodels as the joint fit, so the per-pair δ and
-# per-case Inc sense checks are interpretable for both — they probe
+# Sense-check panels for the Dec 31 real-time delays-only fit: per-case
+# augmented Inc draws and per-pair augmented δ draws against the
+# population distributions implied by the posterior. These probe
 # whether the delay submodels alone can recover the population delays
 # given the augmented latents.
 
-let fit = fits_by_date[1]
+let fit = delays_fits[1]
     plot_inc_sense_check(fit.chn_dly_rt, fit.d_rt)
 end
 
 #-
 
-let fit = fits_by_date[1]
+let fit = delays_fits[1]
     plot_delta_sense_check(fit.chn_dly_rt, fit.d_rt)
 end
 
-# The same sense checks under the joint fit (with the R(t) /
-# `case_model` likelihood layered on) for comparison:
+# ## Joint fits
+#
+# Once the delays-only fits look acceptable, fit the full joint model:
+# one full retrospective fit on the closed-out line list (shared
+# comparator across cut-offs) plus, at each cut-off, a counterfactual
+# retro and a corrected real-time joint fit.
+#
+# The full retrospective fit's standalone diagnostics, headline summary
+# and data plot are not repeated here — see the analysis walkthrough
+# page for those.
 
-let fit = fits_by_date[1]
-    plot_inc_sense_check(fit.chn_rt, fit.d_rt)
+d_retro = build_data(ll; t0 = t0_ref)
+chn_retro_full = sample_fit(joint_model(d_retro, edges_ref);
+    samples = n_samples, chains = n_chains, seed = seed)
+post_retro_full = summarise(chn_retro_full)
+
+function _fit_joint(d, edges)
+    return sample_fit(joint_model(d, edges);
+        samples = n_samples, chains = n_chains, seed = seed)
 end
 
-#-
-
-let fit = fits_by_date[1]
-    plot_delta_sense_check(fit.chn_rt, fit.d_rt)
+joint_fits = map(delays_fits) do prep
+    @info "Joint at cut-off" prep.obs_date
+    chn_truth = _fit_joint(prep.d_truth, edges_ref)
+    chn_rt = _fit_joint(prep.d_rt, prep.edges_rt)
+    merge(prep,
+        (; chn_truth, chn_rt,
+            post_truth = summarise(chn_truth),
+            post_rt = summarise(chn_rt)))
 end
 
-# Pair plot for the population scalars in the Dec 31 joint real-time
-# fit. Strong banana-shaped correlations between `(μ_inc, σ_inc)` and
-# `k` are typical of the joint likelihood under truncation.
+# ## Joint diagnostics across cut-offs
+#
+# Combined sampler diagnostics with one row per fit. The delays-only
+# rows from the section above are repeated alongside the joint rows so
+# that, for each cut-off, the reader can compare R̂ / divergences across
+# the two model variants directly. If R̂ blows up only on the joint
+# rows, the delay submodels are not to blame and the pathology is in
+# the R(t) / `case_model` half of the likelihood.
 
-let fit = fits_by_date[1]
-    plot_pair(fit.chn_rt)
+diag_rows = NamedTuple[]
+push!(diag_rows,
+    _diag_row(chn_retro_full, missing, "full retro (joint)", nrow(ll)))
+for (dly, jnt) in zip(delays_fits, joint_fits)
+    push!(diag_rows,
+        _diag_row(dly.chn_dly_truth, dly.obs_date,
+            "retro (delays only)", dly.n_truth))
+    push!(diag_rows,
+        _diag_row(dly.chn_dly_rt, dly.obs_date,
+            "realtime (delays only)", dly.n_rt))
+    push!(diag_rows,
+        _diag_row(jnt.chn_truth, jnt.obs_date,
+            "retro (joint)", jnt.n_truth))
+    push!(diag_rows,
+        _diag_row(jnt.chn_rt, jnt.obs_date,
+            "realtime (joint)", jnt.n_rt))
 end
+diag_df = DataFrame(diag_rows)
 
-# Offspring posterior-predictive check (joint fit only — the
-# delays-only fit has no NB likelihood).
+# Cross-table comparing delay-parameter posterior medians for the
+# delays-only and joint fits at each cut-off. Stable medians across
+# the two model variants mean adding the R(t) / `case_model` likelihood
+# does not move the delay parameters; large moves point to
+# identifiability problems in the joint fit.
 
-let fit = fits_by_date[1]
-    plot_z_ppc(fit.chn_rt, fit.d_rt)
+delay_rows = NamedTuple[]
+for (dly, jnt) in zip(delays_fits, joint_fits)
+    append!(delay_rows,
+        _delay_rows(dly.chn_dly_truth, dly.obs_date,
+            "retro (delays only)", dly.n_truth))
+    append!(delay_rows,
+        _delay_rows(dly.chn_dly_rt, dly.obs_date,
+            "realtime (delays only)", dly.n_rt))
+    append!(delay_rows,
+        _delay_rows(jnt.chn_truth, jnt.obs_date,
+            "retro (joint)", jnt.n_truth))
+    append!(delay_rows,
+        _delay_rows(jnt.chn_rt, jnt.obs_date,
+            "realtime (joint)", jnt.n_rt))
 end
-
-#-
-
-let fit = fits_by_date[1]
-    z_ppc_summary(fit.chn_rt, fit.d_rt)
-end
+delay_df = DataFrame(delay_rows)
 
 # ## R(t) per cut-off
 #
@@ -278,7 +276,7 @@ end
 let
     colours = [:steelblue, :darkorange, :seagreen]
     fig = Figure(; size = (1500, 500))
-    for (j, fit) in enumerate(fits_by_date)
+    for (j, fit) in enumerate(joint_fits)
         ax = Axis(fig[1, j];
             xlabel = "Bin index", ylabel = "R(t) (80% CrI)",
             title = "obs_date = $(fit.obs_date)",
@@ -286,7 +284,7 @@ let
         panel_fits = [
             ("counterfactual retro", fit.post_truth),
             ("corrected real-time", fit.post_rt),
-            ("full retrospective", post_retro)
+            ("full retrospective", post_retro_full)
         ]
         for (i, (name, post)) in enumerate(panel_fits)
             q = rt_quantiles(post)
@@ -314,11 +312,11 @@ let
         (:k, "k")]
     colours = [:steelblue, :darkorange, :seagreen]
     fig = Figure(; size = (1500, 900))
-    for (r, fit) in enumerate(fits_by_date)
+    for (r, fit) in enumerate(joint_fits)
         row_fits = [
             ("counterfactual retro", fit.post_truth),
             ("corrected real-time", fit.post_rt),
-            ("full retrospective", post_retro)
+            ("full retrospective", post_retro_full)
         ]
         for (c, (key, label)) in enumerate(params)
             ax = Axis(fig[r, c];
@@ -338,6 +336,44 @@ let
     fig
 end
 
+# ## Z PPC and pair plot
+#
+# Illustrative joint-fit diagnostics for the Dec 31 cut-off. The Inc
+# and δ sense-check panels under the joint fit (with the R(t) /
+# `case_model` likelihood layered on) for comparison against the
+# delays-only versions above:
+
+let fit = joint_fits[1]
+    plot_inc_sense_check(fit.chn_rt, fit.d_rt)
+end
+
+#-
+
+let fit = joint_fits[1]
+    plot_delta_sense_check(fit.chn_rt, fit.d_rt)
+end
+
+# Pair plot for the population scalars in the Dec 31 joint real-time
+# fit. Strong banana-shaped correlations between `(μ_inc, σ_inc)` and
+# `k` are typical of the joint likelihood under truncation.
+
+let fit = joint_fits[1]
+    plot_pair(fit.chn_rt)
+end
+
+# Offspring posterior-predictive check for the Dec 31 joint real-time
+# fit (joint fit only — the delays-only fit has no NB likelihood).
+
+let fit = joint_fits[1]
+    plot_z_ppc(fit.chn_rt, fit.d_rt)
+end
+
+#-
+
+let fit = joint_fits[1]
+    z_ppc_summary(fit.chn_rt, fit.d_rt)
+end
+
 # ## Controlled-outbreak projection
 #
 # At each `obs_date`, conditional on the corrected real-time posterior,
@@ -355,7 +391,7 @@ end
 # imply transmission continued past the cut-off in the actual outbreak,
 # values below imply it stalled.
 
-controlled = map(fits_by_date) do fit
+controlled = map(joint_fits) do fit
     res = predict_controlled_outbreak(
         fit.chn_rt, fit.post_rt, ll, fit.obs_date, t0_ref)
     (; fit.obs_date, fit.n_rt, res.future_samples, res.actual_future)
