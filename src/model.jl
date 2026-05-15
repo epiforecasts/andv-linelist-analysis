@@ -89,7 +89,7 @@ Returns the length-`n_knots` `log_R` vector evaluated at the knot dates;
     log_R_init ~ init_prior
     T = typeof(log_R_init)
     ε ~ Turing.filldist(Normal(zero(T), one(T)), n_knots - 1)
-    log_R = vcat(log_R_init, log_R_init .+ accumulate(+, σ_rw .* ε))
+    log_R := vcat(log_R_init, log_R_init .+ accumulate(+, σ_rw .* ε))
     return (; log_R)
 end
 
@@ -107,7 +107,8 @@ returns `(; k = 1 / phi_inv_sqrt^2, phi_inv_sqrt)`.
 @model function nb_dispersion_model(
         phi_prior = truncated(Normal(0.0, 1.0); lower = 0))
     phi_inv_sqrt ~ phi_prior
-    return (; k = 1.0 / phi_inv_sqrt^2, phi_inv_sqrt)
+    k := 1.0 / phi_inv_sqrt^2
+    return (; k, phi_inv_sqrt)
 end
 
 """
@@ -147,8 +148,6 @@ retrospective mode, where `R_eff = R`).
         dispersion = nb_dispersion_model())
     random_walk ~ to_submodel(rt, false)
     nb_dispersion ~ to_submodel(dispersion, false)
-    log_R := random_walk.log_R
-    k := nb_dispersion.k
     realtime = !isempty(p)
     for i in eachindex(Z)
         R_i = exp(log_R_at(T_onset[i], edges, random_walk.log_R))
@@ -164,8 +163,9 @@ Real-time right-truncation submodel. Adds two contributions to the
 log-likelihood:
 
 1. Per-case Inc right-truncation `-logcdf(inc_dist, obs_time − T_inf[i])`
-   for every observed case (both index and sourced) — being in the
-   line list means the case's incubation completed by `obs_time`.
+   for **index cases only**. Sourced cases already get their offspring-
+   chain right-truncation through the convolved-delay denominator in
+   contribution (2), so applying `-logcdf` to them would double-count.
 2. Per-pair offspring-completeness denominator `-log(p[src])` for each
    sourced case, with
    `p = cdf(ConvolvedDelays(inc_dist, delta_dist), obs_time .- T_onset)`.
@@ -187,7 +187,9 @@ both `@addlogprob!` calls reduce to `0` and `p` comes back empty.
         inc_dist, delta_dist)
     convolved = ConvolvedDelays(inc_dist, delta_dist)
     T = eltype(T_onset)
-    Turing.@addlogprob! -sum(logcdf.(inc_dist, obs_time .- T_inf))
+    index = findall(==(0), source_idx)
+    Turing.@addlogprob! -sum(logcdf.(inc_dist,
+        obs_time[index] .- T_inf[index]))
     p = cdf(convolved, obs_time .- T_onset)
     sourced = source_idx[source_idx .!= 0]
     Turing.@addlogprob! -sum(log.(max.(p[sourced], floatmin(T))))
