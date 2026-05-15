@@ -83,15 +83,12 @@ preps = [_prepare_at(ll, obs_date) for obs_date in obs_dates]
 # delay parameters diverge here, the joint fit at the same cut-off has
 # no chance.
 
-function _fit_delays(d)
-    return sample_fit(delays_only_model(d);
-        samples = n_samples, chains = n_chains, seed = seed)
-end
-
 delays_fits = map(preps) do prep
     @info "Delays-only at cut-off" prep.obs_date
-    chn_dly_truth = _fit_delays(prep.d_truth)
-    chn_dly_rt = _fit_delays(prep.d_rt)
+    chn_dly_truth = sample_fit(delays_only_model(prep.d_truth);
+        samples = n_samples, chains = n_chains, seed = seed)
+    chn_dly_rt = sample_fit(delays_only_model(prep.d_rt);
+        samples = n_samples, chains = n_chains, seed = seed)
     merge(prep, (; chn_dly_truth, chn_dly_rt))
 end
 
@@ -187,15 +184,12 @@ chn_retro_full = sample_fit(joint_model(d_retro, edges_ref);
     samples = n_samples, chains = n_chains, seed = seed)
 post_retro_full = summarise(chn_retro_full)
 
-function _fit_joint(d, edges)
-    return sample_fit(joint_model(d, edges);
-        samples = n_samples, chains = n_chains, seed = seed)
-end
-
 joint_fits = map(delays_fits) do prep
     @info "Joint at cut-off" prep.obs_date
-    chn_truth = _fit_joint(prep.d_truth, edges_ref)
-    chn_rt = _fit_joint(prep.d_rt, prep.edges_rt)
+    chn_truth = sample_fit(joint_model(prep.d_truth, edges_ref);
+        samples = n_samples, chains = n_chains, seed = seed)
+    chn_rt = sample_fit(joint_model(prep.d_rt, prep.edges_rt);
+        samples = n_samples, chains = n_chains, seed = seed)
     merge(prep,
         (; chn_truth, chn_rt,
             post_truth = summarise(chn_truth),
