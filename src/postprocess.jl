@@ -83,8 +83,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Build the named-tuple of posterior draws consumed by [`save_posterior`](@ref)
-and print the headline summary table via [`summary_table`](@ref).
+Build the named-tuple of posterior draws consumed by [`save_posterior`](@ref).
+Call [`summary_table`](@ref) directly to print the headline summary.
 
 # Arguments
 - `chn`: FlexiChain returned by [`sample_fit`](@ref).
@@ -107,9 +107,6 @@ function summarise(chn)
     end
 
     log_R_chain = vector_chain(chn, :log_R)
-
-    show(stdout, "text/plain", summary_table(chn))
-    println()
 
     return (; μ_inc, σ_inc, μ_δ, σ_δ, k = k_s, log_R_chain,
         mean_gi_si, sd_gi_si, p_pre)

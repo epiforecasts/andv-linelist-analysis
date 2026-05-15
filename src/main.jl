@@ -91,6 +91,8 @@ function analyse(;
         samples, chains, seed, progress)
 
     post = summarise(chn)
+    show(stdout, "text/plain", summary_table(chn))
+    println()
     save_posterior(post, joinpath(output, "posterior.csv"))
 
     if !plots && figures != FIGURES_DIR

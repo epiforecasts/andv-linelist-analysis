@@ -280,23 +280,16 @@ end
 # At each `obs_date`, two counterfactual predictions for the number of
 # future symptomatic cases:
 #
-# - **Controlled** (`predict_controlled_outbreak`): transmission stops
-#   at `obs_time`.
-#   Only people already infected (chain started, in incubation) can go
-#   on to have onset.
-#   Per source `i`, future onsets `~ Poisson(λ_i · (q_i − p_i))` where
-#   `q_i = cdf(δ_dist, obs_time − T_onset[i])` is the probability
-#   transmission happened by `obs_time` and `p_i =
-#   cdf(ConvolvedDelays(inc, δ), obs_time − T_onset[i])` is the
-#   probability the chain has completed.
-# - **Natural chain** (`predict_natural_chain_outbreak`): current
-#   sources keep transmitting at their existing rate, but no second-
-#   generation chains form from those new offspring.
-#   Per source `i`, future onsets `~ Poisson(λ_i · (1 − p_i))`.
+# - **Controlled** ([`predict_controlled_outbreak`](@ref)): transmission
+#   stops at `obs_time`. Only people already infected by then can go on
+#   to have onset.
+# - **Natural chain** ([`predict_natural_chain_outbreak`](@ref)):
+#   current sources keep transmitting at their existing rate but no
+#   second-generation chains form from those new offspring.
 #
-# Both share the same Gamma posterior on `λ_i`:
-# `λ_i | Z_obs[i], k, R_i, p_i ~ Gamma(k + Z_obs[i], R_i / (k + R_i ·
-# p_i))` (scale form).
+# See the [Model page](model.md#Real-time-predictions) for the
+# Gamma–Poisson conjugate posterior these share and the per-source
+# thinning probabilities that distinguish them.
 # The realised count of cases with onset strictly after each cut-off is
 # overlaid as a vertical reference; values above the natural-chain band
 # imply transmission continued past the cut-off, values below imply it
@@ -358,35 +351,14 @@ end
 
 # ### Why the Jan 7 predictive is wider than Dec 31
 #
-# The Jan 7 cut-off carries more cases but the predictive distribution
-# of future onsets is wider, not narrower.
-# The mechanism is in the per-source Gamma–Poisson conjugate posterior
-# used by `predict_controlled_outbreak`: each observed source `i`
-# contributes
-# ```
-# λ_i | Z_obs[i], k, R_i, p_i  ~  Gamma(k + Z_obs[i],  R_i / (k + R_i · p_i))   (scale form)
-# Z_future[i]                  ~  Poisson(λ_i · (1 − p_i))
-# ```
-# with `p_i = cdf(ConvolvedDelays(inc, δ), obs_time − T_onset[i])` —
-# the probability that a chain rooted at source `i` has already
-# completed by the cut-off.
-# The Gamma scale `R_i / (k + R_i · p_i)` is large for sources with
-# small `p_i` (recent onsets near the cut-off): when `p_i ≈ 0`,
-# `scale ≈ R_i / k`, and the conditional variance
-# `(k + Z_obs[i]) · (R_i / (k + R_i · p_i))²` is correspondingly
-# large.
-# The Poisson thinning by `(1 − p_i)` then routes essentially all of
-# that wide `λ_i` mass into the future window.
-# At Jan 7 the line list adds roughly nine secondary cases with onsets
-# in the last week before the cut-off (`Δ_i = obs_time − T_onset[i]`
-# is just a few days for these): their `p_i` is small, so each
-# contributes a high-variance `Gamma · (1 − p_i)` term to the sum,
-# inflating the variance of the total despite the larger sample.
-# At Dec 31 fewer sources sit in that small-`Δ_i` regime, so the sum
-# is dominated by sources with moderate-to-large `p_i` whose scales
-# `R_i / (k + R_i · p_i)` are close to `1 / p_i` and whose `(1 − p_i)`
-# thinning further damps the contribution to the future window.
-# Additionally, the latest-onset sources have few visible offspring,
-# so the R(t) posterior near the Jan 7 cut-off is more prior-driven —
-# `R_i` is itself wider — which compounds the Gamma scale and the
-# resulting Poisson predictive variance.
+# More data does not always mean a tighter future-cases prediction.
+# At Jan 7 the line list adds about nine secondary cases with onsets
+# in the last week before the cut-off, so for those sources the chain
+# is far from complete and most of their expected offspring still
+# lies in the future.
+# Their R(t) is also more prior-driven (few visible offspring near the
+# cut-off), so the per-source rate is itself wide.
+# Both effects funnel a lot of variance into the predicted total.
+# At Dec 31 the late-onset sources are fewer and most of their
+# expected offspring chains have already completed, so each source
+# contributes far less to the future window.
