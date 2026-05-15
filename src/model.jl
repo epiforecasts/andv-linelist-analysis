@@ -56,11 +56,11 @@ transmission timing. Returns `(; dist = dist_constructor(μ, σ), μ, σ)`.
 - `μ_prior`: prior on the population mean `μ_δ`. Defaults to
   `Normal(0.0, 5.0)`.
 - `σ_prior`: prior on the population SD `σ_δ`, constrained positive.
-  Defaults to `truncated(Normal(1.0, 0.5); lower = 0)`.
+  Defaults to `truncated(Normal(0.0, 1.0); lower = 0)`.
 """
 @model function transmission_delta_model(; dist_constructor = Normal,
         μ_prior = Normal(0.0, 5.0),
-        σ_prior = truncated(Normal(1.0, 0.5); lower = 0))
+        σ_prior = truncated(Normal(0.0, 1.0); lower = 0))
     μ_δ ~ μ_prior
     σ_δ ~ σ_prior
     return (; dist = dist_constructor(μ_δ, σ_δ), μ = μ_δ, σ = σ_δ)
