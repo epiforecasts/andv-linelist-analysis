@@ -117,6 +117,32 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Distribution of the chain delay `δ + Inc(sec)`, with `Inc(sec) ~ inc`
+and `δ ~ δ`. Used as the joint right-truncation distribution for
+sourced offspring at a real-time cut-off.
+
+`cdf(::CombinedDelay, x)` delegates to [`F_offspring`](@ref) so the
+GaussLegendre quadrature remains the single source of truth for the
+joint CDF. `cdf.(d, xs)` works element-wise; for many evaluations,
+pass `xs` to [`F_offspring`](@ref) directly to share one quadrature
+solve across all points.
+
+# Fields
+- `inc`: incubation period distribution for the secondary case.
+- `δ`: per-pair transmission timing distribution.
+"""
+struct CombinedDelay{I, D} <: ContinuousUnivariateDistribution
+    inc::I
+    δ::D
+end
+
+Distributions.cdf(d::CombinedDelay, x::Real) = F_offspring([x], d.inc, d.δ)[1]
+Distributions.minimum(::CombinedDelay) = -Inf
+Distributions.maximum(::CombinedDelay) = Inf
+
+"""
+$(TYPEDSIGNATURES)
+
 Controlled-outbreak counterfactual: for each posterior draw, sum the
 predicted future onsets across observed sources, assuming no further
 transmission after `obs_time`. Each observed source contributes a
@@ -190,7 +216,7 @@ function predict_controlled_outbreak(chn, post, ll,
         for i in 1:N
             R_i = exp(clamp(log_R_at(T_d[i], edges, logR_d),
                 -T(50), T(50)))
-            p_i = p_vec[i]
+            p_i = clamp(p_vec[i], zero(T), one(T))
             shape_post = k_d + Z_obs[i]
             scale_post = R_i / (k_d + R_i * p_i)
             λ_i = rand(rng, Gamma(shape_post, scale_post))

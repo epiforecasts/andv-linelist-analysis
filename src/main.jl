@@ -12,7 +12,7 @@ Uses Mooncake as the default AD backend and `InitFromPrior()` chain
 initialisation. Override `adtype` to swap backends (e.g. Enzyme).
 
 # Arguments
-- `model`: a Turing model, e.g. from [`joint_model_def`](@ref).
+- `model`: a Turing model, e.g. from [`joint_model`](@ref).
 
 # Keyword Arguments
 - `samples`: NUTS samples per chain.
@@ -90,7 +90,7 @@ function analyse(;
     end
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time n_knots=length(edges)
 
-    chn = sample_fit(joint_model_def(d, edges, foffspring_alg);
+    chn = sample_fit(joint_model(d, edges, foffspring_alg);
         samples, chains, seed, progress)
 
     post = summarise(chn)

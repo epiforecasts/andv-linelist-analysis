@@ -34,11 +34,12 @@ t0_ref = minimum(ll.onset_date) - Day(60)
 edges_ref = bin_edges_day(t0_ref)
 seed = 20260512
 
-# Light sampler settings keep the doc build affordable; production fits
-# would use the package defaults (4 chains, 1000 samples).
+# Sampler settings match the package defaults (4 chains, 1000 samples)
+# so the real-time posterior is stable enough for the controlled-
+# outbreak projection downstream.
 
-n_chains = 2
-n_samples = 500
+n_chains = 4
+n_samples = 1000
 
 # ## Full retrospective fit
 #
@@ -46,7 +47,7 @@ n_samples = 500
 # the weekly R(t) knots align with every cut-off below.
 
 d_retro = build_data(ll; t0 = t0_ref)
-model_retro = joint_model_def(d_retro, edges_ref)
+model_retro = joint_model(d_retro, edges_ref)
 chn_retro = sample_fit(model_retro;
     samples = n_samples, chains = n_chains, seed = seed)
 post_retro = summarise(chn_retro)
@@ -84,7 +85,7 @@ plot_rt(chn_retro)
 # cut-off, the pathology is in the R(t) / `case_model` loop rather
 # than in the delay parameters.
 
-function _fit_at(ll, obs_date)
+function _prepare_at(ll, obs_date)
     ll_truth = filter_by_exposure(ll, obs_date)
     ll_rt = filter_realtime(ll, obs_date)
     d_truth = build_data(ll_truth; t0 = t0_ref)
@@ -94,26 +95,35 @@ function _fit_at(ll, obs_date)
         e = edges_ref[edges_ref .<= obs_offset]
         (isempty(e) || e[end] < obs_offset) ? push!(e, obs_offset) : e
     end
-    chn_dly_truth = sample_fit(delays_only_model_def(d_truth);
+    return (; obs_date, ll_truth, ll_rt, d_truth, d_rt, edges_rt,
+        n_truth = nrow(ll_truth), n_rt = nrow(ll_rt))
+end
+
+function _fit_delays(d)
+    return sample_fit(delays_only_model(d);
         samples = n_samples, chains = n_chains, seed = seed)
-    chn_dly_rt = sample_fit(delays_only_model_def(d_rt);
+end
+
+function _fit_joint(d, edges)
+    return sample_fit(joint_model(d, edges);
         samples = n_samples, chains = n_chains, seed = seed)
-    chn_truth = sample_fit(joint_model_def(d_truth, edges_ref);
-        samples = n_samples, chains = n_chains, seed = seed)
-    chn_rt = sample_fit(joint_model_def(d_rt, edges_rt);
-        samples = n_samples, chains = n_chains, seed = seed)
-    post_truth = summarise(chn_truth)
-    post_rt = summarise(chn_rt)
-    return (; obs_date,
-        ll_truth, ll_rt, d_truth, d_rt, edges_rt,
-        n_truth = nrow(ll_truth), n_rt = nrow(ll_rt),
-        chn_dly_truth, chn_dly_rt,
-        chn_truth, chn_rt, post_truth, post_rt)
 end
 
 fits_by_date = map(obs_dates) do obs_date
-    @info "Fitting cut-off" obs_date
-    _fit_at(ll, obs_date)
+    @info "Cut-off" obs_date
+    prep = _prepare_at(ll, obs_date)
+    @info "  delays-only retro fit"
+    chn_dly_truth = _fit_delays(prep.d_truth)
+    @info "  delays-only real-time fit"
+    chn_dly_rt = _fit_delays(prep.d_rt)
+    @info "  joint retro fit"
+    chn_truth = _fit_joint(prep.d_truth, edges_ref)
+    @info "  joint real-time fit"
+    chn_rt = _fit_joint(prep.d_rt, prep.edges_rt)
+    merge(prep,
+        (; chn_dly_truth, chn_dly_rt, chn_truth, chn_rt,
+            post_truth = summarise(chn_truth),
+            post_rt = summarise(chn_rt)))
 end
 
 # ## Sampler diagnostics across fits

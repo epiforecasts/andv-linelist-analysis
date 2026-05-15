@@ -90,7 +90,7 @@ cut-off in days relative to `t0`.
 
 # Returns
 A named tuple `(t0, onset_lo_day, onset_hi_day, exp_lo_day, exp_hi_day,
-source_idx, Zobs, N, obs_time)` ready to pass to [`joint_model_def`](@ref).
+source_idx, Zobs, N, obs_time)` ready to pass to [`joint_model`](@ref).
 
 # Examples
 ```julia
@@ -167,29 +167,6 @@ A `Vector{Float64}` of length `length(BIN_EDGES)` giving the knot positions
 in days.
 """
 bin_edges_day(t0) = Float64[Dates.value(d - t0) for d in BIN_EDGES]
-
-"""
-$(TYPEDSIGNATURES)
-
-Build the joint model from a line-list `ll`.
-
-Wraps [`build_data`](@ref), [`bin_edges_day`](@ref), and
-[`joint_model_def`](@ref) into a single call so the analysis walkthrough
-and CLI share the same model construction code path.
-
-# Arguments
-- `ll`: a line-list `DataFrame` as returned by [`load_linelist`](@ref).
-
-# Returns
-A NamedTuple `(; model, d, edges)`: the Turing model, the augmented data
-named tuple from [`build_data`](@ref), and the weekly knot edges from
-[`bin_edges_day`](@ref).
-"""
-function joint_model(ll)
-    d = build_data(ll)
-    edges = bin_edges_day(d.t0)
-    return (; model = joint_model_def(d, edges), d, edges)
-end
 
 # Piecewise-linear interpolation: log_R[b] is the value at knot b, with
 # linear interpolation inside the knot range and clamping outside.

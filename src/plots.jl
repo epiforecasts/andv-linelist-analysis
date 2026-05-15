@@ -133,7 +133,7 @@ SD, and Negative-Binomial dispersion k. Columns: `quantity`, `median`,
 `lower_95`, `upper_95`.
 
 # Arguments
-- `chn`: a sampled chain from [`joint_model_def`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 """
 function summary_table(chn)
     μ_inc = _draws(chn, :μ_inc)
@@ -187,7 +187,7 @@ the maximum over chains. Returns `missing` for the runtime if the chain
 carries no timing metadata.
 
 # Arguments
-- `chn`: a sampled chain from [`joint_model_def`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 """
 function diagnostics_table(chn)
     d = diagnostics(chn)
@@ -209,7 +209,7 @@ via PairPlots.jl. Returns a Makie `Figure` (requires a Makie backend such
 as CairoMakie loaded at the call site).
 
 # Arguments
-- `chn`: a sampled chain from [`joint_model_def`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 
 # Keyword Arguments
 - `thin`: stride applied to the posterior draws before plotting.
@@ -299,7 +299,7 @@ per draw. GI and SI show the predictive-sample histogram only. Returns a
 `Makie.Figure`.
 
 # Arguments
-- `chn`: a sampled chain from [`joint_model_def`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 
 # Keyword Arguments
 - `rng`: RNG used to draw one predictive sample per posterior draw.
@@ -366,7 +366,7 @@ AlgebraOfGraphics with `group = :draw`, which is the idiomatic way to
 spell "one line per draw" once the data is tidy.
 
 # Arguments
-- `chn`: a sampled chain from [`joint_model_def`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 
 # Keyword Arguments
 - `n_draws_plot`: target number of posterior draws to thin to before
@@ -423,7 +423,7 @@ plot the histogram of those per-pair medians with the population density
 overlaid. Returns a `Makie.Figure`.
 
 # Arguments
-- `chn`: a sampled chain from [`joint_model_def`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 - `d`: the augmented data NamedTuple from [`build_data`](@ref).
 """
 function plot_delta_sense_check(chn, d)
@@ -542,7 +542,7 @@ posterior-predictive summaries for three discrete test statistics —
 Bayesian posterior-predictive p-value.
 
 # Arguments
-- `chn`: a sampled chain from [`joint_model_def`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 - `d`: the augmented data NamedTuple from [`build_data`](@ref).
 
 # Keyword Arguments
@@ -588,7 +588,7 @@ the joint posterior and overlays the simulated counts against the
 observed counts per case.
 
 # Arguments
-- `chn`: a sampled chain from [`joint_model_def`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 - `d`: the augmented data NamedTuple from [`build_data`](@ref).
 
 # Keyword Arguments
@@ -692,7 +692,7 @@ plots the histogram of those per-case medians with the median PDF (and
 `Makie.Figure`.
 
 # Arguments
-- `chn`: a sampled chain from [`joint_model_def`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 - `data`: the augmented data NamedTuple from [`build_data`](@ref).
 
 # Keyword Arguments

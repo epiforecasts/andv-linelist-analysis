@@ -115,22 +115,39 @@ safe_nb(k, R) = NegativeBinomial(k, max(k / (k + R), eps(typeof(k))))
 """
 $(TYPEDSIGNATURES)
 
-Deterministic submodel computing the per-case offspring-completeness
-vector `p_i = F_offspring(Δ_i; inc_dist, δ_dist)`. Returns `(; p)`.
+Real-time right-truncation submodel. Evaluates the per-case
+offspring-completeness `p_i = cdf(delay_dist, obs_time − T_onset[i])`
+under the [`CombinedDelay`](@ref) `δ + Inc(sec)` and adds the per-pair
+thinning denominator `-log(p[src])` once per sourced case, completing
+the joint right-truncation correction for observed transmission pairs.
+Returns `(; p)`.
+
+The vector of `p` values is computed via a single
+[`F_offspring`](@ref) quadrature solve rather than per-element
+`cdf(delay_dist, ·)` calls, so AD passes are O(quadrature nodes)
+rather than O(N × quadrature nodes).
 
 # Arguments
-- `Δ`: vector of `obs_time − T_onset[i]` values per case (empty in
-  retrospective mode).
-- `inc_dist`: incubation period distribution from the incubation submodel.
-- `δ_dist`: transmission-timing distribution from the transmission submodel.
+- `T_onset`: per-case onset times.
+- `source_idx`: per-case source indices (0 for index cases).
+- `obs_time`: real-time cut-off as a day number.
+- `delay_dist`: [`CombinedDelay`](@ref) of `δ + Inc(sec)`.
 
 # Keyword Arguments
 - `foffspring_alg`: quadrature algorithm passed to `F_offspring`.
   Defaults to `_F_OFFSPRING_ALG`.
 """
-@model function combined_delay_model(Δ, inc_dist, δ_dist;
+@model function truncation_model(T_onset, source_idx, obs_time,
+        delay_dist::CombinedDelay;
         foffspring_alg = _F_OFFSPRING_ALG)
-    p = F_offspring(Δ, inc_dist, δ_dist; alg = foffspring_alg)
+    T = eltype(T_onset)
+    Δ = obs_time .- T_onset
+    p = F_offspring(Δ, delay_dist.inc, delay_dist.δ; alg = foffspring_alg)
+    for i in eachindex(source_idx)
+        src = source_idx[i]
+        src == 0 && continue
+        Turing.@addlogprob! -log(max(p[src], floatmin(T)))
+    end
     return (; p)
 end
 
@@ -139,10 +156,7 @@ $(TYPEDSIGNATURES)
 
 Per-case negative binomial likelihood for offspring counts `Z`, thinned
 by the per-case offspring-completeness `p` in real-time mode. Pass an
-empty `p` for retrospective mode. In real-time mode the per-pair
-thinning denominator `-log(p[src])` is also added once per sourced
-case, completing the joint right-truncation correction for observed
-transmission pairs.
+empty `p` for retrospective mode (`R_eff = R`).
 
 # Arguments
 - `Z`: vector of observed offspring counts per case.
@@ -152,21 +166,13 @@ transmission pairs.
 - `k`: negative binomial dispersion.
 - `p`: vector of per-case offspring-completeness values, or empty for
   retrospective mode.
-- `source_idx`: per-case source indices (0 for index cases); used only
-  in real-time mode to apply the per-pair thinning denominator.
 """
-@model function case_model(Z, T_onset, edges, log_R, k, p, source_idx)
+@model function case_model(Z, T_onset, edges, log_R, k, p)
     realtime = !isempty(p)
     for i in eachindex(Z)
         R_i = exp(log_R_at(T_onset[i], edges, log_R))
         R_eff = realtime ? R_i * p[i] : R_i
         Z[i] ~ safe_nb(k, R_eff)
-        if realtime
-            src = source_idx[i]
-            if src != 0
-                Turing.@addlogprob! -log(max(p[src], floatmin(eltype(p))))
-            end
-        end
     end
 end
 
@@ -218,76 +224,23 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Joint Bayesian model over incubation, transmission timing, and the
-weekly random walk on log R(t) at the knot dates.
-The three population components are passed in as Turing submodels so
-priors and structural choices can be swapped without editing this
-function.
-
-# Arguments
-- `d`: structured line-list data as returned by `build_data`, including
-  per-case onset bounds, exposure bounds, source indices, offspring counts
-  `Zobs`, and optional `obs_time` for real-time fits.
-- `edges`: vector of knot dates (as day numbers) at which `log_R` is
-  defined.
-- `foffspring_alg`: quadrature algorithm passed to `F_offspring` for the
-  real-time offspring-completeness integral.
-
-# Keyword Arguments
-- `incubation`: Turing submodel for the incubation period. Defaults to
-  `incubation_model()`.
-- `transmission`: Turing submodel for the transmission timing `δ`.
-  Defaults to `transmission_delta_model()`.
-- `rt`: Turing submodel for the log R(t) random walk. Defaults to
-  `random_walk_rt_model(length(edges))`.
-- `dispersion`: Turing submodel for the NB dispersion `k` (via the
-  Stan-default `1/√k` reparameterisation). Defaults to
-  `nb_dispersion_model()`; swap to plug in a different `phi_prior`.
-"""
-@model function joint_model_def(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
-        incubation = incubation_model(),
-        transmission = transmission_delta_model(),
-        rt = random_walk_rt_model(length(edges)),
-        dispersion = nb_dispersion_model())
-    inc ~ to_submodel(incubation, false)
-    delta ~ to_submodel(transmission, false)
-    _log_R ~ to_submodel(rt, false)
-    disp ~ to_submodel(dispersion, false)
-
-    k := disp.k
-    log_R := _log_R
-
-    latent ~ to_submodel(
-        latent_times_model(d, inc.dist, delta.dist), false)
-    T_onset = latent.T_onset
-
-    realtime = d.obs_time !== nothing
-    T = eltype(T_onset)
-    Δ = realtime ? d.obs_time .- T_onset : T[]
-    delays ~ to_submodel(
-        combined_delay_model(Δ, inc.dist, delta.dist;
-            foffspring_alg = foffspring_alg), false)
-
-    cases ~ to_submodel(
-        case_model(d.Zobs, T_onset, edges, log_R, k, delays.p,
-            d.source_idx), false)
-end
-
-"""
-$(TYPEDSIGNATURES)
-
 Delays-only joint model: fits the incubation period and transmission
 timing submodels against the augmented line-list latents `T_inf` and
 `T_onset` but omits the R(t) random walk, the NB offspring likelihood,
 and the offspring-completeness thinning correction.
 
-Useful as a diagnostic step: a delays-only fit that converges where the
-full [`joint_model_def`](@ref) collapses isolates the pathology to the
-R(t) / `case_model` half of the joint likelihood rather than the delay
-parameters. Index cases retain the same Inc right-truncation under
-`obs_time` as in the full model; sourced cases get the marginal Inc
-and δ log-densities with the GI > 0 constraint enforced, but no joint
-`F_offspring` truncation (pure delay fitting).
+Useful as both a standalone diagnostic fit and the first submodel of
+[`joint_model`](@ref): a delays-only fit that converges where the full
+joint fit collapses isolates the pathology to the R(t) / `case_model`
+half of the joint likelihood rather than the delay parameters. Index
+cases retain the same Inc right-truncation under `obs_time` as in the
+full model; sourced cases get the marginal Inc and δ log-densities
+with the GI > 0 constraint enforced, but no joint `F_offspring`
+truncation (pure delay fitting).
+
+Returns `(; T_inf, T_onset, inc, δ)` so the joint model can pass the
+incubation and δ distributions through to the truncation and case
+submodels without re-instantiating them.
 
 # Arguments
 - `d`: structured line-list data as returned by `build_data`,
@@ -300,35 +253,71 @@ and δ log-densities with the GI > 0 constraint enforced, but no joint
 - `transmission`: Turing submodel for the transmission timing `δ`.
   Defaults to `transmission_delta_model()`.
 """
-@model function delays_only_model_def(d;
+@model function delays_only_model(d;
         incubation = incubation_model(),
         transmission = transmission_delta_model())
     inc ~ to_submodel(incubation, false)
     delta ~ to_submodel(transmission, false)
     latent ~ to_submodel(
         latent_times_model(d, inc.dist, delta.dist), false)
+    return (; T_inf = latent.T_inf, T_onset = latent.T_onset,
+        inc = inc.dist, δ = delta.dist)
 end
 
 """
 $(TYPEDSIGNATURES)
 
-Build a delays-only model from a line-list `ll`, mirroring the
-[`joint_model`](@ref) wrapper but calling [`delays_only_model_def`](@ref).
+Joint Bayesian model over incubation, transmission timing, and the
+weekly random walk on log R(t) at the knot dates.
+The delays bundle (incubation + δ + latent times), R(t), and
+dispersion components are all passed in as Turing submodels so priors
+and structural choices can be swapped without editing this function.
+
+The submodel sequence is: `delays` → (real-time only) `truncation` →
+`rt` + `dispersion` → `cases`. The truncation submodel is invoked
+unconditionally and given empty inputs in retrospective mode so its
+`p` vector comes back empty and `case_model` skips the thinning.
 
 # Arguments
-- `ll`: a line-list `DataFrame` as returned by [`load_linelist`](@ref).
+- `d`: structured line-list data as returned by `build_data`, including
+  per-case onset bounds, exposure bounds, source indices, offspring counts
+  `Zobs`, and optional `obs_time` for real-time fits.
+- `edges`: vector of knot dates (as day numbers) at which `log_R` is
+  defined.
+- `foffspring_alg`: quadrature algorithm passed to `F_offspring` for the
+  real-time offspring-completeness integral.
 
 # Keyword Arguments
-- `obs_time`: optional real-time cut-off `Date`; omit for retrospective.
-- `t0`: optional explicit time origin `Date`.
-
-# Returns
-A NamedTuple `(; model, d)`: the Turing model and the augmented data
-named tuple from [`build_data`](@ref).
+- `delays`: Turing submodel bundling incubation, transmission timing
+  and the per-case latents. Defaults to `delays_only_model(d)`.
+- `rt`: Turing submodel for the log R(t) random walk. Defaults to
+  `random_walk_rt_model(length(edges))`.
+- `dispersion`: Turing submodel for the NB dispersion `k` (via the
+  Stan-default `1/√k` reparameterisation). Defaults to
+  `nb_dispersion_model()`; swap to plug in a different `phi_prior`.
 """
-function delays_only_model(ll;
-        obs_time::Union{Nothing, Date} = nothing,
-        t0::Union{Nothing, Date} = nothing)
-    d = build_data(ll; obs_time = obs_time, t0 = t0)
-    return (; model = delays_only_model_def(d), d)
+@model function joint_model(d, edges, foffspring_alg = _F_OFFSPRING_ALG;
+        delays = delays_only_model(d),
+        rt = random_walk_rt_model(length(edges)),
+        dispersion = nb_dispersion_model())
+    dly ~ to_submodel(delays, false)
+    T_onset = dly.T_onset
+    delay_dist = CombinedDelay(dly.inc, dly.δ)
+
+    realtime = d.obs_time !== nothing
+    T = eltype(T_onset)
+    trunc_T_onset = realtime ? T_onset : T[]
+    trunc_src = realtime ? d.source_idx : Int[]
+    obs_time_t = realtime ? d.obs_time : T[]
+    trunc ~ to_submodel(
+        truncation_model(trunc_T_onset, trunc_src, obs_time_t,
+            delay_dist; foffspring_alg = foffspring_alg), false)
+
+    _log_R ~ to_submodel(rt, false)
+    disp ~ to_submodel(dispersion, false)
+    log_R := _log_R
+    k := disp.k
+
+    cases ~ to_submodel(
+        case_model(d.Zobs, T_onset, edges, log_R, k, trunc.p), false)
 end

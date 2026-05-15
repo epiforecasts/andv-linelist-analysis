@@ -10,9 +10,10 @@ using DataFrames: DataFrame, nrow, eachrow, passmissing, rename!, sort!
 using DataFramesMeta: @select, @transform, @subset, @combine, @by, @rtransform,
                       @rsubset, @orderby, @rename
 using Dates: Dates, Date, Day, dayofweek
-using Distributions: Normal, LogNormal, truncated, NegativeBinomial,
-                     Uniform, Gamma, Poisson, logpdf, logcdf, cdf, pdf,
-                     partype
+using Distributions: Distributions, Normal, LogNormal, truncated,
+                     NegativeBinomial, Uniform, Gamma, Poisson,
+                     ContinuousUnivariateDistribution,
+                     logpdf, logcdf, cdf, pdf, partype
 using DocStringExtensions: TYPEDSIGNATURES
 using Enzyme: Enzyme
 using Integrals: IntegralProblem, GaussLegendre, solve
@@ -40,12 +41,11 @@ include("plots.jl")
 include("main.jl")
 
 export load_linelist, build_data, bin_edges_day, log_R_at, bin_labels
-export joint_model, joint_model_def
-export delays_only_model, delays_only_model_def
+export joint_model, delays_only_model
 export incubation_model, transmission_delta_model, random_walk_rt_model,
-       nb_dispersion_model, combined_delay_model, case_model,
+       nb_dispersion_model, truncation_model, case_model,
        latent_times_model
-export F_offspring
+export F_offspring, CombinedDelay
 export filter_realtime, filter_by_exposure, predict_controlled_outbreak
 export diagnostics, diagnostics_table, summary_table
 export vector_chain, summarise, save_posterior
