@@ -64,54 +64,23 @@ function _filter_linelist(ll, mask::AbstractVector{Bool})
 end
 
 #
-# Offspring-completeness integral
+# Convolved-delay distribution `δ + Inc(sec)` and its cdf
 #
-# F_offspring(Δ) = P(δ + Inc(sec) ≤ Δ) with δ ~ δ_dist, Inc(sec) ~ inc_dist
-#                = ∫ cdf(inc_dist, Δ − δ) · pdf(δ_dist, δ) dδ
+# cdf(d, Δ) = P(δ + Inc(sec) ≤ Δ)
+#           = ∫ cdf(d.inc, Δ − δ) · pdf(d.δ, δ) dδ
 #
 # Fixed-rule `GaussLegendre` rather than an adaptive solver: Mooncake
 # reverse-mode AD does not survive HCubature / QuadGK's internal heap
-# mutations.
+# mutations. Integration bounds scale with `std(d.δ)` so the quadrature
+# nodes stay clustered on the meaningful support regardless of `std`.
 
-function _f_offspring_integrand(δ::Real, p)
+const _CONVOLVED_DELAYS_ALG = GaussLegendre(; n = 80)
+const _CONVOLVED_DELAYS_K = 20
+
+function _convolved_delays_integrand(δ::Real, p)
     w = pdf(p.δ_dist, δ)
     return [(p.ts[i] - δ) > 0 ? cdf(p.inc_dist, p.ts[i] - δ) * w : zero(w)
             for i in eachindex(p.ts)]
-end
-
-const _F_OFFSPRING_BOUNDS = (-30.0, 30.0)
-const _F_OFFSPRING_ALG = GaussLegendre(; n = 80)
-
-"""
-$(TYPEDSIGNATURES)
-
-`P(δ + Inc(sec) ≤ Δ)` evaluated at each `Δ ∈ ts`, with
-`Inc(sec) ~ inc_dist` and `δ ~ δ_dist`.
-Returns a vector of the same length as `ts`.
-
-The integrand calls `cdf(inc_dist, ·)` and `pdf(δ_dist, ·)` directly, so
-swapping the distributional families does not require touching this
-function.
-`δ_bounds` must contain effectively all of `δ_dist`'s mass; the default
-±30 covers any well-behaved Normal δ.
-
-# Arguments
-- `ts`: vector of upper limits `Δ` at which to evaluate the joint CDF.
-- `inc_dist`: incubation period distribution for the secondary case.
-- `δ_dist`: distribution of the per-pair transmission timing `δ`.
-
-# Keyword Arguments
-- `alg`: quadrature rule passed to `Integrals.solve`. Defaults to
-  `GaussLegendre(; n = 80)`.
-- `δ_bounds`: integration bounds on `δ` as a 2-tuple. Defaults to
-  `(-30.0, 30.0)`.
-"""
-function F_offspring(ts::AbstractVector, inc_dist, δ_dist;
-        alg = _F_OFFSPRING_ALG,
-        δ_bounds::Tuple{<:Real, <:Real} = _F_OFFSPRING_BOUNDS)
-    p = (; ts, inc_dist, δ_dist)
-    prob = IntegralProblem(_f_offspring_integrand, δ_bounds, p)
-    return solve(prob, alg).u
 end
 
 """
@@ -139,7 +108,11 @@ end
 
 Distributions.cdf(d::ConvolvedDelays, x::Real) = cdf(d, [x])[1]
 function Distributions.cdf(d::ConvolvedDelays, x::AbstractVector)
-    F_offspring(x, d.inc, d.δ; alg = _F_OFFSPRING_ALG)
+    bounds = (mean(d.δ) - _CONVOLVED_DELAYS_K * std(d.δ),
+        mean(d.δ) + _CONVOLVED_DELAYS_K * std(d.δ))
+    p = (; ts = x, inc_dist = d.inc, δ_dist = d.δ)
+    prob = IntegralProblem(_convolved_delays_integrand, bounds, p)
+    return solve(prob, _CONVOLVED_DELAYS_ALG).u
 end
 Distributions.minimum(::ConvolvedDelays) = -Inf
 Distributions.maximum(::ConvolvedDelays) = Inf
@@ -153,7 +126,7 @@ transmission after `obs_time`. Each observed source contributes a
 `Poisson(λ_i · (1 − p_i))` term where `λ_i | Z_obs[i], k, R_i, p_i`
 follows the conjugate Gamma posterior of the NB-binomial-thinning
 model: `Gamma(k + Z_obs[i], R_i / (k + R_i · p_i))` (scale form),
-with `p_i = F_offspring(obs_time − T_onset[i])`. Conditioning on each
+with `p_i = cdf(ConvolvedDelays(inc, δ), obs_time − T_onset[i])`. Conditioning on each
 source's observed offspring count `Z_obs[i]` sharpens the prediction
 relative to the naive marginal NB(k, R_i (1 − p_i)).
 

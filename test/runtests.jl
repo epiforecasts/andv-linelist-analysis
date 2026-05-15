@@ -4,7 +4,7 @@ using Aqua
 # not brought into `Main`. Otherwise Julia's `(@main)` auto-invocation
 # would run the full `analyse()` pipeline at the end of the test script.
 import TransmissionLinelist
-using TransmissionLinelist: F_offspring
+using TransmissionLinelist: ConvolvedDelays
 using DifferentiationInterface: AutoMooncake, AutoForwardDiff,
                                 value_and_gradient
 using Mooncake: Mooncake

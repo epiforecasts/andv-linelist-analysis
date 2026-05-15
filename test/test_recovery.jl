@@ -127,21 +127,21 @@ end
     @test covered >= ceil(Int, 0.8 * n_knots)
 end
 
-@testset "F_offspring: matches QuadGKJL high-precision reference" begin
+@testset "ConvolvedDelays cdf: matches QuadGKJL high-precision reference" begin
     inc = LogNormal(3.0, 0.5)
     del = Normal(0.0, 1.0)
     t = 30.0
 
-    # Same integrand layout as `_f_offspring_integrand` but for a scalar
-    # `t`, so we can run an adaptive QuadGK reference (gold-standard for
-    # the value, but not used in production since it doesn't survive
-    # Mooncake reverse-mode AD).
+    # Adaptive QuadGK reference (gold-standard for the value, but not
+    # used in production since it doesn't survive Mooncake reverse-mode
+    # AD). Same integrand layout as the production GaussLegendre rule
+    # but for a scalar `t`.
     f_scalar(δ, p) = (t - δ) > 0 ?
                      cdf(p.inc, t - δ) * pdf(p.del, δ) : 0.0
     prob = IntegralProblem(f_scalar, (-30.0, 30.0),
         (; inc = inc, del = del))
     v_ref = solve(prob, QuadGKJL(); reltol = 1e-12, abstol = 1e-14).u
-    v_gl = F_offspring([t], inc, del)[1]
+    v_gl = cdf(ConvolvedDelays(inc, del), [t])[1]
     # Production uses GaussLegendre(n=80), whose absolute error on this
     # integrand is ~1e-6 at t=30. Use a 5e-6 absolute tolerance — tight
     # enough to detect any regression in node count or bounds, loose
