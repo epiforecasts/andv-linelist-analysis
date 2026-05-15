@@ -152,7 +152,7 @@ post_retro_full = summarise(chn_retro_full);
 
 joint_fits = map(delays_fits) do prep
     @info "Joint at cut-off" prep.obs_date
-    chn_truth = sample_fit(joint_model(prep.d_truth, edges_ref);
+    chn_truth = sample_fit(joint_model(prep.d_truth, prep.edges_rt);
         samples = n_samples, chains = n_chains, seed = seed)
     chn_rt = sample_fit(joint_model(prep.d_rt, prep.edges_rt);
         samples = n_samples, chains = n_chains, seed = seed)

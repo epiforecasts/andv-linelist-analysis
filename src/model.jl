@@ -179,7 +179,8 @@ both `@addlogprob!` calls reduce to `0` and `p` comes back empty.
 - `T_inf`: per-case infection times.
 - `T_onset`: per-case onset times.
 - `source_idx`: per-case source indices (0 for index cases).
-- `obs_time`: real-time cut-off as a day number.
+- `obs_time`: per-case real-time cut-off as a vector of day numbers,
+  same length as `T_inf` and `T_onset`.
 - `inc_dist`: incubation period distribution.
 - `delta_dist`: per-pair transmission timing distribution.
 """

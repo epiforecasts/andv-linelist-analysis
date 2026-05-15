@@ -550,7 +550,9 @@ Bayesian posterior-predictive p-value.
 
 # Keyword Arguments
 - `rng`: RNG used to replicate the offspring counts.
-- `edges`: weekly knot edges; defaults to `bin_edges_day(d.t0)`.
+- `edges`: weekly knot edges; defaults to `nothing`, in which case
+  the knots are taken from `bin_edges_day(d.t0)[1:length(log_R)]`
+  inside `_z_ppc_replicate`.
 """
 function z_ppc_summary(chn, d;
         rng = Random.MersenneTwister(1),
@@ -596,7 +598,9 @@ observed counts per case.
 
 # Keyword Arguments
 - `rng`: RNG used for the posterior draws.
-- `edges`: weekly knot edges; defaults to `bin_edges_day(d.t0)`.
+- `edges`: weekly knot edges; defaults to `nothing`, in which case
+  the knots are taken from `bin_edges_day(d.t0)[1:length(log_R)]`
+  inside `_z_ppc_replicate`.
 """
 function plot_z_ppc(chn, d;
         rng = Random.MersenneTwister(1),
