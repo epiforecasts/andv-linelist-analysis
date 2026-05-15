@@ -10,6 +10,25 @@ _default_theme() = merge(theme_latexfonts(), Theme(fontsize = 12))
 
 _with_theme(f) = with_theme(f, _default_theme())
 
+# Saving a Makie figure needs a Makie backend (e.g. CairoMakie) loaded
+# at the call site. Look up `save` dynamically so the package itself
+# doesn't depend on a particular backend.
+function _save_makie_figure(fig, path)
+    backend = nothing
+    for name in (:CairoMakie, :GLMakie, :WGLMakie)
+        if isdefined(Main, name)
+            backend = getfield(Main, name)
+            break
+        end
+    end
+    if backend === nothing
+        @warn "No Makie backend loaded in Main; skipping figure save" path
+        return path
+    end
+    Base.invokelatest(backend.save, path, fig; px_per_unit = 2.0)
+    return path
+end
+
 """
 $(TYPEDSIGNATURES)
 
@@ -479,8 +498,7 @@ end
 Posterior-predictive check for the observed offspring counts `Zobs`. For
 each posterior draw `d` and each case `i`, samples a replicated offspring
 count `Z_rep[i, d] ~ NegativeBinomial(k[d], k[d]/(k[d] + R_i))`, where
-`R_i = exp(clamp(log_R_at(T_onset[i, d], edges, log_R[:, d]), -50, 50))`.
-The clamp matches the model's likelihood.
+`R_i = exp(log_R_at(T_onset[i, d], edges, log_R[:, d]))`.
 
 Joint-draw: `T_onset[i]`, `log_R[:]`, and `k` are taken from the same
 posterior draw, so the PPC reflects full posterior uncertainty in case
@@ -521,11 +539,7 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
         k_d = k_draws[d_idx]
         for i in 1:N
             t_i = t_onset[i][d_idx]
-            lr = log_R_at(t_i, knots, logR_d)
-            # Clamp tightly enough that exp(lr) stays well within Int64
-            # range under the NB sampler. Divergent draws (Mode B) can
-            # otherwise push R_i past 1e18 and overflow when sampled.
-            R_i = exp(clamp(lr, -20.0, 20.0))
+            R_i = exp(log_R_at(t_i, knots, logR_d))
             p = k_d / (k_d + R_i)
             Z_rep[d_idx, i] = rand(rng, NegativeBinomial(k_d, p))
         end

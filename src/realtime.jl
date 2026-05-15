@@ -171,10 +171,9 @@ function _predict_future_onsets(chn, post, ll,
 
         zsum = 0
         for i in 1:N
-            R_i = exp(clamp(log_R_at(T_d[i], edges, logR_d),
-                -T(20), T(20)))
-            p_i = clamp(p_vec[i], zero(T), one(T))
-            q_i = clamp(q_vec[i], zero(T), one(T))
+            R_i = exp(log_R_at(T_d[i], edges, logR_d))
+            p_i = p_vec[i]
+            q_i = q_vec[i]
             shape_post = k_d + Z_obs[i]
             scale_post = R_i / (k_d + R_i * p_i)
             λ_i = rand(rng, Gamma(shape_post, scale_post))

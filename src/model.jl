@@ -114,9 +114,10 @@ end
 """
     safe_nb(k, R)
 
-`NegativeBinomial(k, p)` with `p = max(k/(k+R), eps(typeof(k)))`. Keeps
-the gradient finite when an extreme NUTS proposal overflows `exp(log_R)`
-to `Inf`.
+`NegativeBinomial(k, p)` with `p = max(k/(k+R), eps(typeof(k)))`. The
+clamp stabilises the gradient when an extreme NUTS proposal makes
+`R` so large that `p` underflows to zero, which would otherwise leave
+`logpdf` at `-Inf` and break AD.
 """
 safe_nb(k, R) = NegativeBinomial(k, max(k / (k + R), eps(typeof(k))))
 

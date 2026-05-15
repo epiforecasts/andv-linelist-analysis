@@ -174,14 +174,14 @@ The latent rate of source ``i``'s offspring follows the conjugate posterior
 
 The two predictors differ only in the thinning probability applied to ``\lambda_i`` when drawing future onsets:
 
-- **Controlled** ([`predict_controlled_outbreak`](@ref)): transmission stops at `obs_time`.
+- **Controlled** (`predict_controlled_outbreak`): transmission stops at `obs_time`.
   Only people already infected by then (`δ ≤ Δ_i`, chain not yet symptomatic) contribute:
 
 ```math
 Z_{\mathrm{future}}[i] \;\sim\; \mathrm{Poisson}\!\bigl(\lambda_i\,(q_i - p_i)\bigr).
 ```
 
-- **Natural chain** ([`predict_natural_chain_outbreak`](@ref)): current sources keep transmitting at their existing rate but no second-generation chains form from those new offspring:
+- **Natural chain** (`predict_natural_chain_outbreak`): current sources keep transmitting at their existing rate but no second-generation chains form from those new offspring:
 
 ```math
 Z_{\mathrm{future}}[i] \;\sim\; \mathrm{Poisson}\!\bigl(\lambda_i\,(1 - p_i)\bigr).
