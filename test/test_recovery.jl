@@ -88,10 +88,10 @@ end
     n_per_bin = fill(cases_per_bin, n_knots)
 
     @model function wrap_rt(counts, n_per_bin, k_nb)
-        log_R ~ to_submodel(
+        rw ~ to_submodel(
             TransmissionLinelist.random_walk_rt_model(length(counts)), false)
         for b in eachindex(counts)
-            R = exp(clamp(log_R[b], -50.0, 50.0))
+            R = exp(clamp(rw.log_R[b], -50.0, 50.0))
             # Sum of n iid NB(k, p) is NB(n*k, p).
             counts[b] ~ NegativeBinomial(n_per_bin[b] * k_nb,
                 k_nb / (k_nb + R))

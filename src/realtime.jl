@@ -117,28 +117,32 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Distribution of the chain delay `δ + Inc(sec)`, with `Inc(sec) ~ inc`
-and `δ ~ δ`. Used as the joint right-truncation distribution for
-sourced offspring at a real-time cut-off.
+Distribution of the convolved chain delay `δ + Inc(sec)`, with
+`Inc(sec) ~ inc` and `δ ~ δ`. Used as the joint right-truncation
+distribution for sourced offspring at a real-time cut-off.
 
-`cdf(::CombinedDelay, x)` delegates to [`F_offspring`](@ref) so the
-GaussLegendre quadrature remains the single source of truth for the
-joint CDF. `cdf.(d, xs)` works element-wise; for many evaluations,
-pass `xs` to [`F_offspring`](@ref) directly to share one quadrature
-solve across all points.
+Two `cdf` methods are provided. The scalar form `cdf(d, x::Real)` is
+the standard `Distributions` interface. The vector form
+`cdf(d, xs::AbstractVector)` evaluates the CDF at every `x ∈ xs` in a
+single GaussLegendre quadrature solve. Prefer the vector form when
+evaluating at many points: `cdf.(d, xs)` would otherwise trigger one
+quadrature per element.
 
 # Fields
 - `inc`: incubation period distribution for the secondary case.
 - `δ`: per-pair transmission timing distribution.
 """
-struct CombinedDelay{I, D} <: ContinuousUnivariateDistribution
+struct ConvolvedDelays{I, D} <: ContinuousUnivariateDistribution
     inc::I
     δ::D
 end
 
-Distributions.cdf(d::CombinedDelay, x::Real) = F_offspring([x], d.inc, d.δ)[1]
-Distributions.minimum(::CombinedDelay) = -Inf
-Distributions.maximum(::CombinedDelay) = Inf
+Distributions.cdf(d::ConvolvedDelays, x::Real) = cdf(d, [x])[1]
+function Distributions.cdf(d::ConvolvedDelays, x::AbstractVector)
+    F_offspring(x, d.inc, d.δ; alg = _F_OFFSPRING_ALG)
+end
+Distributions.minimum(::ConvolvedDelays) = -Inf
+Distributions.maximum(::ConvolvedDelays) = Inf
 
 """
 $(TYPEDSIGNATURES)
@@ -167,8 +171,6 @@ control were achieved at the cut-off, above if transmission continued.
 - `t0`: time origin `Date` used to fit `chn`.
 
 # Keyword Arguments
-- `foffspring_alg`: quadrature rule for `F_offspring`. Defaults to
-  `GaussLegendre(; n = 80)`.
 - `inc_dist`: two-argument constructor for the incubation period
   distribution, called as `inc_dist(μ_inc, σ_inc)` per posterior draw.
   Defaults to `LogNormal`; override to match an alternative incubation
@@ -179,7 +181,6 @@ control were achieved at the cut-off, above if transmission continued.
 """
 function predict_controlled_outbreak(chn, post, ll,
         obs_time::Date, t0::Date;
-        foffspring_alg = _F_OFFSPRING_ALG,
         inc_dist = LogNormal,
         delta_dist = Normal,
         rng = Random.MersenneTwister(2026))
@@ -210,7 +211,7 @@ function predict_controlled_outbreak(chn, post, ll,
         T_d = [T_on[i][d_idx] for i in 1:N]
 
         Δ = [obs_offset - T_d[i] for i in 1:N]
-        p_vec = F_offspring(Δ, inc, δd; alg = foffspring_alg)
+        p_vec = cdf(ConvolvedDelays(inc, δd), Δ)
 
         zsum = 0
         for i in 1:N

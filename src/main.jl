@@ -59,8 +59,6 @@ into `figures/`. Returns `(chain, post)`.
 - `seed`: random seed.
 - `progress`: show a NUTS progress bar.
 - `plots`: skip all figure generation when `false`.
-- `foffspring_alg`: integration algorithm used for `F_offspring` in
-  real-time mode.
 """
 function analyse(;
         data = LINELIST_PATH,
@@ -72,8 +70,7 @@ function analyse(;
         chains = 4,
         seed = 20260508,
         progress = true,
-        plots = true,
-        foffspring_alg = _F_OFFSPRING_ALG
+        plots = true
 )
     ll = data isa DataFrame ? data : load_linelist(data)
     if obs_time !== nothing
@@ -90,7 +87,7 @@ function analyse(;
     end
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time n_knots=length(edges)
 
-    chn = sample_fit(joint_model(d, edges, foffspring_alg);
+    chn = sample_fit(joint_model(d, edges);
         samples, chains, seed, progress)
 
     post = summarise(chn)
