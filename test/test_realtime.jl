@@ -6,7 +6,9 @@
 ## joint_model itself uses, so coverage matches production.
 
 using Random: MersenneTwister
-using Distributions: LogNormal, Normal
+using Distributions: LogNormal, Normal, cdf, truncated
+using TransmissionLinelist: ConvolvedDelays
+using Turing: Turing, @model, sample, NUTS
 
 function _f_offspring_mc(t, μ_inc, σ_inc, μ_δ, σ_δ; n = 100_000, seed = 42)
     rng = MersenneTwister(seed)
@@ -58,4 +60,44 @@ end
 
     @test isapprox(fwd_val, mc_val; atol = 1e-10, rtol = 1e-10)
     @test isapprox(fwd_grad, mc_grad; atol = 1e-8, rtol = 1e-6)
+end
+
+@testset "ConvolvedDelays cdf: Mooncake reverse via DifferentiationInterface" begin
+    ts = collect(10.0:5.0:55.0)
+    loss(θ) = sum(cdf(
+        ConvolvedDelays(
+            LogNormal(θ[1], θ[2]), Normal(θ[3], θ[4])), ts))
+    θ = [3.0, 0.5, 0.0, 1.0]
+
+    fwd_val, fwd_grad = value_and_gradient(loss, AutoForwardDiff(), θ)
+
+    mc_backend = AutoMooncake(; config = Mooncake.Config())
+    mc_val, mc_grad = value_and_gradient(loss, mc_backend, θ)
+
+    @test isapprox(fwd_val, mc_val; atol = 1e-10, rtol = 1e-10)
+    @test isapprox(fwd_grad, mc_grad; atol = 1e-8, rtol = 1e-6)
+end
+
+@testset "ConvolvedDelays cdf: samples cleanly inside a Turing model" begin
+    ts = collect(10.0:5.0:55.0)
+    target = cdf(ConvolvedDelays(
+            LogNormal(3.0, 0.5), Normal(0.0, 1.0)), ts)
+
+    @model function convolved_wrap(target, ts)
+        μ_inc ~ Normal(3.0, 0.5)
+        σ_inc ~ truncated(Normal(0.0, 0.5); lower = 0)
+        μ_δ ~ Normal(0.0, 5.0)
+        σ_δ ~ truncated(Normal(1.0, 0.5); lower = 0)
+        p = cdf(ConvolvedDelays(LogNormal(μ_inc, σ_inc),
+                Normal(μ_δ, σ_δ)), ts)
+        for i in eachindex(ts)
+            target[i] ~ Normal(p[i], 0.01)
+        end
+    end
+
+    chn = sample(convolved_wrap(target, ts), NUTS(), 200; progress = false)
+    @test all(isfinite, chn[:μ_inc])
+    @test all(isfinite, chn[:σ_inc])
+    @test all(isfinite, chn[:μ_δ])
+    @test all(isfinite, chn[:σ_δ])
 end
