@@ -1,7 +1,6 @@
 ## Real-time extension utilities.
 
-import FastGaussQuadrature  # activates Integrals' FGQ extension for GaussLegendre nodes
-using Integrals: GaussLegendre
+import FastGaussQuadrature
 
 """
 $(TYPEDSIGNATURES)
@@ -69,19 +68,18 @@ end
 # cdf(d, Δ) = P(δ + Inc(sec) ≤ Δ)
 #           = ∫ cdf(d.inc, Δ − δ) · pdf(d.δ, δ) dδ
 #
-# Fixed-rule `GaussLegendre` rather than an adaptive solver: Mooncake
-# reverse-mode AD does not survive HCubature / QuadGK's internal heap
-# mutations. Integration bounds scale with `std(d.δ)` so the quadrature
-# nodes stay clustered on the meaningful support regardless of `std`.
+# Implemented as a manual GaussLegendre sum over the fixed reference
+# interval (-1, 1), with the parametric integration bounds appearing
+# only inside the integrand. This keeps Mooncake reverse-mode AD
+# happy: AD flows through smooth scalar ops (sum, mul, cdf, pdf), not
+# through Integrals.jl's parameter-dependent bounds dispatch.
+# Integration spans `mean(d.δ) ± K·std(d.δ)` so the 80 nodes always
+# cluster on the meaningful support of `d.δ`.
 
-const _CONVOLVED_DELAYS_ALG = GaussLegendre(; n = 80)
+const _CONVOLVED_DELAYS_N = 80
 const _CONVOLVED_DELAYS_K = 20
-
-function _convolved_delays_integrand(δ::Real, p)
-    w = pdf(p.δ_dist, δ)
-    return [(p.ts[i] - δ) > 0 ? cdf(p.inc_dist, p.ts[i] - δ) * w : zero(w)
-            for i in eachindex(p.ts)]
-end
+const _CONVOLVED_DELAYS_NODES,
+_CONVOLVED_DELAYS_WEIGHTS = FastGaussQuadrature.gausslegendre(_CONVOLVED_DELAYS_N)
 
 """
 $(TYPEDSIGNATURES)
@@ -93,9 +91,9 @@ distribution for sourced offspring at a real-time cut-off.
 Two `cdf` methods are provided. The scalar form `cdf(d, x::Real)` is
 the standard `Distributions` interface. The vector form
 `cdf(d, xs::AbstractVector)` evaluates the CDF at every `x ∈ xs` in a
-single GaussLegendre quadrature solve. Prefer the vector form when
-evaluating at many points: `cdf.(d, xs)` would otherwise trigger one
-quadrature per element.
+single GaussLegendre sum. Prefer the vector form when evaluating at
+many points: `cdf.(d, xs)` would otherwise repeat the node loop per
+element.
 
 # Fields
 - `inc`: incubation period distribution for the secondary case.
@@ -108,11 +106,17 @@ end
 
 Distributions.cdf(d::ConvolvedDelays, x::Real) = cdf(d, [x])[1]
 function Distributions.cdf(d::ConvolvedDelays, x::AbstractVector)
-    bounds = (mean(d.δ) - _CONVOLVED_DELAYS_K * std(d.δ),
-        mean(d.δ) + _CONVOLVED_DELAYS_K * std(d.δ))
-    p = (; ts = x, inc_dist = d.inc, δ_dist = d.δ)
-    prob = IntegralProblem(_convolved_delays_integrand, bounds, p)
-    return solve(prob, _CONVOLVED_DELAYS_ALG).u
+    μ = mean(d.δ)
+    halfwidth = _CONVOLVED_DELAYS_K * std(d.δ)
+    return [halfwidth * sum(
+                _CONVOLVED_DELAYS_WEIGHTS[j] *
+                let δ_j = μ + halfwidth * _CONVOLVED_DELAYS_NODES[j]
+                    (x_i - δ_j) > 0 ?
+                    cdf(d.inc, x_i - δ_j) * pdf(d.δ, δ_j) :
+                    zero(halfwidth)
+                end
+            for j in eachindex(_CONVOLVED_DELAYS_NODES))
+            for x_i in x]
 end
 Distributions.minimum(::ConvolvedDelays) = -Inf
 Distributions.maximum(::ConvolvedDelays) = Inf
