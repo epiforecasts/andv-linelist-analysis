@@ -522,7 +522,10 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
         for i in 1:N
             t_i = t_onset[i][d_idx]
             lr = log_R_at(t_i, knots, logR_d)
-            R_i = exp(clamp(lr, -50.0, 50.0))
+            # Clamp tightly enough that exp(lr) stays well within Int64
+            # range under the NB sampler. Divergent draws (Mode B) can
+            # otherwise push R_i past 1e18 and overflow when sampled.
+            R_i = exp(clamp(lr, -20.0, 20.0))
             p = k_d / (k_d + R_i)
             Z_rep[d_idx, i] = rand(rng, NegativeBinomial(k_d, p))
         end

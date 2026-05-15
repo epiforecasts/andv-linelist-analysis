@@ -215,8 +215,11 @@ function predict_controlled_outbreak(chn, post, ll,
 
         zsum = 0
         for i in 1:N
+            # Clamp tightly enough that exp(log_R) stays well within
+            # Int64 range under the downstream Poisson sampler. Divergent
+            # draws (Mode B) can otherwise push R_i past 1e18 and overflow.
             R_i = exp(clamp(log_R_at(T_d[i], edges, logR_d),
-                -T(50), T(50)))
+                -T(20), T(20)))
             p_i = clamp(p_vec[i], zero(T), one(T))
             shape_post = k_d + Z_obs[i]
             scale_post = R_i / (k_d + R_i * p_i)
