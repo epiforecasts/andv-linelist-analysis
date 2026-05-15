@@ -240,3 +240,86 @@ function.
     cases ~ to_submodel(
         case_model(d.Zobs, T_onset, edges, log_R, k, thins), false)
 end
+
+"""
+$(TYPEDSIGNATURES)
+
+Delays-only joint model: fits the incubation period and transmission
+timing submodels against the augmented line-list latents `T_inf` and
+`T_onset` but omits the R(t) random walk, the NB offspring likelihood,
+and the offspring-completeness thinning correction.
+
+Useful as a diagnostic step: a delays-only fit that converges where the
+full [`joint_model_def`](@ref) collapses isolates the pathology to the
+R(t) / `case_model` half of the joint likelihood rather than the delay
+parameters. Index cases retain the same Inc right-truncation under
+`obs_time` as in the full model; sourced cases get the marginal Inc
+and δ log-densities with the GI > 0 constraint enforced, but no joint
+`F_offspring` truncation (pure delay fitting).
+
+# Arguments
+- `d`: structured line-list data as returned by `build_data`,
+  including per-case onset bounds, exposure bounds, source indices, and
+  optional `obs_time` for real-time fits.
+
+# Keyword Arguments
+- `incubation`: Turing submodel for the incubation period. Defaults to
+  `incubation_model()`.
+- `transmission`: Turing submodel for the transmission timing `δ`.
+  Defaults to `transmission_delta_model()`.
+"""
+@model function delays_only_model_def(d;
+        incubation = incubation_model(),
+        transmission = transmission_delta_model())
+    inc ~ to_submodel(incubation, false)
+    delta ~ to_submodel(transmission, false)
+    T = typeof(inc.μ)
+    T_onset = Vector{T}(undef, d.N)
+    for i in 1:d.N
+        T_onset[i] ~ Uniform(d.onset_lo_day[i], d.onset_hi_day[i])
+    end
+    realtime = d.obs_time !== nothing
+    T_inf = Vector{T}(undef, d.N)
+    for i in 1:d.N
+        src = d.source_idx[i]
+        if src == 0
+            T_inf[i] ~ Uniform(d.onset_lo_day[i] - 80.0, T_onset[i] - 1e-6)
+            Turing.@addlogprob! logpdf(inc.dist, T_onset[i] - T_inf[i])
+            realtime &&
+                Turing.@addlogprob! -logcdf(inc.dist, d.obs_time[i] - T_inf[i])
+        else
+            T_inf[i] ~ Uniform(d.exp_lo_day[i],
+                min(d.exp_hi_day[i], T_onset[i] - 1e-6))
+            if T_inf[i] <= T_inf[src]
+                Turing.@addlogprob! oftype(zero(T), -Inf)
+            else
+                Turing.@addlogprob! logpdf(inc.dist, T_onset[i] - T_inf[i])
+                Turing.@addlogprob! logpdf(delta.dist, T_inf[i] - T_onset[src])
+            end
+        end
+    end
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Build a delays-only model from a line-list `ll`, mirroring the
+[`joint_model`](@ref) wrapper but calling [`delays_only_model_def`](@ref).
+
+# Arguments
+- `ll`: a line-list `DataFrame` as returned by [`load_linelist`](@ref).
+
+# Keyword Arguments
+- `obs_time`: optional real-time cut-off `Date`; omit for retrospective.
+- `t0`: optional explicit time origin `Date`.
+
+# Returns
+A NamedTuple `(; model, d)`: the Turing model and the augmented data
+named tuple from [`build_data`](@ref).
+"""
+function delays_only_model(ll;
+        obs_time::Union{Nothing, Date} = nothing,
+        t0::Union{Nothing, Date} = nothing)
+    d = build_data(ll; obs_time = obs_time, t0 = t0)
+    return (; model = delays_only_model_def(d), d)
+end

@@ -40,6 +40,7 @@ include("main.jl")
 
 export load_linelist, build_data, bin_edges_day, log_R_at, bin_labels
 export joint_model, joint_model_def
+export delays_only_model, delays_only_model_def
 export incubation_model, transmission_delta_model, random_walk_rt_model,
        nb_dispersion_model, combined_delay_model, case_model
 export F_offspring
