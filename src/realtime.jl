@@ -120,6 +120,17 @@ function Distributions.cdf(d::ConvolvedDelays, x::AbstractVector)
     prob = IntegralProblem(_convolved_delays_integrand, (-1.0, 1.0), params)
     return halfwidth .* solve(prob, _CONVOLVED_DELAYS_ALG).u
 end
+
+# Closed-form specialisations: defer to `Distributions.convolve` for
+# same-family pairs that have an analytic sum, skipping the integral.
+function Distributions.cdf(d::ConvolvedDelays{<:Normal, <:Normal}, x::Real)
+    return cdf(Distributions.convolve(d.inc, d.δ), x)
+end
+function Distributions.cdf(d::ConvolvedDelays{<:Normal, <:Normal},
+        x::AbstractVector)
+    return cdf.(Distributions.convolve(d.inc, d.δ), x)
+end
+
 Distributions.minimum(::ConvolvedDelays) = -Inf
 Distributions.maximum(::ConvolvedDelays) = Inf
 

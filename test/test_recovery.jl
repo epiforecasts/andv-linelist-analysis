@@ -12,6 +12,7 @@
 using Random: Random, MersenneTwister
 using Distributions: LogNormal, Normal, NegativeBinomial,
                      logpdf, pdf, cdf
+using Dates: Date, Day
 using Statistics: median, std, quantile, mean
 using Turing: Turing, @model, NUTS, sample, to_submodel
 using Integrals: IntegralProblem, QuadGKJL, solve
@@ -147,4 +148,23 @@ end
     # enough to detect any regression in node count or bounds, loose
     # enough to absorb the fixed-rule's intrinsic truncation error.
     @test isapprox(v_gl, v_ref; atol = 5e-6, rtol = 5e-6)
+end
+
+@testset "delays_only_model: real-time mode converges at both cut-offs" begin
+    # Regression guard for the σ_δ collapse and Mooncake bitcast classes
+    # of bug: if cdf(ConvolvedDelays, ·) ever stops being AD-stable
+    # under parametric (μ, σ) the real-time fit blows up here.
+    ll = TransmissionLinelist.load_linelist()
+    t0 = minimum(ll.onset_date) - Day(60)
+    for obs_date in [Date("2018-12-31"), Date("2019-01-07")]
+        ll_rt = TransmissionLinelist.filter_realtime(ll, obs_date)
+        d_rt = TransmissionLinelist.build_data(ll_rt;
+            obs_time = obs_date, t0 = t0)
+        chn = TransmissionLinelist.sample_fit(
+            TransmissionLinelist.delays_only_model(d_rt);
+            samples = 200, chains = 2, seed = 20260512, progress = false)
+        diag = TransmissionLinelist.diagnostics_table(chn)
+        @test diag.rhat_max[1] < 1.1
+        @test diag.divergences[1] / (2 * 200) < 0.05
+    end
 end

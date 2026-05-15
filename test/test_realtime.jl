@@ -64,6 +64,18 @@ end
     @test isapprox(fwd_grad, mc_grad; atol = 1e-8, rtol = 1e-6)
 end
 
+@testset "ConvolvedDelays{Normal, Normal} cdf uses convolve specialisation" begin
+    inc = Normal(2.0, 0.5)
+    δ = Normal(0.0, 1.0)
+    d = ConvolvedDelays(inc, δ)
+    # Closed form: sum of independent Normals is Normal with summed means
+    # and variances. The specialisation should return this exactly.
+    expected = Normal(2.0, sqrt(0.25 + 1.0))
+    @test cdf(d, 3.5) ≈ cdf(expected, 3.5)
+    ts = [1.0, 2.5, 5.0]
+    @test cdf(d, ts) ≈ cdf.(expected, ts)
+end
+
 @testset "ConvolvedDelays cdf: samples cleanly inside a Turing model" begin
     ts = collect(10.0:5.0:55.0)
     target = cdf(ConvolvedDelays(
