@@ -139,7 +139,10 @@ $(TYPEDSIGNATURES)
 
 Per-case negative binomial likelihood for offspring counts `Z`, thinned
 by the per-case offspring-completeness `p` in real-time mode. Pass an
-empty `p` for retrospective mode.
+empty `p` for retrospective mode. In real-time mode the per-pair
+thinning denominator `-log(p[src])` is also added once per sourced
+case, completing the joint right-truncation correction for observed
+transmission pairs.
 
 # Arguments
 - `Z`: vector of observed offspring counts per case.
@@ -149,14 +152,67 @@ empty `p` for retrospective mode.
 - `k`: negative binomial dispersion.
 - `p`: vector of per-case offspring-completeness values, or empty for
   retrospective mode.
+- `source_idx`: per-case source indices (0 for index cases); used only
+  in real-time mode to apply the per-pair thinning denominator.
 """
-@model function case_model(Z, T_onset, edges, log_R, k, p)
+@model function case_model(Z, T_onset, edges, log_R, k, p, source_idx)
     realtime = !isempty(p)
     for i in eachindex(Z)
         R_i = exp(log_R_at(T_onset[i], edges, log_R))
         R_eff = realtime ? R_i * p[i] : R_i
         Z[i] ~ safe_nb(k, R_eff)
+        if realtime
+            src = source_idx[i]
+            if src != 0
+                Turing.@addlogprob! -log(max(p[src], floatmin(eltype(p))))
+            end
+        end
     end
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Per-case latent infection and onset time submodel. Samples `T_onset[i]`
+and `T_inf[i]` for each case and adds the marginal incubation and
+transmission-timing log-densities for the resulting pairs. Index cases
+get the Inc right-truncation under `obs_time` in real-time mode; sourced
+cases enforce the GI > 0 constraint by rejecting infeasible draws.
+
+# Arguments
+- `d`: structured line-list data as returned by `build_data`, providing
+  per-case onset bounds, exposure bounds, source indices, and optional
+  `obs_time` for real-time fits.
+- `inc_dist`: incubation period distribution from the incubation submodel.
+- `δ_dist`: transmission-timing distribution from the transmission submodel.
+"""
+@model function latent_times_model(d, inc_dist, δ_dist)
+    T = partype(inc_dist)
+    T_onset = Vector{T}(undef, d.N)
+    for i in 1:d.N
+        T_onset[i] ~ Uniform(d.onset_lo_day[i], d.onset_hi_day[i])
+    end
+    realtime = d.obs_time !== nothing
+    T_inf = Vector{T}(undef, d.N)
+    for i in 1:d.N
+        src = d.source_idx[i]
+        if src == 0
+            T_inf[i] ~ Uniform(d.onset_lo_day[i] - 80.0, T_onset[i] - 1e-6)
+            Turing.@addlogprob! logpdf(inc_dist, T_onset[i] - T_inf[i])
+            realtime &&
+                Turing.@addlogprob! -logcdf(inc_dist, d.obs_time[i] - T_inf[i])
+        else
+            T_inf[i] ~ Uniform(d.exp_lo_day[i],
+                min(d.exp_hi_day[i], T_onset[i] - 1e-6))
+            if T_inf[i] <= T_inf[src]
+                Turing.@addlogprob! oftype(zero(T), -Inf)
+            else
+                Turing.@addlogprob! logpdf(inc_dist, T_onset[i] - T_inf[i])
+                Turing.@addlogprob! logpdf(δ_dist, T_inf[i] - T_onset[src])
+            end
+        end
+    end
+    return (; T_inf, T_onset)
 end
 
 """
@@ -201,44 +257,20 @@ function.
     k := disp.k
     log_R := _log_R
 
-    T = typeof(inc.μ)
-    T_onset = Vector{T}(undef, d.N)
-    for i in 1:d.N
-        T_onset[i] ~ Uniform(d.onset_lo_day[i], d.onset_hi_day[i])
-    end
+    latent ~ to_submodel(
+        latent_times_model(d, inc.dist, delta.dist), false)
+    T_onset = latent.T_onset
 
     realtime = d.obs_time !== nothing
-
+    T = eltype(T_onset)
     Δ = realtime ? d.obs_time .- T_onset : T[]
     delays ~ to_submodel(
         combined_delay_model(Δ, inc.dist, delta.dist;
             foffspring_alg = foffspring_alg), false)
-    thins = delays.p
-
-    T_inf = Vector{T}(undef, d.N)
-    for i in 1:d.N
-        src = d.source_idx[i]
-        if src == 0
-            T_inf[i] ~ Uniform(d.onset_lo_day[i] - 80.0, T_onset[i] - 1e-6)
-            Turing.@addlogprob! logpdf(inc.dist, T_onset[i] - T_inf[i])
-            realtime &&
-                Turing.@addlogprob! -logcdf(inc.dist, d.obs_time[i] - T_inf[i])
-        else
-            T_inf[i] ~ Uniform(d.exp_lo_day[i],
-                min(d.exp_hi_day[i], T_onset[i] - 1e-6))
-            if T_inf[i] <= T_inf[src]
-                Turing.@addlogprob! oftype(zero(T), -Inf)
-            else
-                Turing.@addlogprob! logpdf(inc.dist, T_onset[i] - T_inf[i])
-                Turing.@addlogprob! logpdf(delta.dist, T_inf[i] - T_onset[src])
-                realtime &&
-                    Turing.@addlogprob! -log(max(thins[src], floatmin(T)))
-            end
-        end
-    end
 
     cases ~ to_submodel(
-        case_model(d.Zobs, T_onset, edges, log_R, k, thins), false)
+        case_model(d.Zobs, T_onset, edges, log_R, k, delays.p,
+            d.source_idx), false)
 end
 
 """
