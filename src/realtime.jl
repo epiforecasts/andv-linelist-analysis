@@ -134,43 +134,8 @@ end
 Distributions.minimum(::ConvolvedDelays) = -Inf
 Distributions.maximum(::ConvolvedDelays) = Inf
 
-"""
-$(TYPEDSIGNATURES)
-
-Controlled-outbreak counterfactual: for each posterior draw, sum the
-predicted future onsets across observed sources, assuming no further
-transmission after `obs_time`. Each observed source contributes a
-`Poisson(λ_i · (1 − p_i))` term where `λ_i | Z_obs[i], k, R_i, p_i`
-follows the conjugate Gamma posterior of the NB-binomial-thinning
-model: `Gamma(k + Z_obs[i], R_i / (k + R_i · p_i))` (scale form),
-with `p_i = cdf(ConvolvedDelays(inc, δ), obs_time − T_onset[i])`. Conditioning on each
-source's observed offspring count `Z_obs[i]` sharpens the prediction
-relative to the naive marginal NB(k, R_i (1 − p_i)).
-
-Also returns the count of cases with onset strictly after `obs_time`
-in the supplied (full) line list, as a comparator for the
-counterfactual: the realised count lies below the predicted band if
-control were achieved at the cut-off, above if transmission continued.
-
-# Arguments
-- `chn`: chain from a real-time `analyse(; obs_time, ...)` fit.
-- `post`: posterior summary returned by `summarise(chn)` (or
-  the second return value of `analyse`).
-- `ll`: full line-list `DataFrame` (not the obs_time-filtered subset).
-- `obs_time`: cut-off `Date` used to fit `chn`.
-- `t0`: time origin `Date` used to fit `chn`.
-
-# Keyword Arguments
-- `inc_dist`: two-argument constructor for the incubation period
-  distribution, called as `inc_dist(μ_inc, σ_inc)` per posterior draw.
-  Defaults to `LogNormal`; override to match an alternative incubation
-  parameterisation in the joint model.
-- `delta_dist`: two-argument constructor for the transmission timing
-  distribution, called as `delta_dist(μ_δ, σ_δ)`. Defaults to `Normal`.
-- `rng`: RNG used for posterior-predictive draws.
-"""
-function predict_controlled_outbreak(chn, post, ll,
-        obs_time::Date, t0::Date;
+function _predict_future_onsets(chn, post, ll,
+        obs_time::Date, t0::Date, future_prob_fn::Function;
         inc_dist = LogNormal,
         delta_dist = Normal,
         rng = Random.MersenneTwister(2026))
@@ -202,25 +167,100 @@ function predict_controlled_outbreak(chn, post, ll,
 
         Δ = [obs_offset - T_d[i] for i in 1:N]
         p_vec = cdf(ConvolvedDelays(inc, δd), Δ)
+        q_vec = cdf.(δd, Δ)
 
         zsum = 0
         for i in 1:N
-            # Clamp tightly enough that exp(log_R) stays well within
-            # Int64 range under the downstream Poisson sampler. Divergent
-            # draws (Mode B) can otherwise push R_i past 1e18 and overflow.
             R_i = exp(clamp(log_R_at(T_d[i], edges, logR_d),
                 -T(20), T(20)))
             p_i = clamp(p_vec[i], zero(T), one(T))
+            q_i = clamp(q_vec[i], zero(T), one(T))
             shape_post = k_d + Z_obs[i]
             scale_post = R_i / (k_d + R_i * p_i)
             λ_i = rand(rng, Gamma(shape_post, scale_post))
-            zsum += rand(rng, Poisson(λ_i * (one(T) - p_i)))
+            zsum += rand(rng, Poisson(λ_i * future_prob_fn(p_i, q_i)))
         end
         future_total[d_idx] = zsum
     end
 
     actual_future = sum(ll.onset_date .> obs_time)
-    return (; future_samples = future_total,
-        actual_future,
-        n_obs = N)
+    return (; future_samples = future_total, actual_future, n_obs = N)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Strict controlled-outbreak counterfactual: predict future onsets
+assuming all transmission stops at `obs_time`. Only people already
+infected by `obs_time` (transmission event before the cut-off, chain
+not yet symptomatic) contribute. For each posterior draw and observed
+source `i`, the contribution is `Poisson(λ_i · (q_i − p_i))` where
+`q_i = cdf(δ_dist, obs_time − T_onset[i])` is the probability that
+transmission happened by `obs_time`, `p_i = cdf(ConvolvedDelays(inc,
+δ), obs_time − T_onset[i])` is the probability the full chain has
+completed, and `λ_i | Z_obs[i], k, R_i, p_i ~ Gamma(k + Z_obs[i], R_i
+/ (k + R_i · p_i))`.
+
+The realised count of cases with onset after `obs_time` (in the
+supplied full line list) is returned as a comparator: the realised
+count lies below the predicted band if control was achieved, above if
+transmission continued.
+
+# Arguments
+- `chn`: chain from a real-time joint fit.
+- `post`: posterior summary returned by `summarise(chn)`.
+- `ll`: full line-list `DataFrame`.
+- `obs_time`: cut-off `Date`.
+- `t0`: time origin `Date`.
+
+# Keyword Arguments
+- `inc_dist`: two-argument constructor `(μ, σ) -> Distribution` for
+  the incubation period. Defaults to `LogNormal`.
+- `delta_dist`: two-argument constructor for the transmission timing
+  distribution. Defaults to `Normal`.
+- `rng`: RNG used for posterior-predictive draws.
+"""
+function predict_controlled_outbreak(chn, post, ll,
+        obs_time::Date, t0::Date;
+        inc_dist = LogNormal,
+        delta_dist = Normal,
+        rng = Random.MersenneTwister(2026))
+    return _predict_future_onsets(chn, post, ll, obs_time, t0,
+        (p, q) -> q - p; inc_dist, delta_dist, rng)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Natural-chain counterfactual: predict future onsets assuming
+currently-observed sources keep transmitting at their existing rate
+but no second-generation chains form from those new offspring. Each
+observed source contributes `Poisson(λ_i · (1 − p_i))` future onsets,
+covering both offspring already infected by `obs_time` (chain in
+incubation) and offspring still to be infected by the source. Same
+Gamma posterior on `λ_i` as [`predict_controlled_outbreak`](@ref); the
+difference is the per-source future probability (`1 − p_i` here vs
+`q_i − p_i` in the strict-controlled case).
+
+# Arguments
+- `chn`: chain from a real-time joint fit.
+- `post`: posterior summary returned by `summarise(chn)`.
+- `ll`: full line-list `DataFrame`.
+- `obs_time`: cut-off `Date`.
+- `t0`: time origin `Date`.
+
+# Keyword Arguments
+- `inc_dist`: two-argument constructor for the incubation period.
+  Defaults to `LogNormal`.
+- `delta_dist`: two-argument constructor for the transmission timing
+  distribution. Defaults to `Normal`.
+- `rng`: RNG used for posterior-predictive draws.
+"""
+function predict_natural_chain_outbreak(chn, post, ll,
+        obs_time::Date, t0::Date;
+        inc_dist = LogNormal,
+        delta_dist = Normal,
+        rng = Random.MersenneTwister(2026))
+    return _predict_future_onsets(chn, post, ll, obs_time, t0,
+        (p, q) -> one(p) - p; inc_dist, delta_dist, rng)
 end

@@ -46,7 +46,8 @@ export incubation_model, transmission_delta_model, random_walk_rt_model,
        nb_dispersion_model, truncation_model, case_model,
        latent_times_model
 export ConvolvedDelays
-export filter_realtime, filter_by_exposure, predict_controlled_outbreak
+export filter_realtime, filter_by_exposure
+export predict_controlled_outbreak, predict_natural_chain_outbreak
 export diagnostics, diagnostics_table, summary_table
 export vector_chain, summarise, save_posterior
 export plot_data, plot_rt, plot_pair, plot_predictive_distributions
