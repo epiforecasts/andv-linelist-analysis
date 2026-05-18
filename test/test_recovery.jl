@@ -236,6 +236,24 @@ end
         obs_time = obs_date, t0 = t0,
         rng = Random.MersenneTwister(42))
     @test mean(s_scalar.future_samples) <= mean(s_obs.future_samples)
+
+    # Vector{Date} filled with one common date is exactly equivalent
+    # to passing that date as a scalar: same per-source `Δ_q[i]`, same
+    # seed, same posterior-predictive draws.
+    vec_same = fill(earlier, d_rt.N)
+    s_vec = TransmissionLinelist.predict_controlled_outbreak(
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
+        intervention_time = vec_same,
+        rng = Random.MersenneTwister(42))
+    @test s_vec.future_samples == s_scalar.future_samples
+
+    # Length-mismatched Vector{Date} throws.
+    @test_throws ArgumentError TransmissionLinelist.predict_controlled_outbreak(
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
+        intervention_time = fill(earlier, d_rt.N + 1),
+        rng = Random.MersenneTwister(42))
 end
 
 @testset "MC validation: _pipeline_probability matches Monte Carlo" begin

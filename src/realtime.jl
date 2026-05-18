@@ -227,11 +227,18 @@ function _intervention_offsets(intervention_time, obs_offset, T_d, t0, N)
     elseif intervention_time isa Date
         Δ_int = Float64(Dates.value(intervention_time - t0))
         return [Δ_int - T_d[i] for i in 1:N]
+    elseif intervention_time isa AbstractVector{<:Date}
+        length(intervention_time) == N || throw(ArgumentError(
+            "intervention_time vector length $(length(intervention_time)) " *
+            "does not match number of observed sources $(N)"))
+        return [Float64(Dates.value(intervention_time[i] - t0)) - T_d[i]
+                for i in 1:N]
     elseif intervention_time === :natural
         return fill(Inf, N)
     else
         throw(ArgumentError(
-            "intervention_time must be nothing, a Date, or :natural"))
+            "intervention_time must be nothing, a Date, a " *
+            "Vector{Date}, or :natural"))
     end
 end
 
@@ -351,7 +358,7 @@ into a `DataFrame` for downstream diagnostics.
 # Keyword Arguments
 - `obs_time`: cut-off `Date`.
 - `t0`: time origin `Date`.
-- `intervention_time`: when transmission stops. Two forms are
+- `intervention_time`: when transmission stops. Three forms are
   accepted:
   - `nothing` (default): intervention coincides with `obs_time` for
     every source, equivalent to passing `obs_time` as a scalar `Date`.
@@ -360,11 +367,17 @@ into a `DataFrame` for downstream diagnostics.
     after `intervention_time` get a negative `Δ_q[i]`, so
     `q_i = cdf(δ, Δ_q[i])` evaluates in the left tail of the
     transmission-timing distribution.
+  - A `Vector{Date}` of length `N` (one entry per observed source):
+    encodes per-source intervention dates, useful when isolation
+    timing differs across cases (e.g. a per-case isolation date
+    derived from `ll_rt.onset_date`). Element `i` sets
+    `Δ_q[i] = intervention_time[i] − T_onset[i]`.
 - `rng`: RNG used for posterior-predictive draws.
 """
 function predict_controlled_outbreak(model, chn, post, d;
         obs_time::Date, t0::Date,
-        intervention_time::Union{Nothing, Date} = nothing,
+        intervention_time::Union{Nothing, Date,
+            AbstractVector{<:Date}} = nothing,
         rng = Random.MersenneTwister(2026))
     return _predict_future_onsets(model, chn, post, d;
         obs_time = obs_time, t0 = t0,
