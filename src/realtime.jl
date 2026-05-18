@@ -122,7 +122,14 @@ end
 function _convolved_delays_cdf(d::ConvolvedDelays, xs::AbstractVector,
         upper_δ, alg)
     μ = mean(d.δ)
-    σK = _CONVOLVED_DELAYS_K * std(d.δ)
+    σ = std(d.δ)
+    # Guard against non-finite distribution moments (e.g. a NUTS proposal
+    # in unconstrained space that exponentiates to `σ = Inf`). Without
+    # this the GL quadrature returns `Inf * 0 = NaN`, which then
+    # propagates through `R_eff = R · p[i]` and crashes
+    # `NegativeBinomial`'s parameter check during AD.
+    (isfinite(μ) && isfinite(σ)) || return zero(xs)
+    σK = _CONVOLVED_DELAYS_K * σ
     lower = μ - σK
     upper = min(upper_δ, μ + σK)
     upper <= lower && return zero(xs)
