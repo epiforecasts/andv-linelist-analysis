@@ -177,7 +177,7 @@ offset `T_d[i]` using piecewise-constant interpolation against `edges`
 and the per-draw log-R vector `logR_d`.
 Returns a `Vector{Float64}` of length `length(T_d)`.
 """
-function _rates_at_onsets(T_d, edges, logR_d)
+function _R_at_onsets(T_d, edges, logR_d)
     return [exp(log_R_at(T_d[i], edges, logR_d))
             for i in eachindex(T_d)]
 end
@@ -272,7 +272,7 @@ function _predict_future_onsets(model, chn, post, d;
         Δ_q = _intervention_offsets(intervention_time, obs_offset,
             T_d, d.t0, N)
         p_vec = cdf(ConvolvedDelays(inc, δd), Δ_p)
-        R_vec = _rates_at_onsets(T_d, edges, logR_d)
+        R_vec = _R_at_onsets(T_d, edges, logR_d)
 
         for i in 1:N
             R_i = R_vec[i]
