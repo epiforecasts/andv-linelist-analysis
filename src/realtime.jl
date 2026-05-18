@@ -214,30 +214,33 @@ function _pipeline_probability(inc, δd, Δ_q::Real, Δ_p::Real;
     return q - cdf(ConvolvedDelays(inc, δd), Δ_p; upper_δ = Δ_q, alg)
 end
 
+# Internal marker for the natural-chain counterfactual (no
+# intervention). Not exported: the public predictors call
+# `_predict_future_onsets` with `intervention_time = NaturalChain()`,
+# never `:natural`. Dispatching on a singleton type keeps the
+# resolution table closed and removes the symbol-sentinel branch.
+struct NaturalChain end
+
 # Resolve `intervention_time` into per-source offsets `Δ_q[i]` measured
 # from each source's own onset time `T_d[i]`, in units of days from `t0`.
-# The `:natural` sentinel resolves to all-`+Inf` offsets (the no-
-# intervention natural-chain counterfactual).
-function _intervention_offsets(intervention_time, obs_offset, T_d, t0, N)
-    if intervention_time === nothing
-        return [obs_offset - T_d[i] for i in 1:N]
-    elseif intervention_time isa Date
-        Δ_int = Float64(Dates.value(intervention_time - t0))
-        return [Δ_int - T_d[i] for i in 1:N]
-    elseif intervention_time isa AbstractVector{<:Date}
-        length(intervention_time) == N || throw(ArgumentError(
-            "intervention_time vector length $(length(intervention_time)) " *
-            "does not match number of observed sources $(N)"))
-        return [Float64(Dates.value(intervention_time[i] - t0)) - T_d[i]
-                for i in 1:N]
-    elseif intervention_time === :natural
-        return fill(Inf, N)
-    else
-        throw(ArgumentError(
-            "intervention_time must be nothing, a Date, a " *
-            "Vector{Date}, or :natural"))
-    end
+# Each accepted form gets its own method — public callers pass
+# `nothing`, a `Date`, or a `Vector{Date}`; `predict_natural_chain_outbreak`
+# passes the internal `NaturalChain()` marker.
+function _intervention_offsets(::Nothing, obs_offset, T_d, t0, N)
+    return [obs_offset - T_d[i] for i in 1:N]
 end
+function _intervention_offsets(t::Date, obs_offset, T_d, t0, N)
+    Δ_int = Float64(Dates.value(t - t0))
+    return [Δ_int - T_d[i] for i in 1:N]
+end
+function _intervention_offsets(ts::AbstractVector{<:Date},
+        obs_offset, T_d, t0, N)
+    length(ts) == N || throw(ArgumentError(
+        "intervention_time vector length $(length(ts)) " *
+        "does not match number of observed sources $(N)"))
+    return [Float64(Dates.value(ts[i] - t0)) - T_d[i] for i in 1:N]
+end
+_intervention_offsets(::NaturalChain, obs_offset, T_d, t0, N) = fill(Inf, N)
 
 function _predict_future_onsets(model, chn, post, d;
         obs_time::Date, t0::Date,
@@ -421,7 +424,7 @@ function predict_natural_chain_outbreak(model, chn, post, d;
         rng = Random.MersenneTwister(2026))
     return _predict_future_onsets(model, chn, post, d;
         obs_time = obs_time, t0 = t0,
-        intervention_time = :natural, rng = rng)
+        intervention_time = NaturalChain(), rng = rng)
 end
 
 """
