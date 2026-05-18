@@ -13,7 +13,7 @@ using Dates: Dates, Date, Day, dayofweek
 using Distributions: Distributions, Normal, LogNormal, truncated,
                      NegativeBinomial, Uniform, Gamma, Poisson,
                      ContinuousUnivariateDistribution,
-                     logpdf, logcdf, cdf, pdf, partype
+                     logpdf, logcdf, cdf, ccdf, pdf, partype
 using DocStringExtensions: TYPEDSIGNATURES
 using Integrals: IntegralProblem, GaussLegendre, solve
 import FastGaussQuadrature  # activates Integrals' GaussLegendre node extension

@@ -21,3 +21,4 @@ output/
 
 # Scratch diagnostic scripts
 scratch_*.jl
+scratch/
