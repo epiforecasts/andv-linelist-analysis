@@ -11,7 +11,7 @@
 
 using Random: Random, MersenneTwister
 using Distributions: LogNormal, Normal, NegativeBinomial,
-                     logpdf, pdf, cdf
+                     logpdf, pdf, cdf, ccdf
 using Dates: Dates, Date, Day
 using Statistics: median, std, quantile, mean
 using Turing: Turing, @model, NUTS, sample, to_submodel
@@ -257,4 +257,47 @@ end
         m, chn, post, d_rt;
         obs_time = obs_date, t0 = t0,
         intervention_time = fill(earlier, d_rt.N + 1))
+end
+
+@testset "MC validation: _pipeline_probability matches Monte Carlo" begin
+    # Validate `_pipeline_probability` against direct Monte Carlo for
+    # the joint event `{δ ≤ Δ_q ∧ δ + Inc > Δ_p}`. Covers the case
+    # that regressed under the old `q − p` formula (intervention
+    # strictly before the observation horizon, `Δ_q < Δ_p`), the
+    # natural-chain limit (`Δ_q = +Inf`, must equal `1 - cdf(
+    # ConvolvedDelays(inc, δd), Δ_p)`), and the exclusion sentinel
+    # (`Δ_q = -Inf` must return exactly zero).
+    rng = Random.MersenneTwister(20260518)
+    N_mc = 10_000
+    δ_dist = Normal(8.0, 4.0)
+    inc_dist = LogNormal(2.0, 0.5)
+    δ_draws = rand(rng, δ_dist, N_mc)
+    inc_draws = rand(rng, inc_dist, N_mc)
+    sum_draws = δ_draws .+ inc_draws
+
+    cases = [
+        (Δ_q = 10.0, Δ_p = 10.0, label = "Δq=Δp (regression check)"),
+        (Δ_q = 5.0, Δ_p = 10.0, label = "Δq<Δp by 5d (old formula off)"),
+        (Δ_q = 0.0, Δ_p = 10.0, label = "Δq=0"),
+        (Δ_q = -2.0, Δ_p = 10.0, label = "Δq<0")
+    ]
+    for c in cases
+        joint_emp = mean((δ_draws .<= c.Δ_q) .& (sum_draws .> c.Δ_p))
+        mcse = sqrt(joint_emp * (1 - joint_emp) / N_mc)
+        analytic = TransmissionLinelist._pipeline_probability(
+            inc_dist, δ_dist, c.Δ_q, c.Δ_p)
+        @test isapprox(analytic, joint_emp; atol = 5 * mcse + 1e-3)
+    end
+
+    # Δ_q = +Inf must reduce to 1 − cdf(ConvolvedDelays, Δ_p).
+    for Δ_p in (10.0, 30.0)
+        conv = TransmissionLinelist.ConvolvedDelays(inc_dist, δ_dist)
+        natural = TransmissionLinelist._pipeline_probability(
+            inc_dist, δ_dist, Inf, Δ_p)
+        @test isapprox(natural, 1 - cdf(conv, Δ_p); atol = 1e-6)
+    end
+
+    # Δ_q = -Inf must return exactly zero.
+    @test TransmissionLinelist._pipeline_probability(
+        inc_dist, δ_dist, -Inf, 10.0) == 0.0
 end
