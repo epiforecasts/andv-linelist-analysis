@@ -196,10 +196,9 @@ end
 end
 
 @testset "predict_controlled_outbreak: intervention_time variants" begin
-    # Scalar Date applies a per-source `max(intervention, own_onset)`
-    # offset. A per-source Vector{Date} bypasses that max, so the two
-    # are NOT equal in general. An earlier intervention than `obs_time`
-    # must reduce the mean future count.
+    # Scalar Date applies uniformly to every source (no per-source
+    # max-with-onset). A `Vector{Union{Date, Nothing}}` lets callers
+    # zero out individual sources via `nothing`.
     ll = TransmissionLinelist.load_linelist()
     t0 = minimum(ll.onset_date) - Day(60)
     obs_date = Date("2018-12-31")
@@ -212,6 +211,7 @@ end
         samples = 100, chains = 2, seed = 20260512, progress = false)
     post = TransmissionLinelist.summarise(chn)
 
+    # Earlier scalar intervention reduces the mean future count.
     earlier = obs_date - Day(7)
     s_scalar = TransmissionLinelist.predict_controlled_outbreak(
         m, chn, post, d_rt;
@@ -224,21 +224,33 @@ end
         rng = Random.MersenneTwister(42))
     @test mean(s_scalar.future_samples) <= mean(s_obs.future_samples)
 
-    # Vector branch is a separate code path that does not apply the
-    # max-with-onset rule. With a vector of dates well after every
-    # source onset, vector and scalar agree (the max is a no-op).
-    far = obs_date + Day(60)
-    s_scalar_far = TransmissionLinelist.predict_controlled_outbreak(
+    # All-`nothing` vector excludes every source; future_samples = 0.
+    none_vec = Vector{Union{Date, Nothing}}(nothing, d_rt.N)
+    s_none = TransmissionLinelist.predict_controlled_outbreak(
         m, chn, post, d_rt;
         obs_time = obs_date, t0 = t0,
-        intervention_time = far,
+        intervention_time = none_vec,
         rng = Random.MersenneTwister(42))
-    s_vector_far = TransmissionLinelist.predict_controlled_outbreak(
+    @test all(==(0), s_none.future_samples)
+
+    # Mixing `nothing` with `Date` reduces the mean relative to a
+    # vector of the same date applied to every source.
+    mixed = Vector{Union{Date, Nothing}}(undef, d_rt.N)
+    for i in 1:d_rt.N
+        mixed[i] = iseven(i) ? obs_date : nothing
+    end
+    all_dates = fill(obs_date, d_rt.N)
+    s_mixed = TransmissionLinelist.predict_controlled_outbreak(
         m, chn, post, d_rt;
         obs_time = obs_date, t0 = t0,
-        intervention_time = fill(far, d_rt.N),
+        intervention_time = mixed,
         rng = Random.MersenneTwister(42))
-    @test s_scalar_far.future_samples == s_vector_far.future_samples
+    s_all = TransmissionLinelist.predict_controlled_outbreak(
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
+        intervention_time = all_dates,
+        rng = Random.MersenneTwister(42))
+    @test mean(s_mixed.future_samples) <= mean(s_all.future_samples)
 
     # Wrong-length vector must error.
     @test_throws ArgumentError TransmissionLinelist.predict_controlled_outbreak(

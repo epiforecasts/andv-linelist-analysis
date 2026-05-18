@@ -165,22 +165,23 @@ function _intervention_offsets(intervention_time, obs_offset, T_d, t0, N)
     if intervention_time === nothing
         return [obs_offset - T_d[i] for i in 1:N]
     elseif intervention_time isa Date
-        # Scalar Date: per-source `max(intervention, own_onset) − own_onset`.
-        # For sources whose onset is after `intervention_time` this gives
-        # Δ_q = 0 (so q_i = cdf(δ, 0) captures pre-symptomatic
-        # transmission mass only). For sources whose onset precedes the
-        # intervention, Δ_q = intervention_time − T_onset.
         Δ_int = Float64(Dates.value(intervention_time - t0))
-        return [max(Δ_int, T_d[i]) - T_d[i] for i in 1:N]
-    elseif intervention_time isa AbstractVector{<:Date}
+        return [Δ_int - T_d[i] for i in 1:N]
+    elseif intervention_time isa AbstractVector
         length(intervention_time) == N || throw(ArgumentError(
             "intervention_time vector length $(length(intervention_time)) " *
             "does not match number of observed sources $(N)"))
-        return [Float64(Dates.value(intervention_time[i] - t0)) - T_d[i]
-                for i in 1:N]
+        return map(1:N) do i
+            it = intervention_time[i]
+            it === nothing && return -Inf
+            it isa Date || throw(ArgumentError(
+                "intervention_time vector must contain Date or nothing"))
+            Float64(Dates.value(it - t0)) - T_d[i]
+        end
     else
         throw(ArgumentError(
-            "intervention_time must be nothing, a Date, or a Vector{Date}"))
+            "intervention_time must be nothing, a Date, " *
+            "or a Vector of Date/Nothing"))
     end
 end
 
@@ -288,16 +289,21 @@ count from the full line list as a separate evaluation step.
 # Keyword Arguments
 - `obs_time`: cut-off `Date`.
 - `t0`: time origin `Date`.
-- `intervention_time`: when transmission stops.
-  `nothing` (default) means the intervention coincides with `obs_time`
-  for every source. A scalar `Date` means "no transmission after this
-  date for any source, plus isolation on each source's own onset for
-  cases emerging later" — the per-source `Δ_q[i]` is
-  `max(intervention_time, T_onset[i]) − T_onset[i]`, so sources whose
-  onset is after the intervention contribute only their pre-symptomatic
-  mass. For finer control supply a `Vector{Date}` of length `N` (the
-  number of observed sources in `d`) of per-source intervention dates
-  (e.g. case-by-case isolation on the date each case was identified).
+- `intervention_time`: when transmission stops. Three forms are
+  accepted:
+  - `nothing` (default): intervention coincides with `obs_time` for
+    every source, equivalent to passing `obs_time` as a scalar `Date`.
+  - A scalar `Date`: applies uniformly to every source.
+    `Δ_q[i] = intervention_time − T_onset[i]`. Sources whose onset is
+    after `intervention_time` get a negative `Δ_q[i]`, so
+    `q_i = cdf(δ, Δ_q[i])` evaluates in the left tail of the
+    transmission-timing distribution.
+  - A `Vector{Union{Date, Nothing}}` of length `N` (the number of
+    observed sources in `d`): per-source intervention dates. A
+    `nothing` element means the source contributes zero future onsets
+    (resolved as `q_i = cdf(δ, -Inf) = 0`), useful when the caller
+    wants to encode "only these sources had ongoing transmission" as
+    policy in the calling code rather than in the package.
 - `rng`: RNG used for posterior-predictive draws.
 
 # Example
