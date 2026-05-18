@@ -267,8 +267,12 @@ end
 # future symptomatic cases:
 #
 # - **Controlled** ([`predict_controlled_outbreak`](@ref)): transmission
-#   stops at `obs_time`. Only people already infected by then can go on
-#   to have onset.
+#   stops at `intervention_date = 2018-12-31` (the onset date of the
+#   18th case — the back-end of the first wave). Sources whose onset is
+#   after `intervention_date` are assumed isolated on their own onset,
+#   so they only contribute their pre-symptomatic transmission mass.
+#   For sources whose onset precedes the intervention, the chain
+#   probability is `cdf(δ, intervention_date − T_onset)`.
 # - **Natural chain** ([`predict_natural_chain_outbreak`](@ref)):
 #   current sources keep transmitting at their existing rate but no
 #   second-generation chains form from those new offspring.
@@ -276,6 +280,13 @@ end
 # See the [Model page](model.md#Real-time-predictions) for the
 # Gamma–Poisson conjugate posterior these share and the per-source
 # thinning probabilities that distinguish them.
+# At the first cut-off `obs_date = 2018-12-31` the intervention coincides
+# with `obs_date`, so the controlled prediction is the same as a
+# transmission-stops-at-`obs_time` counterfactual. At the second cut-off
+# `obs_date = 2019-01-07` the intervention is genuinely earlier than the
+# cut-off, giving a meaningfully different counterfactual: it asks what
+# would have happened if transmission had been halted at the close of
+# the 18-case wave.
 # The realised count of cases with onset strictly after each cut-off is
 # overlaid as a vertical reference; values above the natural-chain band
 # imply transmission continued past the cut-off, values below imply it
@@ -286,10 +297,13 @@ end
 # separate call to `realised_future_count(ll, obs_date)`, so the
 # comparator is decoupled from the prediction.
 
+intervention_date = Date("2018-12-31")
+
 controlled = map(joint_fits) do fit
     strict = predict_controlled_outbreak(
         fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
-        obs_time = fit.obs_date, t0 = t0_ref)
+        obs_time = fit.obs_date, t0 = t0_ref,
+        intervention_time = intervention_date)
     natural = predict_natural_chain_outbreak(
         fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
         obs_time = fit.obs_date, t0 = t0_ref)
@@ -325,7 +339,9 @@ let
         panel = "obs_date = $(c.obs_date)  (n_obs=$(c.n_rt))"
         for v in c.strict_samples
             push!(hist_rows,
-                (panel = panel, kind = "controlled (strict)", value = v))
+                (panel = panel,
+                    kind = "controlled (stop at $(intervention_date))",
+                    value = v))
         end
         for v in c.natural_samples
             push!(hist_rows,
