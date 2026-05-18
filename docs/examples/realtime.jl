@@ -266,16 +266,20 @@ end
 # At each `obs_date`, two counterfactual predictions for the number of
 # future symptomatic cases:
 #
-# - **Controlled** ([`predict_controlled_outbreak`](@ref)): transmission
-#   stops at `intervention_date = 2018-12-31` (the onset date of the
-#   18th case — the back-end of the first wave). Under "we know what we
-#   know", only sources with at least one observed offspring in the
-#   real-time line list (`Zobs[i] > 0`) are treated as having ongoing
-#   transmission to halt; sources with no observed offspring contribute
-#   zero because we have no direct evidence they ever transmitted.
-#   This policy is encoded in the vignette via a per-source
-#   `Vector{Union{Date, Nothing}}` passed to `intervention_time`; the
-#   package itself takes no view on which sources transmit.
+# - **Controlled** ([`predict_controlled_outbreak`](@ref)): sources are
+#   split at the 18-case intervention date `cutoff = 2018-12-31` (the
+#   onset date of the 18th case — the back-end of the first wave).
+#   Sources with onset on or before `cutoff` have transmission stopping
+#   at the intervention (`intervention[i] = cutoff`). Sources with
+#   onset after `cutoff` fall into two groups: those with at least one
+#   observed offspring (`Zobs[i] > 0`) are treated as having "leaked
+#   through" the intervention and assumed to transmit naturally — set
+#   `intervention[i] = obs_date` so `q_i − p_i` reduces to `1 − p_i`,
+#   the natural-chain quantity. Sources with no observed offspring
+#   (`Zobs[i] == 0`) are excluded (`intervention[i] = nothing` →
+#   contribution forced to zero) under "we know what we know". The
+#   package takes a per-source `Vector{Union{Date, Nothing}}`; all of
+#   this policy lives in the vignette.
 # - **Natural chain** ([`predict_natural_chain_outbreak`](@ref)):
 #   current sources keep transmitting at their existing rate but no
 #   second-generation chains form from those new offspring.
@@ -283,13 +287,14 @@ end
 # See the [Model page](model.md#Real-time-predictions) for the
 # Gamma–Poisson conjugate posterior these share and the per-source
 # thinning probabilities that distinguish them.
-# At the first cut-off `obs_date = 2018-12-31` the intervention coincides
-# with `obs_date`, so the controlled prediction is the same as a
-# transmission-stops-at-`obs_time` counterfactual. At the second cut-off
-# `obs_date = 2019-01-07` the intervention is genuinely earlier than the
-# cut-off, giving a meaningfully different counterfactual: it asks what
-# would have happened if transmission had been halted at the close of
-# the 18-case wave.
+# At the first cut-off `obs_date = 2018-12-31` the cutoff coincides with
+# `obs_date`, every source is pre-cutoff, and the controlled prediction
+# is a transmission-stops-at-`obs_time` counterfactual. At the second
+# cut-off `obs_date = 2019-01-07` a handful of sources have onset after
+# `cutoff`; the policy above sorts each into the natural-chain or
+# excluded bucket, giving a meaningfully different counterfactual: it
+# asks what would have happened if transmission had been halted at the
+# close of the 18-case wave.
 # The realised count of cases with onset strictly after each cut-off is
 # overlaid as a vertical reference; values above the natural-chain band
 # imply transmission continued past the cut-off, values below imply it
@@ -300,15 +305,23 @@ end
 # separate call to `realised_future_count(ll, obs_date)`, so the
 # comparator is decoupled from the prediction.
 
-intervention_date = Date("2018-12-31")
+cutoff_date = Date("2018-12-31")
+
+# Build the per-source intervention vector encoding the three-way
+# policy above. `ll_rt` row order matches `d_rt.Zobs` order because
+# `filter_realtime` preserves row order and `build_data` reads `Z`
+# directly off the filtered line list.
+function intervention_vector(ll_rt, d_rt, cutoff::Date, obs_date::Date)
+    Vector{Union{Date, Nothing}}(
+        [ll_rt.onset_date[i] <= cutoff ? cutoff :
+         d_rt.Zobs[i] > 0 ? obs_date :
+         nothing
+         for i in 1:length(d_rt.Zobs)])
+end
 
 controlled = map(joint_fits) do fit
-    # Per-source policy: only sources with Z > 0 in the real-time line
-    # list (offspring already observed by `obs_date`) keep transmitting
-    # up to `intervention_date`. Sources with Z == 0 become `nothing`,
-    # contributing zero future cases.
-    intervention_vec = Vector{Union{Date, Nothing}}(
-        [z > 0 ? intervention_date : nothing for z in fit.d_rt.Zobs])
+    intervention_vec = intervention_vector(fit.ll_rt, fit.d_rt,
+        cutoff_date, fit.obs_date)
     strict = predict_controlled_outbreak(
         fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
         obs_time = fit.obs_date, t0 = t0_ref,
@@ -349,7 +362,7 @@ let
         for v in c.strict_samples
             push!(hist_rows,
                 (panel = panel,
-                    kind = "controlled (stop at $(intervention_date))",
+                    kind = "controlled (stop at $(cutoff_date))",
                     value = v))
         end
         for v in c.natural_samples
