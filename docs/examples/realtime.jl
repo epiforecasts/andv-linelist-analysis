@@ -25,6 +25,7 @@ using AlgebraOfGraphics: data, mapping, visual, draw
 using DataFrames: DataFrame, nrow
 using Dates: Dates, Date, Day
 using Random
+using Statistics: quantile
 using CairoMakie
 using CairoMakie: Band, Lines, Hist, VLines
 using Logging: Logging
@@ -95,6 +96,19 @@ end;
 # panel, the right-truncation on Inc and δ alone is enough to recover
 # the population delays from the truncated observations.
 
+# Shared marginal-overlay helper used by both this delays-only plot
+# and the joint-fit version further down. AlgebraOfGraphics spec with
+# per-column free x-axis so each parameter's scale is its own.
+function plot_marginal_overlay(df; size_kw = (1500, 700))
+    spec = data(df) *
+           mapping(:value => "value", color = :fit => "fit",
+               row = :obs_date, col = :param) *
+           visual(Hist; bins = 30, normalization = :pdf, alpha = 0.4)
+    return draw(spec;
+        facet = (linkxaxes = :colwise, linkyaxes = :none),
+        figure = (; size = size_kw))
+end
+
 let
     params = [:μ_inc, :σ_inc, :μ_δ, :σ_δ]
     rows = NamedTuple[]
@@ -112,14 +126,7 @@ let
             end
         end
     end
-    df = DataFrame(rows)
-    spec = data(df) *
-           mapping(:value => "value",
-               color = :fit => "fit",
-               row = :obs_date, col = :param) *
-           visual(Hist; bins = 30, normalization = :pdf, alpha = 0.4)
-    draw(spec; facet = (linkxaxes = :colwise, linkyaxes = :none),
-        figure = (; size = (1500, 700)))
+    plot_marginal_overlay(DataFrame(rows))
 end
 
 # ## Joint fits
@@ -235,6 +242,16 @@ end
 
 let
     params = [:μ_inc, :σ_inc, :μ_δ, :σ_δ, :k]
+    ## Cap `k` at its 99% quantile (pooled across fits) so the long
+    ## right tail doesn't compress the other panels visually.
+    all_k = Float64[]
+    for fit in joint_fits,
+        post in
+        (fit.post_truth, fit.post_rt, post_retro_full)
+
+        append!(all_k, getproperty(post, :k))
+    end
+    k_cap = quantile(filter(!isnan, all_k), 0.99)
     rows = NamedTuple[]
     for fit in joint_fits
         row_fits = [
@@ -245,41 +262,30 @@ let
         for (name, post) in row_fits, p in params
 
             for v in getproperty(post, p)
+                p === :k && v > k_cap && continue
                 push!(rows,
                     (obs_date = string(fit.obs_date),
                         fit = name, param = String(p), value = v))
             end
         end
     end
-    df = DataFrame(rows)
-    spec = data(df) *
-           mapping(:value => "value",
-               color = :fit => "fit",
-               row = :obs_date, col = :param) *
-           visual(Hist; bins = 30, normalization = :pdf, alpha = 0.4)
-    draw(spec; facet = (linkxaxes = :colwise, linkyaxes = :none),
-        figure = (; size = (1500, 900)))
+    plot_marginal_overlay(DataFrame(rows); size_kw = (1500, 900))
 end
 
 # ## Controlled-outbreak projection
 #
-# At each `obs_date`, two counterfactual predictions for the number of
-# future symptomatic cases:
+# At each `obs_date`, three counterfactual predictions for the number
+# of future symptomatic cases:
 #
-# - **Controlled** ([`predict_controlled_outbreak`](@ref)): sources are
-#   split at the 18-case intervention date `cutoff = 2018-12-31` (the
-#   onset date of the 18th case — the back-end of the first wave).
-#   Sources with onset on or before `cutoff` have transmission stopping
-#   at the intervention (`intervention[i] = cutoff`). Sources with
-#   onset after `cutoff` fall into two groups: those with at least one
-#   observed offspring (`Zobs[i] > 0`) are treated as having "leaked
-#   through" the intervention and assumed to transmit naturally — set
-#   `intervention[i] = obs_date` so `q_i − p_i` reduces to `1 − p_i`,
-#   the natural-chain quantity. Sources with no observed offspring
-#   (`Zobs[i] == 0`) are excluded (`intervention[i] = nothing` →
-#   contribution forced to zero) under "we know what we know". The
-#   package takes a per-source `Vector{Union{Date, Nothing}}`; all of
-#   this policy lives in the vignette.
+# - **Strict (intervention at 2018-12-31)**
+#   ([`predict_controlled_outbreak`](@ref) with
+#   `intervention_time = cutoff_18`): under the strict counterfactual
+#   we assume transmission stopped on `cutoff_18 = 2018-12-31` (the
+#   onset date of the 18th case). Post-cutoff sources contribute zero
+#   by construction (`Δ_q[i] < 0` ⇒ `q_i ≈ 0`).
+# - **Controlled at obs** ([`predict_controlled_outbreak`](@ref) with
+#   the default `intervention_time = nothing`): transmission stops at
+#   each cut-off, so `Δ_q = Δ_p` and `π_i = q_i − p_i`.
 # - **Natural chain** ([`predict_natural_chain_outbreak`](@ref)):
 #   current sources keep transmitting at their existing rate but no
 #   second-generation chains form from those new offspring.
@@ -287,14 +293,6 @@ end
 # See the [Model page](model.md#Real-time-predictions) for the
 # Gamma–Poisson conjugate posterior these share and the per-source
 # thinning probabilities that distinguish them.
-# At the first cut-off `obs_date = 2018-12-31` the cutoff coincides with
-# `obs_date`, every source is pre-cutoff, and the controlled prediction
-# is a transmission-stops-at-`obs_time` counterfactual. At the second
-# cut-off `obs_date = 2019-01-07` a handful of sources have onset after
-# `cutoff`; the policy above sorts each into the natural-chain or
-# excluded bucket, giving a meaningfully different counterfactual: it
-# asks what would have happened if transmission had been halted at the
-# close of the 18-case wave.
 # The realised count of cases with onset strictly after each cut-off is
 # overlaid as a vertical reference; values above the natural-chain band
 # imply transmission continued past the cut-off, values below imply it
@@ -305,32 +303,22 @@ end
 # separate call to `realised_future_count(ll, obs_date)`, so the
 # comparator is decoupled from the prediction.
 
-cutoff_date = Date("2018-12-31")
-
-# Build the per-source intervention vector encoding the three-way
-# policy above. `ll_rt` row order matches `d_rt.Zobs` order because
-# `filter_realtime` preserves row order and `build_data` reads `Z`
-# directly off the filtered line list.
-function intervention_vector(ll_rt, d_rt, cutoff::Date, obs_date::Date)
-    Vector{Union{Date, Nothing}}(
-        [ll_rt.onset_date[i] <= cutoff ? cutoff :
-         d_rt.Zobs[i] > 0 ? obs_date :
-         nothing
-         for i in 1:length(d_rt.Zobs)])
-end
+cutoff_18 = Date("2018-12-31")
 
 controlled = map(joint_fits) do fit
-    intervention_vec = intervention_vector(fit.ll_rt, fit.d_rt,
-        cutoff_date, fit.obs_date)
     strict = predict_controlled_outbreak(
         fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
         obs_time = fit.obs_date, t0 = t0_ref,
-        intervention_time = intervention_vec)
+        intervention_time = cutoff_18)
+    at_obs = predict_controlled_outbreak(
+        fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
+        obs_time = fit.obs_date, t0 = t0_ref)
     natural = predict_natural_chain_outbreak(
         fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
         obs_time = fit.obs_date, t0 = t0_ref)
     (; fit.obs_date, fit.n_rt,
         strict_samples = strict.future_samples,
+        at_obs_samples = at_obs.future_samples,
         natural_samples = natural.future_samples,
         actual_future = realised_future_count(ll, fit.obs_date))
 end;
@@ -338,6 +326,7 @@ end;
 controlled_df = let
     rows = map(controlled) do c
         s = summarise_predictive(c.strict_samples)
+        a = summarise_predictive(c.at_obs_samples)
         n = summarise_predictive(c.natural_samples)
         (obs_date = c.obs_date,
             n_obs = c.n_rt,
@@ -345,6 +334,9 @@ controlled_df = let
             strict_median = s.med,
             strict_lo10 = s.lo,
             strict_hi90 = s.hi,
+            at_obs_median = a.med,
+            at_obs_lo10 = a.lo,
+            at_obs_hi90 = a.hi,
             natural_median = n.med,
             natural_lo10 = n.lo,
             natural_hi90 = n.hi)
@@ -359,13 +351,27 @@ let
     vline_rows = NamedTuple[]
     for c in controlled
         panel = "obs_date = $(c.obs_date)  (n_obs=$(c.n_rt))"
+        ## Cap per-panel x-axis at the 99% quantile of all three
+        ## variants pooled, so the long natural-chain tail doesn't
+        ## compress the strict and at-obs bulks.
+        pooled = vcat(Float64.(c.strict_samples),
+            Float64.(c.at_obs_samples),
+            Float64.(c.natural_samples))
+        cap = quantile(pooled, 0.99)
         for v in c.strict_samples
+            v > cap && continue
             push!(hist_rows,
                 (panel = panel,
-                    kind = "controlled (stop at $(cutoff_date))",
+                    kind = "strict (intervention at $(cutoff_18))",
                     value = v))
         end
+        for v in c.at_obs_samples
+            v > cap && continue
+            push!(hist_rows,
+                (panel = panel, kind = "controlled at obs", value = v))
+        end
         for v in c.natural_samples
+            v > cap && continue
             push!(hist_rows,
                 (panel = panel, kind = "natural chain", value = v))
         end
