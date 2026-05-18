@@ -156,36 +156,19 @@ Reverse-mode AD via Mooncake.
 Two counterfactual predictors give posterior-predictive future onset counts conditional on a real-time fit at cut-off `obs_time`.
 Both reuse the same Gamma–Poisson conjugate update on each source's true offspring rate.
 
-For source `i` with onset at `T_onset[i]` let
-
-```math
-\Delta_i = \mathrm{obs\_time} - T_{\mathrm{onset}}[i],\quad
-p_i = \Pr(\delta + \mathrm{Inc}(\mathrm{sec}) \le \Delta_i),\quad
-q_i = \Pr(\delta \le \Delta_i),
-```
-
-where ``p_i`` is the offspring-completeness probability (chain finished by `obs_time`, the cdf of `ConvolvedDelays(inc, δ)`) and ``q_i`` is the probability that transmission has happened by `obs_time` (the cdf of the transmission timing distribution).
-
+For source ``i`` with onset at ``T_{\mathrm{onset}}[i]`` let ``\Delta_p[i] = \mathrm{obs\_time} - T_{\mathrm{onset}}[i]`` (observation horizon) and ``\Delta_q[i]`` the intervention horizon (defaults to ``\Delta_p[i]``; equals ``+\infty`` under the natural chain).
 The latent rate of source ``i``'s offspring follows the conjugate posterior
 
 ```math
-\lambda_i \mid Z_{\mathrm{obs}}[i], k, R_i, p_i \;\sim\; \mathrm{Gamma}\!\left(k + Z_{\mathrm{obs}}[i],\ \frac{R_i}{k + R_i\,p_i}\right) \quad (\text{scale form}).
+\lambda_i \mid Z_{\mathrm{obs}}[i], k, R_i, p_i \;\sim\; \mathrm{Gamma}\!\left(k + Z_{\mathrm{obs}}[i],\ \frac{R_i}{k + R_i\,p_i}\right) \quad (\text{scale form}),
 ```
 
-The two predictors differ only in the thinning probability applied to ``\lambda_i`` when drawing future onsets:
-
-- **Controlled** (`predict_controlled_outbreak`): transmission stops at `obs_time`.
-  Only people already infected by then (`δ ≤ Δ_i`, chain not yet symptomatic) contribute:
+with ``p_i = \mathrm{cdf}(\mathrm{ConvolvedDelays}(\mathrm{inc}, \delta),\ \Delta_p[i])``.
+Future onsets are then
 
 ```math
-Z_{\mathrm{future}}[i] \;\sim\; \mathrm{Poisson}\!\bigl(\lambda_i\,(q_i - p_i)\bigr).
+Z_{\mathrm{future}}[i] \sim \mathrm{Poisson}(\lambda_i\,\pi_i),\quad
+\pi_i = \Pr(\delta \le \Delta_q[i] \wedge \delta + \mathrm{Inc} > \Delta_p[i]) = \mathrm{cdf}(\delta,\ \Delta_q[i]) - \mathrm{cdf}(\mathrm{ConvolvedDelays}(\mathrm{inc}, \delta),\ \Delta_p[i];\ \mathtt{upper\_\delta} = \Delta_q[i]).
 ```
 
-- **Natural chain** (`predict_natural_chain_outbreak`): current sources keep transmitting at their existing rate but no second-generation chains form from those new offspring:
-
-```math
-Z_{\mathrm{future}}[i] \;\sim\; \mathrm{Poisson}\!\bigl(\lambda_i\,(1 - p_i)\bigr).
-```
-
-Both sum the contributions across observed sources for each posterior draw.
-The strict counterfactual is a subset of the natural-chain one: every offspring in the controlled prediction is also in the natural-chain prediction, plus the offspring whose transmission hasn't happened yet.
+The controlled-outbreak default ``\Delta_q = \Delta_p`` gives ``\pi = q - p`` with ``q_i = \mathrm{cdf}(\delta, \Delta_p[i])``; the natural-chain limit ``\Delta_q \to +\infty`` gives ``\pi = 1 - p``.
