@@ -200,9 +200,11 @@ log-likelihood:
    `p = cdf(ConvolvedDelays(inc_dist, delta_dist), obs_time .- T_onset)`.
 
 Both contributions are vectorised into a single `@addlogprob!` call
-each rather than per-case loops. Returns `(; p, convolved)`. Called
-with empty `T_inf` / `T_onset` / `source_idx` in retrospective mode so
-both `@addlogprob!` calls reduce to `0` and `p` comes back empty.
+each rather than per-case loops. Returns `(; p)`, where `p` is built
+through [`_chain_completion`](@ref) so the predictive code and the
+likelihood share the same chain-completion cdf. Called with empty
+`T_inf` / `T_onset` / `source_idx` in retrospective mode so both
+`@addlogprob!` calls reduce to `0` and `p` comes back empty.
 
 # Arguments
 - `T_inf`: per-case infection times.
@@ -215,15 +217,14 @@ both `@addlogprob!` calls reduce to `0` and `p` comes back empty.
 """
 @model function truncation_model(T_inf, T_onset, source_idx, obs_time,
         inc_dist, delta_dist)
-    convolved = ConvolvedDelays(inc_dist, delta_dist)
     T = eltype(T_onset)
     index = findall(==(0), source_idx)
     Turing.@addlogprob! -sum(logcdf.(inc_dist,
         obs_time[index] .- T_inf[index]))
-    p = cdf(convolved, obs_time .- T_onset)
+    p = _chain_completion(inc_dist, delta_dist, obs_time .- T_onset)
     sourced = source_idx[source_idx .!= 0]
     Turing.@addlogprob! -sum(log.(max.(p[sourced], floatmin(T))))
-    return (; p, convolved)
+    return (; p)
 end
 
 """

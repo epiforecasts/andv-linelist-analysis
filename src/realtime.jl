@@ -147,6 +147,18 @@ function _rates_at_onsets(T_d, edges, logR_d)
             for i in eachindex(T_d)]
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Per-source probability that the offspring chain `δ + Inc(sec)` has
+completed by elapsed time `Δ` (vector of per-source horizons measured
+in days from the source's onset). Shared between
+[`truncation_model`](@ref)'s real-time denominator and the predictive
+machinery in [`predict_controlled_outbreak`](@ref) /
+[`predict_natural_chain_outbreak`](@ref).
+"""
+_chain_completion(inc, δd, Δ) = cdf(ConvolvedDelays(inc, δd), Δ)
+
 # Resolve `intervention_time` into per-source offsets `Δ_q[i]` measured
 # from each source's own onset time `T_d[i]`, in units of days from `t0`.
 function _intervention_offsets(intervention_time, obs_offset, T_d, t0, N)
@@ -201,7 +213,7 @@ function _predict_future_onsets(model, chn, post, ll,
         Δ_p = [obs_offset - T_d[i] for i in 1:N]
         Δ_q = _intervention_offsets(intervention_time, obs_offset,
             T_d, d.t0, N)
-        p_vec = cdf(ConvolvedDelays(inc, δd), Δ_p)
+        p_vec = _chain_completion(inc, δd, Δ_p)
         q_vec = cdf.(δd, Δ_q)
         R_vec = _rates_at_onsets(T_d, edges, logR_d)
 
