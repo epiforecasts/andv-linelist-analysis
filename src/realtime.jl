@@ -141,13 +141,8 @@ function _predict_future_onsets(chn, post, ll,
         rng = Random.MersenneTwister(2026))
     ll_rt = filter_realtime(ll, obs_time)
     d = build_data(ll_rt; obs_time = obs_time, t0 = t0)
-    edges = bin_edges_day(d.t0)
-    T = eltype(edges)
-    obs_offset = T(Dates.value(obs_time - d.t0))
-    edges = edges[edges .<= obs_offset]
-    if isempty(edges) || edges[end] < obs_offset
-        push!(edges, obs_offset)
-    end
+    edges = prepare_rt_edges(d.t0; obs_time = obs_time)
+    obs_offset = eltype(edges)(Dates.value(obs_time - d.t0))
 
     (; μ_inc, σ_inc, μ_δ, σ_δ, k) = post
     log_R = post.log_R_chain

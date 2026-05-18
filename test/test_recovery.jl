@@ -179,10 +179,7 @@ end
     ll_rt = TransmissionLinelist.filter_realtime(ll, obs_date)
     d_rt = TransmissionLinelist.build_data(ll_rt;
         obs_time = obs_date, t0 = t0)
-    edges = TransmissionLinelist.bin_edges_day(t0)
-    obs_offset = Float64(Dates.value(obs_date - t0))
-    edges = edges[edges .<= obs_offset]
-    isempty(edges) || edges[end] < obs_offset && push!(edges, obs_offset)
+    edges = TransmissionLinelist.prepare_rt_edges(t0; obs_time = obs_date)
     chn = TransmissionLinelist.sample_fit(
         TransmissionLinelist.joint_model(d_rt, edges);
         samples = 200, chains = 2, seed = 20260512, progress = false)

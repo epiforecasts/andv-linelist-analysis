@@ -22,7 +22,7 @@ DocMeta.setdocmeta!(
 # which trips on bare `{T}` in the Julia code.
 let ll = load_linelist()
     d = build_data(ll)
-    src = @code_string TransmissionLinelist.joint_model(d, bin_edges_day(d.t0))
+    src = @code_string TransmissionLinelist.joint_model(d, prepare_rt_edges(d.t0))
     write(joinpath(@__DIR__, "examples", "joint_model_source.jl"), src)
 end
 

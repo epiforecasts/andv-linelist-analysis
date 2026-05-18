@@ -153,21 +153,40 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Return the weekly R(t) knot dates expressed as days relative to `t0`.
+Return the weekly R(t) knot positions expressed as days relative to `t0`.
 
 The knots span the outbreak in weekly steps; combined with [`log_R_at`](@ref)
 this defines the piecewise-linear log R(t) trajectory used by
 [`joint_model`](@ref).
 
+When `obs_time` is supplied, knots strictly after the cut-off are dropped
+and the final knot is set to the cut-off itself, so the last segment of
+the piecewise-linear log R(t) trajectory ends exactly at `obs_time`. This
+is the form needed for a real-time fit.
+
 # Arguments
 - `t0`: the model's time origin (the `t0` field of the tuple returned by
   [`build_data`](@ref)).
 
+# Keyword Arguments
+- `obs_time`: optional real-time observation cut-off `Date`. `nothing`
+  (the default) returns the full weekly knot set for a retrospective fit.
+
 # Returns
-A `Vector{Float64}` of length `length(BIN_EDGES)` giving the knot positions
-in days.
+A `Vector{Float64}` of knot positions in days. Length equals
+`length(BIN_EDGES)` for `obs_time === nothing`, and at most that for a
+real-time fit.
 """
-bin_edges_day(t0) = Float64[Dates.value(d - t0) for d in BIN_EDGES]
+function prepare_rt_edges(t0; obs_time::Union{Nothing, Date} = nothing)
+    edges = Float64[Dates.value(d - t0) for d in BIN_EDGES]
+    obs_time === nothing && return edges
+    obs_offset = Float64(Dates.value(obs_time - t0))
+    edges = edges[edges .<= obs_offset]
+    if isempty(edges) || edges[end] < obs_offset
+        push!(edges, obs_offset)
+    end
+    return edges
+end
 
 # Piecewise-linear interpolation: log_R[b] is the value at knot b, with
 # linear interpolation inside the knot range and clamping outside.
@@ -181,7 +200,7 @@ the endpoint values outside the knot range.
 
 # Arguments
 - `t`: time (in days from `t0`) at which to evaluate log R.
-- `knots`: knot positions in days, as returned by [`bin_edges_day`](@ref).
+- `knots`: knot positions in days, as returned by [`prepare_rt_edges`](@ref).
 - `log_R`: vector of log R values at each knot.
 
 # Returns

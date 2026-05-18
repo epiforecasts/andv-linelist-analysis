@@ -493,7 +493,7 @@ function plot_delta_sense_check(chn, d)
 end
 
 """
-    plot_z_ppc(chn, data; rng = Random.MersenneTwister(1), edges = bin_edges_day(data.t0))
+    plot_z_ppc(chn, data; rng = Random.MersenneTwister(1), edges = prepare_rt_edges(data.t0))
 
 Posterior-predictive check for the observed offspring counts `Zobs`. For
 each posterior draw `d` and each case `i`, samples a replicated offspring
@@ -531,7 +531,7 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
     N = d.N
 
     knots = edges === nothing ?
-            bin_edges_day(d.t0)[1:length(log_R)] : edges
+            prepare_rt_edges(d.t0)[1:length(log_R)] : edges
 
     Z_rep = Matrix{Int}(undef, n_draws, N)
     for d_idx in 1:n_draws
@@ -565,7 +565,7 @@ Bayesian posterior-predictive p-value.
 # Keyword Arguments
 - `rng`: RNG used to replicate the offspring counts.
 - `edges`: weekly knot edges; defaults to `nothing`, in which case
-  the knots are taken from `bin_edges_day(d.t0)[1:length(log_R)]`
+  the knots are taken from `prepare_rt_edges(d.t0)[1:length(log_R)]`
   inside `_z_ppc_replicate`.
 """
 function z_ppc_summary(chn, d;
@@ -613,7 +613,7 @@ observed counts per case.
 # Keyword Arguments
 - `rng`: RNG used for the posterior draws.
 - `edges`: weekly knot edges; defaults to `nothing`, in which case
-  the knots are taken from `bin_edges_day(d.t0)[1:length(log_R)]`
+  the knots are taken from `prepare_rt_edges(d.t0)[1:length(log_R)]`
   inside `_z_ppc_replicate`.
 """
 function plot_z_ppc(chn, d;
