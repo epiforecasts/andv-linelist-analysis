@@ -320,8 +320,16 @@ controlled = map(joint_fits) do fit
         strict_samples = strict.future_samples,
         at_obs_samples = at_obs.future_samples,
         natural_samples = natural.future_samples,
+        at_obs_per_source = at_obs,
         actual_future = realised_future_count(ll, fit.obs_date))
 end;
+
+# Per-source breakdown for the controlled-at-obs counterfactual at the
+# latest cut-off: shows which sources drive the projected future onset
+# count. One row per observed source case in the order they appear in
+# the predictor's `d` argument.
+
+per_source_predictive_summary(controlled[end].at_obs_per_source)
 
 controlled_df = let
     rows = map(controlled) do c

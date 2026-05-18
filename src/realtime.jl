@@ -253,7 +253,7 @@ function _predict_future_onsets(model, chn, post, d;
     n_draws = length(k)
     N = d.N
     Z_obs = d.Zobs
-    future_total = Vector{Int}(undef, n_draws)
+    future_per_source = Matrix{Int}(undef, n_draws, N)
 
     for d_idx in 1:n_draws
         inc = DynamicPPL.fix(inc_sub,
@@ -270,18 +270,18 @@ function _predict_future_onsets(model, chn, post, d;
         p_vec = _chain_completion(inc, δd, Δ_p)
         R_vec = _rates_at_onsets(T_d, edges, logR_d)
 
-        zsum = 0
         for i in 1:N
             R_i = R_vec[i]
             p_i = p_vec[i]
             prob = _pipeline_probability(inc, δd, Δ_q[i], Δ_p[i])
-            zsum += posterior_predictive(cases_sub, rng,
-                k_d, Z_obs[i], R_i, p_i, prob)
+            future_per_source[d_idx, i] = posterior_predictive(
+                cases_sub, rng, k_d, Z_obs[i], R_i, p_i, prob)
         end
-        future_total[d_idx] = zsum
     end
 
-    return (; future_samples = future_total, n_obs = N)
+    future_total = vec(sum(future_per_source, dims = 2))
+    return (; future_samples = future_total,
+        future_samples_per_source = future_per_source, n_obs = N)
 end
 
 """
@@ -332,6 +332,13 @@ chain, posterior summary, and the same `d` the model was fit on).
 [`realised_future_count`](@ref) returns the corresponding realised
 count from the full line list as a separate evaluation step.
 
+Returns a named tuple with fields `future_samples` (a `Vector{Int}` of
+length `n_draws` giving the total future count per draw),
+`future_samples_per_source` (an `n_draws × N` `Matrix{Int}` whose row
+sums equal `future_samples`), and `n_obs`. Use
+[`per_source_predictive_summary`](@ref) to turn the per-source matrix
+into a `DataFrame` for downstream diagnostics.
+
 # Arguments
 - `model`: the `DynamicPPL.Model` that produced `chn`, carrying the
   incubation, transmission, and observation submodels under
@@ -379,6 +386,12 @@ this is the `Δ_q = +Inf` limit of that predictor, where
 Incubation and transmission timing distributions per draw are
 recovered from the fitted `model`'s submodels via `DynamicPPL.fix`.
 
+Returns the same named tuple shape as
+[`predict_controlled_outbreak`](@ref): `future_samples`,
+`future_samples_per_source`, and `n_obs`.
+[`per_source_predictive_summary`](@ref) turns the per-source matrix
+into a `DataFrame` for downstream diagnostics.
+
 # Arguments
 - `model`: the `DynamicPPL.Model` that produced `chn`, carrying the
   incubation, transmission, and observation submodels under
@@ -399,4 +412,38 @@ function predict_natural_chain_outbreak(model, chn, post, d;
     return _predict_future_onsets(model, chn, post, d;
         obs_time = obs_time, t0 = t0,
         intervention_time = :natural, rng = rng)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Summarise per-source future-onset samples into a `DataFrame` with
+columns `source_idx`, `median`, `lo10`, `hi90`, `mean` — one row per
+source case in the order they appear in the predictor's `d` argument.
+
+Useful for diagnosing which sources drive a controlled-outbreak
+prediction.
+
+# Arguments
+- `pred`: the named tuple returned by
+  [`predict_controlled_outbreak`](@ref) or
+  [`predict_natural_chain_outbreak`](@ref), carrying the
+  `future_samples_per_source` matrix.
+
+# Keyword Arguments
+- `q`: three-tuple of lower, central, and upper quantiles used for the
+  `lo10`, `median`, and `hi90` columns.
+"""
+function per_source_predictive_summary(pred; q = (0.1, 0.5, 0.9))
+    fps = pred.future_samples_per_source
+    n_sources = size(fps, 2)
+    rows = map(1:n_sources) do i
+        samples = view(fps, :, i)
+        (source_idx = i,
+            median = quantile(samples, q[2]),
+            lo10 = quantile(samples, q[1]),
+            hi90 = quantile(samples, q[3]),
+            mean = mean(samples))
+    end
+    return DataFrame(rows)
 end

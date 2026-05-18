@@ -16,6 +16,7 @@ using Dates: Dates, Date, Day
 using Statistics: median, std, quantile, mean
 using Turing: Turing, @model, NUTS, sample, to_submodel
 using Integrals: IntegralProblem, QuadGKJL, solve
+using DataFrames: DataFrame, nrow, names
 
 # Helper: vector of pooled samples for a scalar parameter from a
 # Turing/FlexiChains VNChain.
@@ -193,6 +194,19 @@ end
     @test all(>=(0), natural.future_samples)
     @test TransmissionLinelist.realised_future_count(ll, obs_date) >= 0
     @test mean(strict.future_samples) <= mean(natural.future_samples) + 1
+    # Per-source matrix: shape `(n_draws, N)` and row sums equal totals.
+    n_draws = length(strict.future_samples)
+    @test size(strict.future_samples_per_source) == (n_draws, d_rt.N)
+    @test size(natural.future_samples_per_source) == (n_draws, d_rt.N)
+    @test vec(sum(strict.future_samples_per_source, dims = 2)) ==
+          strict.future_samples
+    @test vec(sum(natural.future_samples_per_source, dims = 2)) ==
+          natural.future_samples
+    # Summary helper returns a DataFrame with one row per source.
+    summ = TransmissionLinelist.per_source_predictive_summary(strict)
+    @test nrow(summ) == d_rt.N
+    @test Set(names(summ)) ==
+          Set(["source_idx", "median", "lo10", "hi90", "mean"])
 end
 
 @testset "predict_controlled_outbreak: intervention_time variants" begin

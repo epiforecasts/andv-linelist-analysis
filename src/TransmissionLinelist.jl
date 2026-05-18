@@ -47,7 +47,7 @@ export incubation_model, transmission_delta_model, random_walk_rt_model,
 export ConvolvedDelays
 export filter_realtime, filter_by_exposure
 export predict_controlled_outbreak, predict_natural_chain_outbreak,
-       realised_future_count
+       realised_future_count, per_source_predictive_summary
 export diagnostics, diagnostics_table, summary_table
 export vector_chain, summarise, save_posterior, rt_band, summarise_predictive
 export plot_data, plot_rt, plot_pair, plot_predictive_distributions
