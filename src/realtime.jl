@@ -147,19 +147,6 @@ function _rates_at_onsets(T_d, edges, logR_d)
             for i in eachindex(T_d)]
 end
 
-"""
-$(TYPEDSIGNATURES)
-
-Single Gamma-Poisson mixture draw: sample `λ ~ Gamma(shape, scale)`
-then return `rand(rng, Poisson(λ · prob))`.
-Used for the per-source future-onset draw in `_predict_future_onsets`
-and for the observed-case posterior predictive in `_z_ppc_replicate`.
-"""
-function _sample_gamma_poisson(rng, shape, scale, prob)
-    λ = rand(rng, Gamma(shape, scale))
-    return rand(rng, Poisson(λ * prob))
-end
-
 # Resolve `intervention_time` into per-source offsets `Δ_q[i]` measured
 # from each source's own onset time `T_d[i]`, in units of days from `t0`.
 function _intervention_offsets(intervention_time, obs_offset, T_d, t0, N)
@@ -195,6 +182,7 @@ function _predict_future_onsets(model, chn, post, ll,
 
     inc_sub = model.defaults.incubation
     δ_sub = model.defaults.transmission
+    cases_sub = model.defaults.cases
 
     n_draws = length(k)
     N = d.N
@@ -223,8 +211,8 @@ function _predict_future_onsets(model, chn, post, ll,
             p_i = p_vec[i]
             q_i = q_vec[i]
             prob = max(zero(p_i), future_prob_fn(p_i, q_i))
-            zsum += _sample_gamma_poisson(rng,
-                k_d + Z_obs[i], R_i / (k_d + R_i * p_i), prob)
+            zsum += posterior_predictive(cases_sub, rng,
+                k_d, Z_obs[i], R_i, p_i, prob)
         end
         future_total[d_idx] = zsum
     end

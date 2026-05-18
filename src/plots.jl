@@ -493,11 +493,13 @@ function plot_delta_sense_check(chn, d)
 end
 
 """
-    plot_z_ppc(chn, data; rng = Random.MersenneTwister(1), edges = prepare_rt_edges(data.t0))
+    plot_z_ppc(model, chn, data; rng = Random.MersenneTwister(1), edges = prepare_rt_edges(data.t0))
 
 Posterior-predictive check for the observed offspring counts `Zobs`. For
 each posterior draw `d` and each case `i`, samples a replicated offspring
-count `Z_rep[i, d] ~ NegativeBinomial(k[d], k[d]/(k[d] + R_i))`, where
+count via [`posterior_predictive`](@ref) dispatched on
+`model.defaults.cases`. For the default [`case_model`](@ref) this is
+`Z_rep[i, d] ~ NegativeBinomial(k[d], k[d]/(k[d] + R_i))`, where
 `R_i = exp(log_R_at(T_onset[i, d], edges, log_R[:, d]))`.
 
 Joint-draw: `T_onset[i]`, `log_R[:]`, and `k` are taken from the same
@@ -521,8 +523,9 @@ Returns a `Makie.Figure`.
 # Joint-draw posterior-predictive replication of Z. Returns an
 # `(n_draws × N)` matrix where each row is one replicated line list under
 # the model's Negative-Binomial likelihood, using the same draw of
-# `(T_inf, log_R, k)`.
-function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
+# `(T_inf, log_R, k)`. Dispatches `posterior_predictive` on
+# `model.defaults.cases` so alternative obs submodels are honoured.
+function _z_ppc_replicate(model, chn, d; rng = Random.MersenneTwister(1),
         edges = nothing)
     k_draws = _draws(chn, :k)
     log_R = vector_chain(chn, :log_R)
@@ -534,6 +537,8 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
     knots = edges === nothing ?
             prepare_rt_edges(d.t0)[1:length(log_R)] : edges
 
+    cases_sub = model.defaults.cases
+
     Z_rep = Matrix{Int}(undef, n_draws, N)
     for d_idx in 1:n_draws
         logR_d = [log_R[b][d_idx] for b in eachindex(log_R)]
@@ -541,8 +546,8 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
         for i in 1:N
             t_i = t_onset[i][d_idx]
             R_i = exp(log_R_at(t_i, knots, logR_d))
-            Z_rep[d_idx, i] = _sample_gamma_poisson(rng,
-                k_d + Zobs[i], R_i / (k_d + R_i), 1.0)
+            Z_rep[d_idx, i] = posterior_predictive(cases_sub, rng,
+                k_d, Zobs[i], R_i, 1.0, 1.0)
         end
     end
     return Z_rep
@@ -560,6 +565,9 @@ posterior-predictive summaries for three discrete test statistics —
 Bayesian posterior-predictive p-value.
 
 # Arguments
+- `model`: the [`joint_model`](@ref) instance that produced `chn`; its
+  `defaults.cases` field dispatches the per-case posterior-predictive
+  draw.
 - `chn`: a sampled chain from [`joint_model`](@ref).
 - `d`: the augmented data NamedTuple from [`build_data`](@ref).
 
@@ -569,10 +577,10 @@ Bayesian posterior-predictive p-value.
   the knots are taken from `prepare_rt_edges(d.t0)[1:length(log_R)]`
   inside `_z_ppc_replicate`.
 """
-function z_ppc_summary(chn, d;
+function z_ppc_summary(model, chn, d;
         rng = Random.MersenneTwister(1),
         edges = nothing)
-    Z_rep = _z_ppc_replicate(chn, d; rng, edges)
+    Z_rep = _z_ppc_replicate(model, chn, d; rng, edges)
     n_draws = size(Z_rep, 1)
     Zobs = d.Zobs
 
@@ -608,6 +616,9 @@ the joint posterior and overlays the simulated counts against the
 observed counts per case.
 
 # Arguments
+- `model`: the [`joint_model`](@ref) instance that produced `chn`; its
+  `defaults.cases` field dispatches the per-case posterior-predictive
+  draw.
 - `chn`: a sampled chain from [`joint_model`](@ref).
 - `d`: the augmented data NamedTuple from [`build_data`](@ref).
 
@@ -617,11 +628,11 @@ observed counts per case.
   the knots are taken from `prepare_rt_edges(d.t0)[1:length(log_R)]`
   inside `_z_ppc_replicate`.
 """
-function plot_z_ppc(chn, d;
+function plot_z_ppc(model, chn, d;
         rng = Random.MersenneTwister(1),
         edges = nothing)
     N = d.N
-    Z_rep = _z_ppc_replicate(chn, d; rng, edges)
+    Z_rep = _z_ppc_replicate(model, chn, d; rng, edges)
     n_draws = size(Z_rep, 1)
 
     Zobs = d.Zobs

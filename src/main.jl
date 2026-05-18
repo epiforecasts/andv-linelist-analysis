@@ -80,7 +80,8 @@ function analyse(;
     edges = prepare_rt_edges(d.t0; obs_time = obs_time)
     @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time n_knots=length(edges)
 
-    chn = sample_fit(joint_model(d, edges);
+    m = joint_model(d, edges)
+    chn = sample_fit(m;
         samples, chains, seed, progress)
 
     post = summarise(chn)
@@ -98,7 +99,8 @@ function analyse(;
             joinpath(figures, "delta_sense_check.png"))
         _save_makie_figure(plot_inc_sense_check(chn, d),
             joinpath(figures, "inc_sense_check.png"))
-        _save_makie_figure(plot_z_ppc(chn, d), joinpath(figures, "z_ppc.png"))
+        _save_makie_figure(plot_z_ppc(m, chn, d),
+            joinpath(figures, "z_ppc.png"))
         _save_makie_figure(plot_prior_predictives(), joinpath(figures, "prior_predictives.png"))
         _save_makie_figure(plot_predictive_distributions(chn),
             joinpath(figures, "predictive_distributions.png"))

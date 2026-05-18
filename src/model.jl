@@ -160,6 +160,34 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Posterior-predictive draw for a single case under the [`case_model`](@ref)
+negative-binomial likelihood. Uses the Gamma-Poisson conjugate structure
+of NB: `λ ~ Gamma(k + Z_obs, R / (k + R · p_i))`, then
+`Poisson(λ · prob)`. Real-time predictors dispatch on the joint
+model's observation-submodel constructor (`model.defaults.cases`) so
+alternative obs models (e.g. Poisson, beta-binomial) can supply their
+own `posterior_predictive` methods without editing the predictor.
+
+# Arguments
+- `cases_sub`: the observation-submodel constructor stored on
+  `joint_model`'s defaults; here `typeof(case_model)`.
+- `rng`: RNG used for the Gamma and Poisson draws.
+- `k`: per-draw NB dispersion `k`.
+- `Z_obs`: observed offspring count for this source.
+- `R`: per-source rate `R_i = exp(log_R_at(T_onset_i, edges, log_R))`.
+- `p_i`: offspring-completeness probability for this source.
+- `prob`: per-source future-onset thinning probability (e.g.
+  `q_i − p_i` for the controlled counterfactual).
+"""
+function posterior_predictive(::typeof(case_model),
+        rng, k, Z_obs, R, p_i, prob)
+    λ = rand(rng, Gamma(k + Z_obs, R / (k + R * p_i)))
+    return rand(rng, Poisson(λ * prob))
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Real-time right-truncation submodel. Adds two contributions to the
 log-likelihood:
 
@@ -319,15 +347,21 @@ surfaced via `:=` from inside `case_model`.
   `case_model`. Defaults to `random_walk_rt_model(length(edges))`.
 - `dispersion`: Turing submodel for the NB dispersion `k` passed
   through to `case_model`. Defaults to `nb_dispersion_model()`.
+- `cases`: observation-submodel constructor invoked as
+  `cases(d.Zobs, edges, delays.T_onset, delays.p; rt, dispersion)`.
+  Defaults to [`case_model`](@ref). Exposed on `model.defaults.cases`
+  so real-time predictors can dispatch [`posterior_predictive`](@ref)
+  on the obs submodel.
 """
 @model function joint_model(d, edges;
         incubation = incubation_model(),
         transmission = transmission_delta_model(),
         rt = random_walk_rt_model(length(edges)),
-        dispersion = nb_dispersion_model())
+        dispersion = nb_dispersion_model(),
+        cases = case_model)
     delays ~ to_submodel(
         delays_only_model(d; incubation, transmission), false)
-    cases ~ to_submodel(
-        case_model(d.Zobs, edges, delays.T_onset, delays.p;
+    case_obs ~ to_submodel(
+        cases(d.Zobs, edges, delays.T_onset, delays.p;
             rt, dispersion), false)
 end

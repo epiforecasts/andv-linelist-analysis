@@ -43,7 +43,7 @@ export load_linelist, build_data, prepare_rt_edges, log_R_at, bin_labels
 export joint_model, delays_only_model
 export incubation_model, transmission_delta_model, random_walk_rt_model,
        nb_dispersion_model, truncation_model, case_model,
-       latent_times_model
+       latent_times_model, posterior_predictive
 export ConvolvedDelays
 export filter_realtime, filter_by_exposure
 export predict_controlled_outbreak, predict_natural_chain_outbreak
