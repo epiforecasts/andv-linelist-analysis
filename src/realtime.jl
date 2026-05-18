@@ -165,8 +165,13 @@ function _intervention_offsets(intervention_time, obs_offset, T_d, t0, N)
     if intervention_time === nothing
         return [obs_offset - T_d[i] for i in 1:N]
     elseif intervention_time isa Date
+        # Scalar Date: per-source `max(intervention, own_onset) − own_onset`.
+        # For sources whose onset is after `intervention_time` this gives
+        # Δ_q = 0 (so q_i = cdf(δ, 0) captures pre-symptomatic
+        # transmission mass only). For sources whose onset precedes the
+        # intervention, Δ_q = intervention_time − T_onset.
         Δ_int = Float64(Dates.value(intervention_time - t0))
-        return [Δ_int - T_d[i] for i in 1:N]
+        return [max(Δ_int, T_d[i]) - T_d[i] for i in 1:N]
     elseif intervention_time isa AbstractVector{<:Date}
         length(intervention_time) == N || throw(ArgumentError(
             "intervention_time vector length $(length(intervention_time)) " *
@@ -284,11 +289,15 @@ count from the full line list as a separate evaluation step.
 - `obs_time`: cut-off `Date`.
 - `t0`: time origin `Date`.
 - `intervention_time`: when transmission stops.
-  `nothing` (default) means the intervention coincides with `obs_time`.
-  Pass a single `Date` to apply the same intervention to every source,
-  or a `Vector{Date}` of length `N` (the number of observed sources in
-  `d`) for per-source intervention dates (e.g. case-by-case isolation
-  on the date each case was identified).
+  `nothing` (default) means the intervention coincides with `obs_time`
+  for every source. A scalar `Date` means "no transmission after this
+  date for any source, plus isolation on each source's own onset for
+  cases emerging later" — the per-source `Δ_q[i]` is
+  `max(intervention_time, T_onset[i]) − T_onset[i]`, so sources whose
+  onset is after the intervention contribute only their pre-symptomatic
+  mass. For finer control supply a `Vector{Date}` of length `N` (the
+  number of observed sources in `d`) of per-source intervention dates
+  (e.g. case-by-case isolation on the date each case was identified).
 - `rng`: RNG used for posterior-predictive draws.
 
 # Example

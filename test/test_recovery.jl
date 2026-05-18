@@ -196,9 +196,10 @@ end
 end
 
 @testset "predict_controlled_outbreak: intervention_time variants" begin
-    # Scalar Date and a per-source Vector{Date} filled with the same date
-    # must produce identical samples (with shared RNG). An earlier
-    # intervention than `obs_time` must reduce the mean future count.
+    # Scalar Date applies a per-source `max(intervention, own_onset)`
+    # offset. A per-source Vector{Date} bypasses that max, so the two
+    # are NOT equal in general. An earlier intervention than `obs_time`
+    # must reduce the mean future count.
     ll = TransmissionLinelist.load_linelist()
     t0 = minimum(ll.onset_date) - Day(60)
     obs_date = Date("2018-12-31")
@@ -217,18 +218,27 @@ end
         obs_time = obs_date, t0 = t0,
         intervention_time = earlier,
         rng = Random.MersenneTwister(42))
-    s_vector = TransmissionLinelist.predict_controlled_outbreak(
-        m, chn, post, d_rt;
-        obs_time = obs_date, t0 = t0,
-        intervention_time = fill(earlier, d_rt.N),
-        rng = Random.MersenneTwister(42))
-    @test s_scalar.future_samples == s_vector.future_samples
-
     s_obs = TransmissionLinelist.predict_controlled_outbreak(
         m, chn, post, d_rt;
         obs_time = obs_date, t0 = t0,
         rng = Random.MersenneTwister(42))
     @test mean(s_scalar.future_samples) <= mean(s_obs.future_samples)
+
+    # Vector branch is a separate code path that does not apply the
+    # max-with-onset rule. With a vector of dates well after every
+    # source onset, vector and scalar agree (the max is a no-op).
+    far = obs_date + Day(60)
+    s_scalar_far = TransmissionLinelist.predict_controlled_outbreak(
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
+        intervention_time = far,
+        rng = Random.MersenneTwister(42))
+    s_vector_far = TransmissionLinelist.predict_controlled_outbreak(
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
+        intervention_time = fill(far, d_rt.N),
+        rng = Random.MersenneTwister(42))
+    @test s_scalar_far.future_samples == s_vector_far.future_samples
 
     # Wrong-length vector must error.
     @test_throws ArgumentError TransmissionLinelist.predict_controlled_outbreak(
