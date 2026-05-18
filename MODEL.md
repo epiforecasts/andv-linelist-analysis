@@ -8,7 +8,7 @@ The model jointly explores these latent times together with the parameters gover
 Generation and serial intervals are not given separate priors.
 They are computed from the fitted incubation period and transmission timing distributions in post-processing: the generation interval is the transmission timing plus the source's incubation period, and the serial interval is the transmission timing plus the secondary's incubation period.
 
-See the [rendered analysis walkthrough](https://epiforecasts.io/andv-linelist-analysis/dev/analysis) for fitted results and [LIMITATIONS.md](LIMITATIONS.md) for known caveats.
+See the [rendered analysis walkthrough](https://epiforecasts.io/andv-linelist-analysis/dev/analysis) for fitted results and the [limitations page](https://epiforecasts.io/andv-linelist-analysis/dev/limitations) for known caveats.
 
 ## Reproduction number
 
