@@ -160,8 +160,29 @@ function _sample_gamma_poisson(rng, shape, scale, prob)
     return rand(rng, Poisson(λ * prob))
 end
 
+# Resolve `intervention_time` into per-source offsets `Δ_q[i]` measured
+# from each source's own onset time `T_d[i]`, in units of days from `t0`.
+function _intervention_offsets(intervention_time, obs_offset, T_d, t0, N)
+    if intervention_time === nothing
+        return [obs_offset - T_d[i] for i in 1:N]
+    elseif intervention_time isa Date
+        Δ_int = Float64(Dates.value(intervention_time - t0))
+        return [Δ_int - T_d[i] for i in 1:N]
+    elseif intervention_time isa AbstractVector{<:Date}
+        length(intervention_time) == N || throw(ArgumentError(
+            "intervention_time vector length $(length(intervention_time)) " *
+            "does not match number of observed sources $(N)"))
+        return [Float64(Dates.value(intervention_time[i] - t0)) - T_d[i]
+                for i in 1:N]
+    else
+        throw(ArgumentError(
+            "intervention_time must be nothing, a Date, or a Vector{Date}"))
+    end
+end
+
 function _predict_future_onsets(model, chn, post, ll,
         obs_time::Date, t0::Date, future_prob_fn::Function;
+        intervention_time = nothing,
         rng = Random.MersenneTwister(2026))
     ll_rt = filter_realtime(ll, obs_time)
     d = build_data(ll_rt; obs_time = obs_time, t0 = t0)
@@ -189,9 +210,11 @@ function _predict_future_onsets(model, chn, post, ll,
         logR_d = [log_R[b][d_idx] for b in eachindex(log_R)]
         T_d = [T_on[i][d_idx] for i in 1:N]
 
-        Δ = [obs_offset - T_d[i] for i in 1:N]
-        p_vec = cdf(ConvolvedDelays(inc, δd), Δ)
-        q_vec = cdf.(δd, Δ)
+        Δ_p = [obs_offset - T_d[i] for i in 1:N]
+        Δ_q = _intervention_offsets(intervention_time, obs_offset,
+            T_d, d.t0, N)
+        p_vec = cdf(ConvolvedDelays(inc, δd), Δ_p)
+        q_vec = cdf.(δd, Δ_q)
         R_vec = _rates_at_onsets(T_d, edges, logR_d)
 
         zsum = 0
@@ -214,15 +237,16 @@ end
 $(TYPEDSIGNATURES)
 
 Strict controlled-outbreak counterfactual: predict future onsets
-assuming all transmission stops at `obs_time`.
-Only people already infected by `obs_time` (transmission event before
-the cut-off, chain not yet symptomatic) contribute.
+assuming all transmission stops at `intervention_time` (default
+`obs_time`).
+Only people already infected by `intervention_time` (transmission event
+before the cut-off, chain not yet symptomatic) contribute.
 For each posterior draw and observed source `i`, the contribution is
 `Poisson(λ_i · max(0, q_i − p_i))` where
-`q_i = cdf(δ_dist, obs_time − T_onset[i])` is the probability that
-transmission happened by `obs_time`, `p_i = cdf(ConvolvedDelays(inc,
-δ), obs_time − T_onset[i])` is the probability the full chain has
-completed, and
+`q_i = cdf(δ_dist, intervention_time_i − T_onset[i])` is the probability
+that transmission happened by the per-source intervention time,
+`p_i = cdf(ConvolvedDelays(inc, δ), obs_time − T_onset[i])` is the
+probability the full chain has completed by `obs_time`, and
 `λ_i | Z_obs[i], k, R_i, p_i ~ Gamma(k + Z_obs[i], R_i / (k + R_i · p_i))`.
 Incubation and transmission timing distributions per draw are
 recovered from the fitted `model`'s submodels via `DynamicPPL.fix`.
@@ -242,13 +266,30 @@ transmission continued.
 - `t0`: time origin `Date`.
 
 # Keyword Arguments
+- `intervention_time`: when transmission stops.
+  `nothing` (default) means the intervention coincides with `obs_time`.
+  Pass a single `Date` to apply the same intervention to every source,
+  or a `Vector{Date}` of length `N` (the number of observed sources
+  after `filter_realtime`) for per-source intervention dates (e.g.
+  case-by-case isolation on the date each case was identified).
 - `rng`: RNG used for posterior-predictive draws.
+
+# Example
+
+Per-source intervention dates for case-by-case isolation:
+
+```julia
+isolation = [c.onset_date + Day(1) for c in eachrow(ll_rt)]
+predict_controlled_outbreak(model, chn, post, ll, obs_date, t0;
+    intervention_time = isolation)
+```
 """
 function predict_controlled_outbreak(model, chn, post, ll,
         obs_time::Date, t0::Date;
+        intervention_time = nothing,
         rng = Random.MersenneTwister(2026))
     return _predict_future_onsets(model, chn, post, ll, obs_time, t0,
-        (p, q) -> q - p; rng)
+        (p, q) -> q - p; intervention_time, rng)
 end
 
 """

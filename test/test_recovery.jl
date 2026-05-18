@@ -194,3 +194,41 @@ end
     @test strict.actual_future >= 0
     @test mean(strict.future_samples) <= mean(natural.future_samples) + 1
 end
+
+@testset "predict_controlled_outbreak: intervention_time variants" begin
+    # Scalar Date and a per-source Vector{Date} filled with the same date
+    # must produce identical samples (with shared RNG). An earlier
+    # intervention than `obs_time` must reduce the mean future count.
+    ll = TransmissionLinelist.load_linelist()
+    t0 = minimum(ll.onset_date) - Day(60)
+    obs_date = Date("2018-12-31")
+    ll_rt = TransmissionLinelist.filter_realtime(ll, obs_date)
+    d_rt = TransmissionLinelist.build_data(ll_rt;
+        obs_time = obs_date, t0 = t0)
+    edges = TransmissionLinelist.prepare_rt_edges(t0; obs_time = obs_date)
+    m = TransmissionLinelist.joint_model(d_rt, edges)
+    chn = TransmissionLinelist.sample_fit(m;
+        samples = 100, chains = 2, seed = 20260512, progress = false)
+    post = TransmissionLinelist.summarise(chn)
+
+    earlier = obs_date - Day(7)
+    s_scalar = TransmissionLinelist.predict_controlled_outbreak(
+        m, chn, post, ll, obs_date, t0;
+        intervention_time = earlier,
+        rng = Random.MersenneTwister(42))
+    s_vector = TransmissionLinelist.predict_controlled_outbreak(
+        m, chn, post, ll, obs_date, t0;
+        intervention_time = fill(earlier, d_rt.N),
+        rng = Random.MersenneTwister(42))
+    @test s_scalar.future_samples == s_vector.future_samples
+
+    s_obs = TransmissionLinelist.predict_controlled_outbreak(
+        m, chn, post, ll, obs_date, t0;
+        rng = Random.MersenneTwister(42))
+    @test mean(s_scalar.future_samples) <= mean(s_obs.future_samples)
+
+    # Wrong-length vector must error.
+    @test_throws ArgumentError TransmissionLinelist.predict_controlled_outbreak(
+        m, chn, post, ll, obs_date, t0;
+        intervention_time = fill(earlier, d_rt.N + 1))
+end
