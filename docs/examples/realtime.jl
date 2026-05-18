@@ -21,11 +21,12 @@
 # under the "Real-time fitting caveats" heading.
 
 using TransmissionLinelist
+using AlgebraOfGraphics: data, mapping, visual, draw
 using DataFrames: DataFrame, nrow
 using Dates: Dates, Date, Day
-using Statistics: quantile, median
 using Random
 using CairoMakie
+using CairoMakie: Band, Lines, Hist, VLines
 using Logging: Logging
 
 Random.seed!(20260512)
@@ -41,7 +42,7 @@ Logging.disable_logging(Logging.Info)
 obs_dates = [Date("2018-12-31"), Date("2019-01-07")]
 ll = load_linelist();
 t0_ref = minimum(ll.onset_date) - Day(60)
-edges_ref = bin_edges_day(t0_ref)
+edges_ref = prepare_rt_edges(t0_ref)
 seed = 20260512
 
 # ## Data preparation per cut-off
@@ -62,11 +63,7 @@ function prepare_at(ll, obs_date)
     ll_rt = filter_realtime(ll, obs_date)
     d_truth = build_data(ll_truth; t0 = t0_ref)
     d_rt = build_data(ll_rt; obs_time = obs_date, t0 = t0_ref)
-    edges_rt = let
-        obs_offset = Float64(Dates.value(obs_date - t0_ref))
-        e = edges_ref[edges_ref .<= obs_offset]
-        (isempty(e) || e[end] < obs_offset) ? push!(e, obs_offset) : e
-    end
+    edges_rt = prepare_rt_edges(t0_ref; obs_time = obs_date)
     return (; obs_date, ll_truth, ll_rt, d_truth, d_rt, edges_rt,
         n_truth = nrow(ll_truth), n_rt = nrow(ll_rt))
 end
@@ -99,32 +96,30 @@ end;
 # the population delays from the truncated observations.
 
 let
-    params = [(:μ_inc, "μ_inc"), (:σ_inc, "σ_inc"),
-        (:μ_δ, "μ_δ"), (:σ_δ, "σ_δ")]
-    colours = [:steelblue, :darkorange]
-    fig = Figure(; size = (1500, 700))
-    for (r, fit) in enumerate(delays_fits)
+    params = [:μ_inc, :σ_inc, :μ_δ, :σ_δ]
+    rows = NamedTuple[]
+    for fit in delays_fits
         row_fits = [
             ("counterfactual retro", fit.chn_dly_truth),
             ("corrected real-time", fit.chn_dly_rt)
         ]
-        for (c, (key, label)) in enumerate(params)
-            ax = Axis(fig[r, c];
-                xlabel = label, ylabel = "density",
-                title = c == 1 ?
-                        "obs_date = $(fit.obs_date)" : "")
-            for (i, (name, chn)) in enumerate(row_fits)
-                draws = vec(collect(chn[key]))
-                hist!(ax, draws;
-                    bins = 30, normalization = :pdf,
-                    color = (colours[i], 0.3),
-                    strokecolor = colours[i], strokewidth = 1,
-                    label = name)
+        for (name, chn) in row_fits, p in params
+
+            for v in vec(collect(chn[p]))
+                push!(rows,
+                    (obs_date = string(fit.obs_date),
+                        fit = name, param = String(p), value = v))
             end
-            r == 1 && c == 1 && axislegend(ax; position = :rt)
         end
     end
-    fig
+    df = DataFrame(rows)
+    spec = data(df) *
+           mapping(:value => "value",
+               color = :fit => "fit",
+               row = :obs_date, col = :param) *
+           visual(Hist; bins = 30, normalization = :pdf, alpha = 0.4)
+    draw(spec; facet = (linkxaxes = :colwise, linkyaxes = :none),
+        figure = (; size = (1500, 700)))
 end
 
 # ## Joint fits
@@ -164,13 +159,11 @@ end;
 # `case_model` half of the likelihood.
 
 function diag_row(chn, obs_date, fit_kind, n_cases)
-    d = diagnostics_table(chn)
-    return (obs_date = obs_date,
-        fit_kind = fit_kind,
-        N_cases = n_cases,
-        rhat_max = d.rhat_max[1],
-        n_divergent = d.divergences[1],
-        wall_sec = d.runtime_seconds[1])
+    d = first(diagnostics_table(chn))
+    return merge((; obs_date, fit_kind, N_cases = n_cases),
+        (; rhat_max = d.rhat_max,
+            n_divergent = d.divergences,
+            wall_sec = d.runtime_seconds))
 end
 
 diag_df = let
@@ -202,40 +195,35 @@ end
 # Posterior medians with 80% CrI ribbons. Bin indices are comparable
 # across panels because `t0_ref` is shared.
 
-function rt_quantiles(post)
-    return (
-        lo = [quantile(exp.(post.log_R_chain[b]), 0.10)
-              for b in eachindex(post.log_R_chain)],
-        med = [quantile(exp.(post.log_R_chain[b]), 0.50)
-               for b in eachindex(post.log_R_chain)],
-        hi = [quantile(exp.(post.log_R_chain[b]), 0.90)
-              for b in eachindex(post.log_R_chain)])
-end
-
 let
-    colours = [:steelblue, :darkorange, :seagreen]
-    fig = Figure(; size = (1500, 500))
-    for (j, fit) in enumerate(joint_fits)
-        ax = Axis(fig[1, j];
-            xlabel = "Bin index", ylabel = "R(t) (80% CrI)",
-            title = "obs_date = $(fit.obs_date)",
-            limits = (nothing, (0.0, 4.0)))
+    band_rows = DataFrame[]
+    for fit in joint_fits
         panel_fits = [
             ("counterfactual retro", fit.post_truth),
             ("corrected real-time", fit.post_rt),
             ("full retrospective", post_retro_full)
         ]
-        for (i, (name, post)) in enumerate(panel_fits)
-            q = rt_quantiles(post)
-            b = collect(1:length(q.med))
-            band!(ax, b, q.lo, q.hi; color = (colours[i], 0.2))
-            lines!(ax, b, q.med; color = colours[i], linewidth = 2,
-                label = name)
+        for (name, post) in panel_fits
+            tbl = rt_band(post)
+            tbl.fit .= name
+            tbl.obs_date .= string(fit.obs_date)
+            push!(band_rows, tbl)
         end
-        hlines!(ax, [1.0]; color = :grey, linestyle = :dash)
-        j == 1 && axislegend(ax; position = :rt)
     end
-    fig
+    df = reduce(vcat, band_rows)
+    band_spec = data(df) *
+                mapping(:bin => "Bin index",
+                    :lo => "R(t) (80% CrI)", :hi;
+                    color = :fit, col = :obs_date) *
+                visual(Band; alpha = 0.2)
+    line_spec = data(df) *
+                mapping(:bin => "Bin index",
+                    :med => "R(t) (80% CrI)";
+                    color = :fit, col = :obs_date) *
+                visual(Lines; linewidth = 2)
+    draw(band_spec + line_spec;
+        axis = (; limits = (nothing, (0.0, 4.0))),
+        figure = (; size = (1500, 500)))
 end
 
 # ## Population posteriors per cut-off
@@ -246,33 +234,31 @@ end
 # recovering the population from the truncated observations.
 
 let
-    params = [(:μ_inc, "μ_inc"), (:σ_inc, "σ_inc"),
-        (:μ_δ, "μ_δ"), (:σ_δ, "σ_δ"),
-        (:k, "k")]
-    colours = [:steelblue, :darkorange, :seagreen]
-    fig = Figure(; size = (1500, 900))
-    for (r, fit) in enumerate(joint_fits)
+    params = [:μ_inc, :σ_inc, :μ_δ, :σ_δ, :k]
+    rows = NamedTuple[]
+    for fit in joint_fits
         row_fits = [
             ("counterfactual retro", fit.post_truth),
             ("corrected real-time", fit.post_rt),
             ("full retrospective", post_retro_full)
         ]
-        for (c, (key, label)) in enumerate(params)
-            ax = Axis(fig[r, c];
-                xlabel = label, ylabel = "density",
-                title = c == 1 ?
-                        "obs_date = $(fit.obs_date)" : "")
-            for (i, (name, post)) in enumerate(row_fits)
-                hist!(ax, getproperty(post, key);
-                    bins = 30, normalization = :pdf,
-                    color = (colours[i], 0.3),
-                    strokecolor = colours[i], strokewidth = 1,
-                    label = name)
+        for (name, post) in row_fits, p in params
+
+            for v in getproperty(post, p)
+                push!(rows,
+                    (obs_date = string(fit.obs_date),
+                        fit = name, param = String(p), value = v))
             end
-            r == 1 && c == 1 && axislegend(ax; position = :rt)
         end
     end
-    fig
+    df = DataFrame(rows)
+    spec = data(df) *
+           mapping(:value => "value",
+               color = :fit => "fit",
+               row = :obs_date, col = :param) *
+           visual(Hist; bins = 30, normalization = :pdf, alpha = 0.4)
+    draw(spec; facet = (linkxaxes = :colwise, linkyaxes = :none),
+        figure = (; size = (1500, 900)))
 end
 
 # ## Controlled-outbreak projection
@@ -306,47 +292,56 @@ controlled = map(joint_fits) do fit
         actual_future = strict.actual_future)
 end;
 
-controlled_df = DataFrame(
-    obs_date = [c.obs_date for c in controlled],
-    n_obs = [c.n_rt for c in controlled],
-    actual_future = [c.actual_future for c in controlled],
-    strict_median = [Int(round(median(c.strict_samples)))
-                     for c in controlled],
-    strict_lo10 = [Int(round(quantile(c.strict_samples, 0.10)))
-                   for c in controlled],
-    strict_hi90 = [Int(round(quantile(c.strict_samples, 0.90)))
-                   for c in controlled],
-    natural_median = [Int(round(median(c.natural_samples)))
-                      for c in controlled],
-    natural_lo10 = [Int(round(quantile(c.natural_samples, 0.10)))
-                    for c in controlled],
-    natural_hi90 = [Int(round(quantile(c.natural_samples, 0.90)))
-                    for c in controlled])
+controlled_df = let
+    rows = map(controlled) do c
+        s = summarise_predictive(c.strict_samples)
+        n = summarise_predictive(c.natural_samples)
+        (obs_date = c.obs_date,
+            n_obs = c.n_rt,
+            actual_future = c.actual_future,
+            strict_median = s.med,
+            strict_lo10 = s.lo,
+            strict_hi90 = s.hi,
+            natural_median = n.med,
+            natural_lo10 = n.lo,
+            natural_hi90 = n.hi)
+    end
+    DataFrame(rows)
+end
 
 #-
 
 let
-    fig = Figure(; size = (1500, 400))
-    for (j, c) in enumerate(controlled)
-        ax = Axis(fig[1, j];
-            xlabel = "Future cases", ylabel = "Density",
-            title = "obs_date = $(c.obs_date)  (n_obs=$(c.n_rt))")
-        hist!(ax, c.strict_samples;
-            bins = 30, normalization = :pdf,
-            color = (:steelblue, 0.4),
-            strokecolor = :steelblue, strokewidth = 1,
-            label = "controlled (strict)")
-        hist!(ax, c.natural_samples;
-            bins = 30, normalization = :pdf,
-            color = (:seagreen, 0.3),
-            strokecolor = :seagreen, strokewidth = 1,
-            label = "natural chain")
-        vlines!(ax, [c.actual_future];
-            color = :darkorange, linewidth = 3,
-            label = "actual = $(c.actual_future)")
-        j == 1 && axislegend(ax; position = :rt)
+    hist_rows = NamedTuple[]
+    vline_rows = NamedTuple[]
+    for c in controlled
+        panel = "obs_date = $(c.obs_date)  (n_obs=$(c.n_rt))"
+        for v in c.strict_samples
+            push!(hist_rows,
+                (panel = panel, kind = "controlled (strict)", value = v))
+        end
+        for v in c.natural_samples
+            push!(hist_rows,
+                (panel = panel, kind = "natural chain", value = v))
+        end
+        push!(vline_rows,
+            (panel = panel,
+                kind = "actual = $(c.actual_future)",
+                value = Float64(c.actual_future)))
     end
-    fig
+    df_hist = DataFrame(hist_rows)
+    df_vline = DataFrame(vline_rows)
+    hist_spec = data(df_hist) *
+                mapping(:value => "Future cases";
+                    color = :kind => "kind", col = :panel) *
+                visual(Hist; bins = 30, normalization = :pdf, alpha = 0.4)
+    vline_spec = data(df_vline) *
+                 mapping(:value; color = :kind => "kind",
+                     col = :panel) *
+                 visual(VLines; linewidth = 3)
+    draw(hist_spec + vline_spec;
+        facet = (linkxaxes = :none, linkyaxes = :none),
+        figure = (; size = (1500, 400)))
 end
 
 # ### Why the Jan 7 predictive is wider than Dec 31
