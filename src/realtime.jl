@@ -209,28 +209,16 @@ end
 # The `:natural` sentinel resolves to all-`+Inf` offsets (the no-
 # intervention natural-chain counterfactual).
 function _intervention_offsets(intervention_time, obs_offset, T_d, t0, N)
-    if intervention_time === :natural
-        return fill(Inf, N)
-    elseif intervention_time === nothing
+    if intervention_time === nothing
         return [obs_offset - T_d[i] for i in 1:N]
     elseif intervention_time isa Date
         Δ_int = Float64(Dates.value(intervention_time - t0))
         return [Δ_int - T_d[i] for i in 1:N]
-    elseif intervention_time isa AbstractVector
-        length(intervention_time) == N || throw(ArgumentError(
-            "intervention_time vector length $(length(intervention_time)) " *
-            "does not match number of observed sources $(N)"))
-        return map(1:N) do i
-            it = intervention_time[i]
-            it === nothing && return -Inf
-            it isa Date || throw(ArgumentError(
-                "intervention_time vector must contain Date or nothing"))
-            Float64(Dates.value(it - t0)) - T_d[i]
-        end
+    elseif intervention_time === :natural
+        return fill(Inf, N)
     else
         throw(ArgumentError(
-            "intervention_time must be nothing, a Date, " *
-            "or a Vector of Date/Nothing"))
+            "intervention_time must be nothing, a Date, or :natural"))
     end
 end
 
@@ -343,7 +331,7 @@ count from the full line list as a separate evaluation step.
 # Keyword Arguments
 - `obs_time`: cut-off `Date`.
 - `t0`: time origin `Date`.
-- `intervention_time`: when transmission stops. Three forms are
+- `intervention_time`: when transmission stops. Two forms are
   accepted:
   - `nothing` (default): intervention coincides with `obs_time` for
     every source, equivalent to passing `obs_time` as a scalar `Date`.
@@ -352,27 +340,11 @@ count from the full line list as a separate evaluation step.
     after `intervention_time` get a negative `Δ_q[i]`, so
     `q_i = cdf(δ, Δ_q[i])` evaluates in the left tail of the
     transmission-timing distribution.
-  - A `Vector{Union{Date, Nothing}}` of length `N` (the number of
-    observed sources in `d`): per-source intervention dates. A
-    `nothing` element means the source contributes zero future onsets
-    (resolved as `q_i = cdf(δ, -Inf) = 0`), useful when the caller
-    wants to encode "only these sources had ongoing transmission" as
-    policy in the calling code rather than in the package.
 - `rng`: RNG used for posterior-predictive draws.
-
-# Example
-
-Per-source intervention dates for case-by-case isolation:
-
-```julia
-isolation = [c.onset_date + Day(1) for c in eachrow(ll_rt)]
-predict_controlled_outbreak(model, chn, post, d_rt;
-    obs_time = obs_date, t0 = t0, intervention_time = isolation)
-```
 """
 function predict_controlled_outbreak(model, chn, post, d;
         obs_time::Date, t0::Date,
-        intervention_time = nothing,
+        intervention_time::Union{Nothing, Date} = nothing,
         rng = Random.MersenneTwister(2026))
     return _predict_future_onsets(model, chn, post, d;
         obs_time = obs_time, t0 = t0,
