@@ -268,11 +268,14 @@ end
 #
 # - **Controlled** ([`predict_controlled_outbreak`](@ref)): transmission
 #   stops at `intervention_date = 2018-12-31` (the onset date of the
-#   18th case — the back-end of the first wave). Sources whose onset is
-#   after `intervention_date` are assumed isolated on their own onset,
-#   so they only contribute their pre-symptomatic transmission mass.
-#   For sources whose onset precedes the intervention, the chain
-#   probability is `cdf(δ, intervention_date − T_onset)`.
+#   18th case — the back-end of the first wave). Under "we know what we
+#   know", only sources with at least one observed offspring in the
+#   real-time line list (`Zobs[i] > 0`) are treated as having ongoing
+#   transmission to halt; sources with no observed offspring contribute
+#   zero because we have no direct evidence they ever transmitted.
+#   This policy is encoded in the vignette via a per-source
+#   `Vector{Union{Date, Nothing}}` passed to `intervention_time`; the
+#   package itself takes no view on which sources transmit.
 # - **Natural chain** ([`predict_natural_chain_outbreak`](@ref)):
 #   current sources keep transmitting at their existing rate but no
 #   second-generation chains form from those new offspring.
@@ -300,10 +303,16 @@ end
 intervention_date = Date("2018-12-31")
 
 controlled = map(joint_fits) do fit
+    # Per-source policy: only sources with Z > 0 in the real-time line
+    # list (offspring already observed by `obs_date`) keep transmitting
+    # up to `intervention_date`. Sources with Z == 0 become `nothing`,
+    # contributing zero future cases.
+    intervention_vec = Vector{Union{Date, Nothing}}(
+        [z > 0 ? intervention_date : nothing for z in fit.d_rt.Zobs])
     strict = predict_controlled_outbreak(
         fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
         obs_time = fit.obs_date, t0 = t0_ref,
-        intervention_time = intervention_date)
+        intervention_time = intervention_vec)
     natural = predict_natural_chain_outbreak(
         fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
         obs_time = fit.obs_date, t0 = t0_ref)
