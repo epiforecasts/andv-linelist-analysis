@@ -10,10 +10,10 @@
 # The real-time machinery in `joint_model` corrects for these via per-case right-truncation on Inc and δ and an offspring-completeness adjustment on the NB offspring count, expressed as the cdf of the [`ConvolvedDelays`](@ref) distribution `δ + Inc(sec)`.
 # The adjustment is the probability that an offspring's chain has completed by the cut-off, conditional on the source's onset time.
 # The argument is `obs_time − T_onset[src]`, not `obs_time − T_inf[src]` — the source's own incubation is a sampled latent already scored, so the offspring delay reduces to `δ + Inc(sec)`.
-# This page validates the corrections by fitting the same outbreak at two real-time cut-offs and overlaying the resulting R(t) posteriors and population marginals against a counterfactual retrospective and the full closed-out fit.
+# This page validates the corrections by fitting the same outbreak at three real-time cut-offs and overlaying the resulting R(t) posteriors and population marginals against a counterfactual retrospective and the full closed-out fit.
 # It also runs a **delays-only diagnostic** at each cut-off — fitting just the incubation and δ submodels — so that if the full joint fit collapses, we can tell whether the pathology lives in the delay submodels or in the R(t) / `case_model` half of the likelihood.
 #
-# The workflow is sequenced so the delays-only fits at both cut-offs are inspected first.
+# The workflow is sequenced so the delays-only fits at each cut-off are inspected first.
 # If the delay submodels diverge at a cut-off, the joint fit is hopeless and the reader can stop there.
 # Only once the delay parameters look well-identified does the page move on to the joint fits and their downstream diagnostics, R(t) overlays, population marginals, and controlled-outbreak projection.
 #
@@ -37,10 +37,16 @@ Logging.disable_logging(Logging.Info)
 
 # ## Setup
 #
-# Two cut-offs are used: 31 December 2018 (about three weeks into the
-# outbreak) and 7 January 2019.
+# Three cut-offs are used: 31 December 2018 (about three weeks into the
+# outbreak), 7 January 2019, and 14 January 2019.
+# Together they show successive stages of inference as the
+# offspring-completeness window expands: at Dec 31 most late-December
+# sources have had little time to seed offspring; at Jan 7 the
+# completeness factor for those sources has begun to fill in; by
+# Jan 14 the late-December chains have largely played out, so R(t) at
+# the late-December knots should sharpen toward the retrospective.
 
-obs_dates = [Date("2018-12-31"), Date("2019-01-07")]
+obs_dates = [Date("2018-12-31"), Date("2019-01-07"), Date("2019-01-14")]
 ll = load_linelist();
 t0_ref = minimum(ll.onset_date) - Day(60)
 edges_ref = prepare_rt_edges(t0_ref)
@@ -99,7 +105,7 @@ end;
 # Shared marginal-overlay helper used by both this delays-only plot
 # and the joint-fit version further down. AlgebraOfGraphics spec with
 # per-column free x-axis so each parameter's scale is its own.
-function plot_marginal_overlay(df; size_kw = (1500, 700))
+function plot_marginal_overlay(df; size_kw = (1500, 950))
     spec = data(df) *
            mapping(:value => "value", color = :fit => "fit",
                row = :obs_date, col = :param) *
@@ -269,7 +275,7 @@ let
             end
         end
     end
-    plot_marginal_overlay(DataFrame(rows); size_kw = (1500, 900))
+    plot_marginal_overlay(DataFrame(rows); size_kw = (1500, 1200))
 end
 
 # ## Controlled-outbreak projection
@@ -421,7 +427,7 @@ let
         figure = (; size = (1500, 400)))
 end
 
-# ### Why the Jan 7 predictive is wider than Dec 31
+# ### Why the Jan 7 predictive is wider than Dec 31, and how Jan 14 tightens
 #
 # More data does not always mean a tighter future-cases prediction.
 # At Jan 7 the line list adds secondary cases with onsets in the last
@@ -434,6 +440,11 @@ end
 # At Dec 31 the late-onset sources are fewer and most of their
 # expected offspring chains have already completed, so each source
 # contributes far less to the future window.
+# By Jan 14 the late-December sources have had two further weeks for
+# their offspring to surface, so the completeness factor pins their
+# per-source rate more tightly and the predictive distribution
+# narrows even though the late-cut-off sources themselves remain
+# pipeline-heavy.
 #
 # ### Why the upper tail is wide even under the strict counterfactual
 #
