@@ -82,7 +82,7 @@ const _CONVOLVED_DELAYS_ALG = GaussLegendre(; n = 80)
 const _CONVOLVED_DELAYS_K = 20
 
 function _convolved_delays_integrand(u::Real, p)
-    δ = p.μ + p.halfwidth * u
+    δ = p.centre + p.halfwidth * u
     return [(x_i - δ) > 0 ?
             cdf(p.inc_dist, x_i - δ) * pdf(p.δ_dist, δ) :
             zero(p.halfwidth)
@@ -96,12 +96,19 @@ Distribution of the convolved chain delay `δ + Inc(sec)`, with
 `Inc(sec) ~ inc` and `δ ~ δ`. Used as the joint right-truncation
 distribution for sourced offspring at a real-time cut-off.
 
-Two `cdf` methods are provided. The scalar form `cdf(d, x::Real)` is
-the standard `Distributions` interface. The vector form
-`cdf(d, xs::AbstractVector)` evaluates the CDF at every `x ∈ xs` in a
-single GaussLegendre solve. Prefer the vector form when evaluating at
-many points: `cdf.(d, xs)` would otherwise trigger one solve per
-element.
+`cdf(d, x; upper_δ = Inf)` evaluates `P(δ + Inc ≤ x ∧ δ ≤ upper_δ)`
+by GaussLegendre quadrature over
+`(mean(d.δ) − K·std(d.δ), min(upper_δ, mean(d.δ) + K·std(d.δ)))`.
+With the default `upper_δ = Inf` the integration domain is the full
+truncated support and the result is the ordinary chain-completion
+CDF. A finite `upper_δ` caps the inner δ integral and is used by
+[`_pipeline_probability`](@ref) for the controlled-outbreak
+counterfactual.
+
+Accepts both `x::Real` (returns a scalar) and `x::AbstractVector`
+(returns a vector, evaluating every point in a single GaussLegendre
+solve). Prefer the vector form when evaluating at many points:
+`cdf.(d, xs)` would otherwise trigger one solve per element.
 
 # Fields
 - `inc`: incubation period distribution for the secondary case.
@@ -112,22 +119,43 @@ struct ConvolvedDelays{I, D} <: ContinuousUnivariateDistribution
     δ::D
 end
 
-Distributions.cdf(d::ConvolvedDelays, x::Real) = cdf(d, [x])[1]
-function Distributions.cdf(d::ConvolvedDelays, x::AbstractVector)
+function _convolved_delays_cdf(d::ConvolvedDelays, xs::AbstractVector,
+        upper_δ, alg)
     μ = mean(d.δ)
-    halfwidth = _CONVOLVED_DELAYS_K * std(d.δ)
-    params = (; μ, halfwidth, x, inc_dist = d.inc, δ_dist = d.δ)
+    σK = _CONVOLVED_DELAYS_K * std(d.δ)
+    lower = μ - σK
+    upper = min(upper_δ, μ + σK)
+    upper <= lower && return zero(xs)
+    halfwidth = (upper - lower) / 2
+    centre = (upper + lower) / 2
+    params = (; centre, halfwidth, x = xs,
+        inc_dist = d.inc, δ_dist = d.δ)
     prob = IntegralProblem(_convolved_delays_integrand, (-1.0, 1.0), params)
-    return halfwidth .* solve(prob, _CONVOLVED_DELAYS_ALG).u
+    return halfwidth .* solve(prob, alg).u
+end
+
+function Distributions.cdf(d::ConvolvedDelays, x::Real;
+        upper_δ = Inf, alg = _CONVOLVED_DELAYS_ALG)
+    return _convolved_delays_cdf(d, [x], upper_δ, alg)[1]
+end
+function Distributions.cdf(d::ConvolvedDelays, x::AbstractArray{<:Real};
+        upper_δ = Inf, alg = _CONVOLVED_DELAYS_ALG)
+    return _convolved_delays_cdf(d, x, upper_δ, alg)
 end
 
 # Closed-form specialisations: defer to `Distributions.convolve` for
 # same-family pairs that have an analytic sum, skipping the integral.
-function Distributions.cdf(d::ConvolvedDelays{<:Normal, <:Normal}, x::Real)
+# Only valid when the δ integration is unbounded (`upper_δ = Inf`);
+# otherwise fall back to the general quadrature method.
+function Distributions.cdf(d::ConvolvedDelays{<:Normal, <:Normal}, x::Real;
+        upper_δ = Inf, alg = _CONVOLVED_DELAYS_ALG)
+    upper_δ == Inf || return _convolved_delays_cdf(d, [x], upper_δ, alg)[1]
     return cdf(Distributions.convolve(d.inc, d.δ), x)
 end
 function Distributions.cdf(d::ConvolvedDelays{<:Normal, <:Normal},
-        x::AbstractVector)
+        x::AbstractArray{<:Real};
+        upper_δ = Inf, alg = _CONVOLVED_DELAYS_ALG)
+    upper_δ == Inf || return _convolved_delays_cdf(d, x, upper_δ, alg)
     return cdf.(Distributions.convolve(d.inc, d.δ), x)
 end
 
@@ -157,13 +185,6 @@ in days from the source's onset). Used by
 """
 _chain_completion(inc, δd, Δ) = cdf(ConvolvedDelays(inc, δd), Δ)
 
-function _pipeline_integrand(u::Real, p)
-    δ = p.mid + p.halfwidth * u
-    return (p.Δ_p - δ) > 0 ?
-           ccdf(p.inc_dist, p.Δ_p - δ) * pdf(p.δ_dist, δ) :
-           pdf(p.δ_dist, δ)
-end
-
 """
 $(TYPEDSIGNATURES)
 
@@ -174,16 +195,14 @@ after its onset:
 
 ```
 P(δ ≤ Δ_q ∧ δ + Inc > Δ_p)
-    = ∫_{-∞}^{Δ_q} pdf(δ_dist, δ) · ccdf(inc, Δ_p − δ) dδ
+    = cdf(δd, Δ_q) − cdf(ConvolvedDelays(inc, δd), Δ_p; upper_δ = Δ_q)
 ```
 
-(where `ccdf(inc, x) = 1` for `x ≤ 0`). Evaluated by GaussLegendre
-quadrature over the truncated support
-`(mean(δ_dist) − K·std(δ_dist), Δ_q)`. The natural-chain limit
-(no intervention) falls out as `Δ_q = +Inf`, where the upper bound is
-clipped to `mean(δ_dist) + K·std(δ_dist)` and the result reduces to
-`1 − cdf(ConvolvedDelays(inc, δ_dist), Δ_p)`. The exclusion sentinel
-`Δ_q = -Inf` returns exactly `0`.
+Routed through [`Distributions.cdf(::ConvolvedDelays, x; upper_δ)`]
+so the GaussLegendre quadrature lives in one place. The natural-chain
+limit (no intervention) falls out as `Δ_q = +Inf`, where the result
+reduces to `1 − cdf(ConvolvedDelays(inc, δd), Δ_p)`. The exclusion
+sentinel `Δ_q = -Inf` returns exactly `0`.
 
 # Arguments
 - `inc`: incubation period distribution for the secondary case.
@@ -191,17 +210,11 @@ clipped to `mean(δ_dist) + K·std(δ_dist)` and the result reduces to
 - `Δ_q`: per-source intervention offset (days from source onset).
 - `Δ_p`: per-source observation offset (days from source onset).
 """
-function _pipeline_probability(inc, δd, Δ_q::Real, Δ_p::Real)
-    μ = mean(δd)
-    σ = std(δd)
-    a = μ - _CONVOLVED_DELAYS_K * σ
-    b = min(Δ_q, μ + _CONVOLVED_DELAYS_K * σ)
-    b <= a && return zero(Δ_p)
-    halfwidth = (b - a) / 2
-    mid = (a + b) / 2
-    params = (; mid, halfwidth, Δ_p, inc_dist = inc, δ_dist = δd)
-    prob = IntegralProblem(_pipeline_integrand, (-1.0, 1.0), params)
-    return halfwidth * solve(prob, _CONVOLVED_DELAYS_ALG).u
+function _pipeline_probability(inc, δd, Δ_q::Real, Δ_p::Real;
+        alg = _CONVOLVED_DELAYS_ALG)
+    q = cdf(δd, Δ_q)
+    iszero(q) && return zero(q)
+    return q - cdf(ConvolvedDelays(inc, δd), Δ_p; upper_δ = Δ_q, alg)
 end
 
 # Resolve `intervention_time` into per-source offsets `Δ_q[i]` measured
