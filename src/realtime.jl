@@ -185,16 +185,6 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Per-source probability that the offspring chain `δ + Inc(sec)` has
-completed by elapsed time `Δ` (vector of per-source horizons measured
-in days from the source's onset). Used by
-[`truncation_model`](@ref)'s real-time denominator.
-"""
-_chain_completion(inc, δd, Δ) = cdf(ConvolvedDelays(inc, δd), Δ)
-
-"""
-$(TYPEDSIGNATURES)
-
 Probability that an offspring of a source case is currently in
 incubation at `Δ_p` days after the source's onset, given the
 counterfactual that transmission from that source stops `Δ_q` days
@@ -281,7 +271,7 @@ function _predict_future_onsets(model, chn, post, d;
         Δ_p = [obs_offset - T_d[i] for i in 1:N]
         Δ_q = _intervention_offsets(intervention_time, obs_offset,
             T_d, d.t0, N)
-        p_vec = _chain_completion(inc, δd, Δ_p)
+        p_vec = cdf(ConvolvedDelays(inc, δd), Δ_p)
         R_vec = _rates_at_onsets(T_d, edges, logR_d)
 
         for i in 1:N
