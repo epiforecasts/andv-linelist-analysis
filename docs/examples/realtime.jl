@@ -139,12 +139,12 @@ chn_retro_full = sample_fit(joint_model(d_retro, edges_ref);
 post_retro_full = summarise(chn_retro_full);
 
 joint_fits = map(delays_fits) do prep
-    chn_truth = sample_fit(joint_model(prep.d_truth, prep.edges_rt);
-        seed = seed)
-    chn_rt = sample_fit(joint_model(prep.d_rt, prep.edges_rt);
-        seed = seed)
+    m_truth = joint_model(prep.d_truth, prep.edges_rt)
+    m_rt = joint_model(prep.d_rt, prep.edges_rt)
+    chn_truth = sample_fit(m_truth; seed = seed)
+    chn_rt = sample_fit(m_rt; seed = seed)
     merge(prep,
-        (; chn_truth, chn_rt,
+        (; m_truth, m_rt, chn_truth, chn_rt,
             post_truth = summarise(chn_truth),
             post_rt = summarise(chn_rt)))
 end;
@@ -283,9 +283,9 @@ end
 
 controlled = map(joint_fits) do fit
     strict = predict_controlled_outbreak(
-        fit.chn_rt, fit.post_rt, ll, fit.obs_date, t0_ref)
+        fit.m_rt, fit.chn_rt, fit.post_rt, ll, fit.obs_date, t0_ref)
     natural = predict_natural_chain_outbreak(
-        fit.chn_rt, fit.post_rt, ll, fit.obs_date, t0_ref)
+        fit.m_rt, fit.chn_rt, fit.post_rt, ll, fit.obs_date, t0_ref)
     (; fit.obs_date, fit.n_rt,
         strict_samples = strict.future_samples,
         natural_samples = natural.future_samples,

@@ -529,6 +529,7 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
     t_onset = vector_chain(chn, :T_onset)
     n_draws = length(k_draws)
     N = d.N
+    Zobs = d.Zobs
 
     knots = edges === nothing ?
             prepare_rt_edges(d.t0)[1:length(log_R)] : edges
@@ -540,8 +541,8 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
         for i in 1:N
             t_i = t_onset[i][d_idx]
             R_i = exp(log_R_at(t_i, knots, logR_d))
-            p = k_d / (k_d + R_i)
-            Z_rep[d_idx, i] = rand(rng, NegativeBinomial(k_d, p))
+            Z_rep[d_idx, i] = _sample_gamma_poisson(rng,
+                k_d + Zobs[i], R_i / (k_d + R_i), 1.0)
         end
     end
     return Z_rep

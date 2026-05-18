@@ -180,14 +180,14 @@ end
     d_rt = TransmissionLinelist.build_data(ll_rt;
         obs_time = obs_date, t0 = t0)
     edges = TransmissionLinelist.prepare_rt_edges(t0; obs_time = obs_date)
-    chn = TransmissionLinelist.sample_fit(
-        TransmissionLinelist.joint_model(d_rt, edges);
+    m = TransmissionLinelist.joint_model(d_rt, edges)
+    chn = TransmissionLinelist.sample_fit(m;
         samples = 200, chains = 2, seed = 20260512, progress = false)
     post = TransmissionLinelist.summarise(chn)
     strict = TransmissionLinelist.predict_controlled_outbreak(
-        chn, post, ll, obs_date, t0)
+        m, chn, post, ll, obs_date, t0)
     natural = TransmissionLinelist.predict_natural_chain_outbreak(
-        chn, post, ll, obs_date, t0)
+        m, chn, post, ll, obs_date, t0)
     @test length(strict.future_samples) == length(natural.future_samples)
     @test all(>=(0), strict.future_samples)
     @test all(>=(0), natural.future_samples)

@@ -134,10 +134,34 @@ end
 Distributions.minimum(::ConvolvedDelays) = -Inf
 Distributions.maximum(::ConvolvedDelays) = Inf
 
-function _predict_future_onsets(chn, post, ll,
+"""
+$(TYPEDSIGNATURES)
+
+Evaluate the time-varying reproduction number at each per-case onset
+offset `T_d[i]` using piecewise-constant interpolation against `edges`
+and the per-draw log-R vector `logR_d`.
+Returns a `Vector{Float64}` of length `length(T_d)`.
+"""
+function _rates_at_onsets(T_d, edges, logR_d)
+    return [exp(log_R_at(T_d[i], edges, logR_d))
+            for i in eachindex(T_d)]
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Single Gamma-Poisson mixture draw: sample `λ ~ Gamma(shape, scale)`
+then return `rand(rng, Poisson(λ · prob))`.
+Used for the per-source future-onset draw in `_predict_future_onsets`
+and for the observed-case posterior predictive in `_z_ppc_replicate`.
+"""
+function _sample_gamma_poisson(rng, shape, scale, prob)
+    λ = rand(rng, Gamma(shape, scale))
+    return rand(rng, Poisson(λ * prob))
+end
+
+function _predict_future_onsets(model, chn, post, ll,
         obs_time::Date, t0::Date, future_prob_fn::Function;
-        inc_dist = LogNormal,
-        delta_dist = Normal,
         rng = Random.MersenneTwister(2026))
     ll_rt = filter_realtime(ll, obs_time)
     d = build_data(ll_rt; obs_time = obs_time, t0 = t0)
@@ -148,14 +172,19 @@ function _predict_future_onsets(chn, post, ll,
     log_R = post.log_R_chain
     T_on = vector_chain(chn, :T_onset)
 
+    inc_sub = model.defaults.incubation
+    δ_sub = model.defaults.transmission
+
     n_draws = length(k)
     N = d.N
     Z_obs = d.Zobs
     future_total = Vector{Int}(undef, n_draws)
 
     for d_idx in 1:n_draws
-        inc = inc_dist(μ_inc[d_idx], σ_inc[d_idx])
-        δd = delta_dist(μ_δ[d_idx], σ_δ[d_idx])
+        inc = DynamicPPL.fix(inc_sub,
+            (; μ_inc = μ_inc[d_idx], σ_inc = σ_inc[d_idx]))().dist
+        δd = DynamicPPL.fix(δ_sub,
+            (; μ_δ = μ_δ[d_idx], σ_δ = σ_δ[d_idx]))().dist
         k_d = k[d_idx]
         logR_d = [log_R[b][d_idx] for b in eachindex(log_R)]
         T_d = [T_on[i][d_idx] for i in 1:N]
@@ -163,16 +192,16 @@ function _predict_future_onsets(chn, post, ll,
         Δ = [obs_offset - T_d[i] for i in 1:N]
         p_vec = cdf(ConvolvedDelays(inc, δd), Δ)
         q_vec = cdf.(δd, Δ)
+        R_vec = _rates_at_onsets(T_d, edges, logR_d)
 
         zsum = 0
         for i in 1:N
-            R_i = exp(log_R_at(T_d[i], edges, logR_d))
+            R_i = R_vec[i]
             p_i = p_vec[i]
             q_i = q_vec[i]
-            shape_post = k_d + Z_obs[i]
-            scale_post = R_i / (k_d + R_i * p_i)
-            λ_i = rand(rng, Gamma(shape_post, scale_post))
-            zsum += rand(rng, Poisson(λ_i * future_prob_fn(p_i, q_i)))
+            prob = max(zero(p_i), future_prob_fn(p_i, q_i))
+            zsum += _sample_gamma_poisson(rng,
+                k_d + Z_obs[i], R_i / (k_d + R_i * p_i), prob)
         end
         future_total[d_idx] = zsum
     end
@@ -185,15 +214,18 @@ end
 $(TYPEDSIGNATURES)
 
 Strict controlled-outbreak counterfactual: predict future onsets
-assuming all transmission stops at `obs_time`. Only people already
-infected by `obs_time` (transmission event before the cut-off, chain
-not yet symptomatic) contribute. For each posterior draw and observed
-source `i`, the contribution is `Poisson(λ_i · (q_i − p_i))` where
+assuming all transmission stops at `obs_time`.
+Only people already infected by `obs_time` (transmission event before
+the cut-off, chain not yet symptomatic) contribute.
+For each posterior draw and observed source `i`, the contribution is
+`Poisson(λ_i · max(0, q_i − p_i))` where
 `q_i = cdf(δ_dist, obs_time − T_onset[i])` is the probability that
 transmission happened by `obs_time`, `p_i = cdf(ConvolvedDelays(inc,
 δ), obs_time − T_onset[i])` is the probability the full chain has
-completed, and `λ_i | Z_obs[i], k, R_i, p_i ~ Gamma(k + Z_obs[i], R_i
-/ (k + R_i · p_i))`.
+completed, and
+`λ_i | Z_obs[i], k, R_i, p_i ~ Gamma(k + Z_obs[i], R_i / (k + R_i · p_i))`.
+Incubation and transmission timing distributions per draw are
+recovered from the fitted `model`'s submodels via `DynamicPPL.fix`.
 
 The realised count of cases with onset after `obs_time` (in the
 supplied full line list) is returned as a comparator: the realised
@@ -201,6 +233,8 @@ count lies below the predicted band if control was achieved, above if
 transmission continued.
 
 # Arguments
+- `model`: the `DynamicPPL.Model` that produced `chn`, carrying the
+  incubation and transmission submodels under `model.defaults`.
 - `chn`: chain from a real-time joint fit.
 - `post`: posterior summary returned by `summarise(chn)`.
 - `ll`: full line-list `DataFrame`.
@@ -208,19 +242,13 @@ transmission continued.
 - `t0`: time origin `Date`.
 
 # Keyword Arguments
-- `inc_dist`: two-argument constructor `(μ, σ) -> Distribution` for
-  the incubation period. Defaults to `LogNormal`.
-- `delta_dist`: two-argument constructor for the transmission timing
-  distribution. Defaults to `Normal`.
 - `rng`: RNG used for posterior-predictive draws.
 """
-function predict_controlled_outbreak(chn, post, ll,
+function predict_controlled_outbreak(model, chn, post, ll,
         obs_time::Date, t0::Date;
-        inc_dist = LogNormal,
-        delta_dist = Normal,
         rng = Random.MersenneTwister(2026))
-    return _predict_future_onsets(chn, post, ll, obs_time, t0,
-        (p, q) -> q - p; inc_dist, delta_dist, rng)
+    return _predict_future_onsets(model, chn, post, ll, obs_time, t0,
+        (p, q) -> q - p; rng)
 end
 
 """
@@ -228,15 +256,19 @@ $(TYPEDSIGNATURES)
 
 Natural-chain counterfactual: predict future onsets assuming
 currently-observed sources keep transmitting at their existing rate
-but no second-generation chains form from those new offspring. Each
-observed source contributes `Poisson(λ_i · (1 − p_i))` future onsets,
-covering both offspring already infected by `obs_time` (chain in
-incubation) and offspring still to be infected by the source. Same
-Gamma posterior on `λ_i` as [`predict_controlled_outbreak`](@ref); the
-difference is the per-source future probability (`1 − p_i` here vs
+but no second-generation chains form from those new offspring.
+Each observed source contributes `Poisson(λ_i · (1 − p_i))` future
+onsets, covering both offspring already infected by `obs_time` (chain
+in incubation) and offspring still to be infected by the source.
+Same Gamma posterior on `λ_i` as [`predict_controlled_outbreak`](@ref);
+the difference is the per-source future probability (`1 − p_i` here vs
 `q_i − p_i` in the strict-controlled case).
+Incubation and transmission timing distributions per draw are
+recovered from the fitted `model`'s submodels via `DynamicPPL.fix`.
 
 # Arguments
+- `model`: the `DynamicPPL.Model` that produced `chn`, carrying the
+  incubation and transmission submodels under `model.defaults`.
 - `chn`: chain from a real-time joint fit.
 - `post`: posterior summary returned by `summarise(chn)`.
 - `ll`: full line-list `DataFrame`.
@@ -244,17 +276,11 @@ difference is the per-source future probability (`1 − p_i` here vs
 - `t0`: time origin `Date`.
 
 # Keyword Arguments
-- `inc_dist`: two-argument constructor for the incubation period.
-  Defaults to `LogNormal`.
-- `delta_dist`: two-argument constructor for the transmission timing
-  distribution. Defaults to `Normal`.
 - `rng`: RNG used for posterior-predictive draws.
 """
-function predict_natural_chain_outbreak(chn, post, ll,
+function predict_natural_chain_outbreak(model, chn, post, ll,
         obs_time::Date, t0::Date;
-        inc_dist = LogNormal,
-        delta_dist = Normal,
         rng = Random.MersenneTwister(2026))
-    return _predict_future_onsets(chn, post, ll, obs_time, t0,
-        (p, q) -> one(p) - p; inc_dist, delta_dist, rng)
+    return _predict_future_onsets(model, chn, post, ll, obs_time, t0,
+        (p, q) -> one(p) - p; rng)
 end
