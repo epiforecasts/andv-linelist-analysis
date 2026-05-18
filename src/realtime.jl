@@ -179,12 +179,10 @@ function _intervention_offsets(intervention_time, obs_offset, T_d, t0, N)
     end
 end
 
-function _predict_future_onsets(model, chn, post, ll,
-        obs_time::Date, t0::Date, future_prob_fn::Function;
+function _predict_future_onsets(model, chn, post, d, future_prob_fn;
+        obs_time::Date, t0::Date,
         intervention_time = nothing,
         rng = Random.MersenneTwister(2026))
-    ll_rt = filter_realtime(ll, obs_time)
-    d = build_data(ll_rt; obs_time = obs_time, t0 = t0)
     edges = prepare_rt_edges(d.t0; obs_time = obs_time)
     obs_offset = eltype(edges)(Dates.value(obs_time - d.t0))
 
@@ -229,8 +227,25 @@ function _predict_future_onsets(model, chn, post, ll,
         future_total[d_idx] = zsum
     end
 
-    actual_future = sum(ll.onset_date .> obs_time)
-    return (; future_samples = future_total, actual_future, n_obs = N)
+    return (; future_samples = future_total, n_obs = N)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Count line-list cases with onset strictly after `obs_time`. The
+realised analogue of the `future_samples` field returned by
+[`predict_controlled_outbreak`](@ref) and
+[`predict_natural_chain_outbreak`](@ref); kept as a separate function
+so the predictors stay pure functions of the fit.
+
+# Arguments
+- `ll`: full line-list `DataFrame` with an `onset_date` column.
+- `obs_time`: real-time cut-off `Date`. Cases whose onset is strictly
+  after this date are counted.
+"""
+function realised_future_count(ll, obs_time::Date)
+    sum(skipmissing(ll.onset_date) .> obs_time)
 end
 
 """
@@ -251,27 +266,29 @@ probability the full chain has completed by `obs_time`, and
 Incubation and transmission timing distributions per draw are
 recovered from the fitted `model`'s submodels via `DynamicPPL.fix`.
 
-The realised count of cases with onset after `obs_time` (in the
-supplied full line list) is returned as a comparator: the realised
-count lies below the predicted band if control was achieved, above if
-transmission continued.
+The prediction is a pure function of the fit (the fitted `model`, its
+chain, posterior summary, and the same `d` the model was fit on).
+[`realised_future_count`](@ref) returns the corresponding realised
+count from the full line list as a separate evaluation step.
 
 # Arguments
 - `model`: the `DynamicPPL.Model` that produced `chn`, carrying the
-  incubation and transmission submodels under `model.defaults`.
+  incubation, transmission, and observation submodels under
+  `model.defaults`.
 - `chn`: chain from a real-time joint fit.
 - `post`: posterior summary returned by `summarise(chn)`.
-- `ll`: full line-list `DataFrame`.
-- `obs_time`: cut-off `Date`.
-- `t0`: time origin `Date`.
+- `d`: structured line-list data the model was fit on (returned by
+  `build_data`).
 
 # Keyword Arguments
+- `obs_time`: cut-off `Date`.
+- `t0`: time origin `Date`.
 - `intervention_time`: when transmission stops.
   `nothing` (default) means the intervention coincides with `obs_time`.
   Pass a single `Date` to apply the same intervention to every source,
-  or a `Vector{Date}` of length `N` (the number of observed sources
-  after `filter_realtime`) for per-source intervention dates (e.g.
-  case-by-case isolation on the date each case was identified).
+  or a `Vector{Date}` of length `N` (the number of observed sources in
+  `d`) for per-source intervention dates (e.g. case-by-case isolation
+  on the date each case was identified).
 - `rng`: RNG used for posterior-predictive draws.
 
 # Example
@@ -280,16 +297,18 @@ Per-source intervention dates for case-by-case isolation:
 
 ```julia
 isolation = [c.onset_date + Day(1) for c in eachrow(ll_rt)]
-predict_controlled_outbreak(model, chn, post, ll, obs_date, t0;
-    intervention_time = isolation)
+predict_controlled_outbreak(model, chn, post, d_rt;
+    obs_time = obs_date, t0 = t0, intervention_time = isolation)
 ```
 """
-function predict_controlled_outbreak(model, chn, post, ll,
-        obs_time::Date, t0::Date;
+function predict_controlled_outbreak(model, chn, post, d;
+        obs_time::Date, t0::Date,
         intervention_time = nothing,
         rng = Random.MersenneTwister(2026))
-    return _predict_future_onsets(model, chn, post, ll, obs_time, t0,
-        (p, q) -> q - p; intervention_time, rng)
+    return _predict_future_onsets(model, chn, post, d,
+        (p, q) -> q - p;
+        obs_time = obs_time, t0 = t0,
+        intervention_time = intervention_time, rng = rng)
 end
 
 """
@@ -309,19 +328,22 @@ recovered from the fitted `model`'s submodels via `DynamicPPL.fix`.
 
 # Arguments
 - `model`: the `DynamicPPL.Model` that produced `chn`, carrying the
-  incubation and transmission submodels under `model.defaults`.
+  incubation, transmission, and observation submodels under
+  `model.defaults`.
 - `chn`: chain from a real-time joint fit.
 - `post`: posterior summary returned by `summarise(chn)`.
-- `ll`: full line-list `DataFrame`.
-- `obs_time`: cut-off `Date`.
-- `t0`: time origin `Date`.
+- `d`: structured line-list data the model was fit on (returned by
+  `build_data`).
 
 # Keyword Arguments
+- `obs_time`: cut-off `Date`.
+- `t0`: time origin `Date`.
 - `rng`: RNG used for posterior-predictive draws.
 """
-function predict_natural_chain_outbreak(model, chn, post, ll,
-        obs_time::Date, t0::Date;
+function predict_natural_chain_outbreak(model, chn, post, d;
+        obs_time::Date, t0::Date,
         rng = Random.MersenneTwister(2026))
-    return _predict_future_onsets(model, chn, post, ll, obs_time, t0,
-        (p, q) -> one(p) - p; rng)
+    return _predict_future_onsets(model, chn, post, d,
+        (p, q) -> one(p) - p;
+        obs_time = obs_time, t0 = t0, rng = rng)
 end

@@ -185,13 +185,13 @@ end
         samples = 200, chains = 2, seed = 20260512, progress = false)
     post = TransmissionLinelist.summarise(chn)
     strict = TransmissionLinelist.predict_controlled_outbreak(
-        m, chn, post, ll, obs_date, t0)
+        m, chn, post, d_rt; obs_time = obs_date, t0 = t0)
     natural = TransmissionLinelist.predict_natural_chain_outbreak(
-        m, chn, post, ll, obs_date, t0)
+        m, chn, post, d_rt; obs_time = obs_date, t0 = t0)
     @test length(strict.future_samples) == length(natural.future_samples)
     @test all(>=(0), strict.future_samples)
     @test all(>=(0), natural.future_samples)
-    @test strict.actual_future >= 0
+    @test TransmissionLinelist.realised_future_count(ll, obs_date) >= 0
     @test mean(strict.future_samples) <= mean(natural.future_samples) + 1
 end
 
@@ -213,22 +213,26 @@ end
 
     earlier = obs_date - Day(7)
     s_scalar = TransmissionLinelist.predict_controlled_outbreak(
-        m, chn, post, ll, obs_date, t0;
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
         intervention_time = earlier,
         rng = Random.MersenneTwister(42))
     s_vector = TransmissionLinelist.predict_controlled_outbreak(
-        m, chn, post, ll, obs_date, t0;
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
         intervention_time = fill(earlier, d_rt.N),
         rng = Random.MersenneTwister(42))
     @test s_scalar.future_samples == s_vector.future_samples
 
     s_obs = TransmissionLinelist.predict_controlled_outbreak(
-        m, chn, post, ll, obs_date, t0;
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
         rng = Random.MersenneTwister(42))
     @test mean(s_scalar.future_samples) <= mean(s_obs.future_samples)
 
     # Wrong-length vector must error.
     @test_throws ArgumentError TransmissionLinelist.predict_controlled_outbreak(
-        m, chn, post, ll, obs_date, t0;
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
         intervention_time = fill(earlier, d_rt.N + 1))
 end

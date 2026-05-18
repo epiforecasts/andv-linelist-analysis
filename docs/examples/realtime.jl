@@ -281,15 +281,22 @@ end
 # imply transmission continued past the cut-off, values below imply it
 # stalled.
 
+# `predict_*_outbreak` is pure in the fit (model + chain + posterior +
+# the `d` it was fit on). The realised future count comes from a
+# separate call to `realised_future_count(ll, obs_date)`, so the
+# comparator is decoupled from the prediction.
+
 controlled = map(joint_fits) do fit
     strict = predict_controlled_outbreak(
-        fit.m_rt, fit.chn_rt, fit.post_rt, ll, fit.obs_date, t0_ref)
+        fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
+        obs_time = fit.obs_date, t0 = t0_ref)
     natural = predict_natural_chain_outbreak(
-        fit.m_rt, fit.chn_rt, fit.post_rt, ll, fit.obs_date, t0_ref)
+        fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
+        obs_time = fit.obs_date, t0 = t0_ref)
     (; fit.obs_date, fit.n_rt,
         strict_samples = strict.future_samples,
         natural_samples = natural.future_samples,
-        actual_future = strict.actual_future)
+        actual_future = realised_future_count(ll, fit.obs_date))
 end;
 
 controlled_df = let
