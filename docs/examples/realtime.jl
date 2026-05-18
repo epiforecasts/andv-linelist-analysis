@@ -275,17 +275,20 @@ end
 # ## Controlled-outbreak projection
 #
 # At each `obs_date`, three counterfactual predictions for the number
-# of future symptomatic cases:
+# of future symptomatic cases, each conditional on an *assumed*
+# intervention rule. None of these scenarios is a factual claim about
+# what happened in Epuyén; they describe what the fitted model implies
+# *if* transmission had been interrupted in one of three ways.
 #
-# - **Strict (intervention at 2018-12-31)**
+# - **Strict (assumed intervention at 2018-12-31)**
 #   ([`predict_controlled_outbreak`](@ref) with
-#   `intervention_time = cutoff_18`): under the strict counterfactual
-#   we assume transmission stopped on `cutoff_18 = 2018-12-31` (the
-#   onset date of the 18th case). Post-cutoff sources contribute zero
-#   by construction (`Δ_q[i] < 0` ⇒ `q_i ≈ 0`).
+#   `intervention_time = cutoff_18`): the counterfactual assumes all
+#   transmission had stopped on `cutoff_18 = 2018-12-31` (the onset
+#   date of the 18th case). Post-cutoff sources contribute zero by
+#   construction (`Δ_q[i] < 0` ⇒ `q_i ≈ 0`).
 # - **Controlled at obs** ([`predict_controlled_outbreak`](@ref) with
-#   the default `intervention_time = nothing`): transmission stops at
-#   each cut-off, so `Δ_q = Δ_p` and `π_i = q_i − p_i`.
+#   the default `intervention_time = nothing`): assumes transmission
+#   stops at each cut-off, so `Δ_q = Δ_p` and `π_i = q_i − p_i`.
 # - **Natural chain** ([`predict_natural_chain_outbreak`](@ref)):
 #   current sources keep transmitting at their existing rate but no
 #   second-generation chains form from those new offspring.
@@ -293,10 +296,25 @@ end
 # See the [Model page](model.md#Real-time-predictions) for the
 # Gamma–Poisson conjugate posterior these share and the per-source
 # thinning probabilities that distinguish them.
-# The realised count of cases with onset strictly after each cut-off is
-# overlaid as a vertical reference; values above the natural-chain band
-# imply transmission continued past the cut-off, values below imply it
-# stalled.
+# The realised count of cases with onset strictly after each cut-off
+# is overlaid as a vertical reference. It is one realisation drawn
+# from the true (unknown) process; the predictive distribution is the
+# posterior over what could have happened consistent with the fitted
+# model and the assumed intervention rule, so we expect spread around
+# the realised count rather than agreement on a point.
+#
+# ### Per-source intervention rules
+#
+# The scenarios above set a single intervention date (or none) that
+# applies to every source. The `intervention_time` keyword also
+# accepts a `Vector{Date}` of length `N`, one cut-off per observed
+# source. This is useful when isolation policies differ across cases.
+# If we believed cases were being isolated on or shortly after their
+# own symptom onset, for example under an aggressive contact-tracing
+# policy, we could encode that scenario by passing a per-source
+# `Vector{Date}` derived from `ll_rt.onset_date`. We do not have
+# direct evidence of per-case isolation in the Epuyén outbreak so we
+# do not run this scenario here, but the API supports it.
 
 # `predict_*_outbreak` is pure in the fit (model + chain + posterior +
 # the `d` it was fit on). The realised future count comes from a
@@ -406,13 +424,29 @@ end
 # ### Why the Jan 7 predictive is wider than Dec 31
 #
 # More data does not always mean a tighter future-cases prediction.
-# At Jan 7 the line list adds about nine secondary cases with onsets
-# in the last week before the cut-off, so for those sources the chain
-# is far from complete and most of their expected offspring still
-# lies in the future.
+# At Jan 7 the line list adds secondary cases with onsets in the last
+# week before the cut-off, so for those sources the chain is far from
+# complete and most of their expected offspring still lies in the
+# future.
 # Their R(t) is also more prior-driven (few visible offspring near the
 # cut-off), so the per-source rate is itself wide.
 # Both effects funnel a lot of variance into the predicted total.
 # At Dec 31 the late-onset sources are fewer and most of their
 # expected offspring chains have already completed, so each source
 # contributes far less to the future window.
+#
+# ### Why the upper tail is wide even under the strict counterfactual
+#
+# Under the assumed strict counterfactual we still expect a
+# substantial pipeline from sources who became symptomatic just
+# before the assumed intervention date. Their offspring chains were
+# almost certainly initiated before the cut-off (the fitted
+# transmission timing δ is centred near zero days post-source-onset),
+# and most of those offspring would still be in the incubation period
+# at `obs_date`. The wide upper band reflects two compounding sources
+# of uncertainty: the R(t) posterior at the latest knots is wide
+# because few cases inform it directly, and the small posterior of
+# the dispersion `k` means even sources with no observed offspring
+# carry meaningful pipeline mass. See the
+# [Limitations page](limitations.md) for the real-time fitting
+# caveats.
