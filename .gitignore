@@ -13,8 +13,10 @@ docs/src/analysis.md
 docs/src/realtime.md
 docs/examples/joint_model_source.jl
 
-# Model outputs are regenerable from scripts/run.jl.
+# Model outputs are regenerable by analyse(); published as release assets
+# on every push to main (see .github/workflows/Release.yml).
 output/
+figures/
 
 # Editor / OS detritus
 .DS_Store
