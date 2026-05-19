@@ -256,6 +256,56 @@ end
         rng = Random.MersenneTwister(42))
 end
 
+@testset "predict_*_outbreak: NamedTuple convenience signature" begin
+    # The fit-like NamedTuple returned by the joint-fits map in the
+    # realtime walkthrough carries `m_rt/chn_rt/post_rt/d_rt` (and
+    # `_truth` analogues). The convenience signature must dispatch on
+    # `corrected` to pick the right field set and reproduce the
+    # 4-positional call's output bit-for-bit (same seed).
+    ll = TransmissionLinelist.load_linelist()
+    t0 = minimum(ll.onset_date) - Day(60)
+    obs_date = Date("2018-12-31")
+    ll_rt = TransmissionLinelist.filter_realtime(ll, obs_date)
+    d_rt = TransmissionLinelist.build_data(ll_rt;
+        obs_time = obs_date, t0 = t0)
+    edges = TransmissionLinelist.prepare_rt_edges(t0;
+        obs_time = obs_date)
+    m = TransmissionLinelist.joint_model(d_rt, edges)
+    chn = TransmissionLinelist.sample_fit(m;
+        samples = 100, chains = 2, seed = 20260512, progress = false)
+    post = TransmissionLinelist.summarise(chn)
+    fit = (; m_rt = m, chn_rt = chn, post_rt = post, d_rt = d_rt,
+        m_truth = m, chn_truth = chn, post_truth = post,
+        d_truth = d_rt, obs_date = obs_date)
+
+    pos = TransmissionLinelist.predict_controlled_outbreak(
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
+        rng = Random.MersenneTwister(42))
+    conv = TransmissionLinelist.predict_controlled_outbreak(fit;
+        obs_time = obs_date, t0 = t0,
+        rng = Random.MersenneTwister(42))
+    @test conv.future_samples == pos.future_samples
+
+    nat_pos = TransmissionLinelist.predict_natural_chain_outbreak(
+        m, chn, post, d_rt;
+        obs_time = obs_date, t0 = t0,
+        rng = Random.MersenneTwister(99))
+    nat_conv = TransmissionLinelist.predict_natural_chain_outbreak(fit;
+        obs_time = obs_date, t0 = t0,
+        rng = Random.MersenneTwister(99))
+    @test nat_conv.future_samples == nat_pos.future_samples
+
+    # `corrected = false` selects the `_truth` field set. With
+    # m_truth/chn_truth/d_truth aliased to the rt versions in this
+    # smoke test, the two NamedTuple calls must agree.
+    conv_truth = TransmissionLinelist.predict_controlled_outbreak(fit;
+        corrected = false,
+        obs_time = obs_date, t0 = t0,
+        rng = Random.MersenneTwister(42))
+    @test conv_truth.future_samples == conv.future_samples
+end
+
 @testset "MC validation: _pipeline_probability matches Monte Carlo" begin
     # Validate `_pipeline_probability` against direct Monte Carlo for
     # the joint event `{δ ≤ Δ_q ∧ δ + Inc > Δ_p}`. Covers the case

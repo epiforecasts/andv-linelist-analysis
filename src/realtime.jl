@@ -387,6 +387,27 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Convenience wrapper that unpacks a fit-like `NamedTuple` (as returned by
+the real-time joint-fit map: fields `m_rt`, `chn_rt`, `post_rt`, `d_rt`
+and, for the counterfactual retro, `m_truth`, `chn_truth`, `post_truth`,
+`d_truth`). Pass `corrected = true` (default) for the real-time fit;
+pass `corrected = false` for the counterfactual retro fit.
+"""
+function predict_controlled_outbreak(fit::NamedTuple;
+        corrected::Bool = true,
+        obs_time::Date, t0::Date,
+        intervention_time::Union{Nothing, Date,
+            AbstractVector{<:Date}} = nothing,
+        rng = Random.MersenneTwister(2026))
+    fields = corrected ? _rt_fields(fit) : _truth_fields(fit)
+    return predict_controlled_outbreak(fields...;
+        obs_time = obs_time, t0 = t0,
+        intervention_time = intervention_time, rng = rng)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Natural-chain counterfactual: predict future onsets assuming
 currently-observed sources keep transmitting at their existing rate
 but no second-generation chains form from those new offspring.
@@ -426,6 +447,27 @@ function predict_natural_chain_outbreak(model, chn, post, d;
         obs_time = obs_time, t0 = t0,
         intervention_time = NaturalChain(), rng = rng)
 end
+
+"""
+$(TYPEDSIGNATURES)
+
+Convenience wrapper that unpacks a fit-like `NamedTuple`; see
+[`predict_controlled_outbreak`](@ref). Pass `corrected = true`
+(default) for the real-time fit; `corrected = false` for the
+counterfactual retro fit.
+"""
+function predict_natural_chain_outbreak(fit::NamedTuple;
+        corrected::Bool = true,
+        obs_time::Date, t0::Date,
+        rng = Random.MersenneTwister(2026))
+    fields = corrected ? _rt_fields(fit) : _truth_fields(fit)
+    return predict_natural_chain_outbreak(fields...;
+        obs_time = obs_time, t0 = t0, rng = rng)
+end
+
+_rt_fields(fit) = (fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt)
+_truth_fields(fit) = (fit.m_truth, fit.chn_truth, fit.post_truth,
+    fit.d_truth)
 
 """
 $(TYPEDSIGNATURES)
