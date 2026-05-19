@@ -80,7 +80,13 @@ Returns the length-`n_knots` `log_R` vector evaluated at the knot dates;
 - `init_prior`: prior on the initial log R(t) value `log_R_init`. Defaults
   to `Normal(log(1.5), 1.0)`.
 - `sigma_prior`: prior on the random walk step SD `σ_rw`, constrained
-  positive. Defaults to `truncated(Normal(0.0, 0.2); lower = 0)`.
+  positive. Defaults to `truncated(Normal(0.0, 0.2); lower = 0)`,
+  reflecting our prior experience estimating transmission intensity
+  across a range of outbreaks. At weekly knot spacing this puts the
+  typical weekly innovation SD around 5% per day, with a 95th
+  percentile near 15% per day — wide enough to accommodate
+  outbreak-scale R(t) swings while ruling out biologically
+  implausible per-week step sizes.
 """
 @model function random_walk_rt_model(n_knots::Integer;
         init_prior = Normal(log(1.5), 1.0),
