@@ -23,10 +23,19 @@ jobs:
         with:
           version: '1'
       - uses: julia-actions/cache@v3
-      - name: Instantiate project
-        run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      # Reuse the docs environment because it already pins CairoMakie and
+      # the package itself; the CLI entrypoint loads no Makie backend, so
+      # `_save_makie_figure` silently skips figure writes when invoked via
+      # `-m TransmissionLinelist`.
+      - name: Instantiate docs environment
+        run: julia --project=docs -e 'using Pkg; Pkg.instantiate()'
       - name: Run analysis
-        run: julia --project=. -t auto -m TransmissionLinelist
+        run: |
+          julia --project=docs -t auto -e '
+            using CairoMakie
+            using TransmissionLinelist
+            TransmissionLinelist.analyse()
+          '
       - name: Bundle results
         run: |
           set -euo pipefail
