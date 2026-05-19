@@ -18,7 +18,7 @@
 
 using TransmissionLinelist
 using AlgebraOfGraphics: data, mapping, visual, draw
-using DataFrames: DataFrame, nrow
+using DataFrames: DataFrame, groupby, nrow
 using DataFramesMeta: @chain, @rtransform, @rsubset, @select, @transform,
                       @combine, @subset
 using Dates: Dates, Date, Day
@@ -296,41 +296,21 @@ end
 # what happened in Epuyén; they describe what the fitted model implies
 # *if* transmission had been interrupted in one of three ways.
 #
-# - **Strict (assumed intervention at 2018-12-31)**
-#   ([`predict_controlled_outbreak`](@ref) with
-#   `intervention_time = cutoff_18`): the counterfactual assumes all
-#   transmission had stopped on `cutoff_18 = 2018-12-31` (the onset
-#   date of the 18th case). Post-cutoff sources contribute zero by
-#   construction (`Δ_q[i] < 0` ⇒ `q_i ≈ 0`).
-# - **Controlled at obs** ([`predict_controlled_outbreak`](@ref) with
-#   the default `intervention_time = nothing`): assumes transmission
-#   stops at each cut-off, so `Δ_q = Δ_p` and `π_i = q_i − p_i`.
-# - **Natural chain** ([`predict_natural_chain_outbreak`](@ref)):
-#   current sources keep transmitting at their existing rate but no
-#   second-generation chains form from those new offspring.
+# - **Intervention on 2018-12-31** — transmission is assumed to have
+#   stopped on the onset date of the 18th case.
+# - **Intervention at the cut-off** — transmission is assumed to have
+#   stopped at each panel's `obs_date`. This is
+#   [`predict_controlled_outbreak`](@ref)'s default; for the Dec 31
+#   panel it coincides with the variant above.
+# - **No intervention** — current sources keep transmitting; see
+#   [`predict_natural_chain_outbreak`](@ref).
 #
-# See the [Model page](model.md#Real-time-predictions) for the
-# Gamma–Poisson conjugate posterior these share and the per-source
-# thinning probabilities that distinguish them.
 # The realised count of cases with onset strictly after each cut-off
 # is overlaid as a vertical reference. It is one realisation drawn
 # from the true (unknown) process; the predictive distribution is the
 # posterior over what could have happened consistent with the fitted
 # model and the assumed intervention rule, so we expect spread around
 # the realised count rather than agreement on a point.
-#
-# ### Per-source intervention rules
-#
-# The scenarios above set a single intervention date (or none) that
-# applies to every source. The `intervention_time` keyword also
-# accepts a `Vector{Date}` of length `N`, one cut-off per observed
-# source. This is useful when isolation policies differ across cases.
-# If we believed cases were being isolated on or shortly after their
-# own symptom onset, for example under an aggressive contact-tracing
-# policy, we could encode that scenario by passing a per-source
-# `Vector{Date}` derived from `ll_rt.onset_date`. We do not have
-# direct evidence of per-case isolation in the Epuyén outbreak so we
-# do not run this scenario here, but the API supports it.
 
 cutoff_18 = Date("2018-12-31")
 
@@ -353,10 +333,9 @@ controlled = map(joint_fits) do fit
         actual_future = realised_future_count(ll, fit.obs_date))
 end;
 
-# Per-source breakdown for the controlled-at-obs counterfactual at the
-# latest cut-off: shows which sources drive the projected future onset
-# count. One row per observed source case in the order they appear in
-# the predictor's `d` argument.
+# Per-source breakdown for the intervention-at-cut-off counterfactual
+# at the latest `obs_date`: shows which sources drive the projected
+# future onset count, one row per observed source.
 
 per_source_predictive_summary(controlled[end].at_obs_per_source)
 
@@ -384,48 +363,32 @@ end
 #-
 
 let
-    hist_rows = NamedTuple[]
-    vline_rows = NamedTuple[]
-    for c in controlled
-        panel = "obs_date = $(c.obs_date)  (n_obs=$(c.n_rt))"
-        ## Cap per-panel x-axis at the 99% quantile of all three
-        ## variants pooled, so the long natural-chain tail doesn't
-        ## compress the strict and at-obs bulks.
-        pooled = vcat(Float64.(c.strict_samples),
-            Float64.(c.at_obs_samples),
-            Float64.(c.natural_samples))
-        cap = quantile(pooled, 0.99)
-        for v in c.strict_samples
-            v > cap && continue
-            push!(hist_rows,
-                (panel = panel,
-                    kind = "strict (intervention at $(cutoff_18))",
-                    value = v))
+    kinds = [(:strict_samples, "intervention 2018-12-31"),
+        (:at_obs_samples, "intervention at cut-off"),
+        (:natural_samples, "no intervention")]
+    df_hist = @chain controlled begin
+        mapreduce(vcat, _) do c
+            mapreduce(vcat, kinds) do (field, label)
+                DataFrame(panel = string(c.obs_date), kind = label,
+                    value = Float64.(getproperty(c, field)))
+            end
         end
-        for v in c.at_obs_samples
-            v > cap && continue
-            push!(hist_rows,
-                (panel = panel, kind = "controlled at obs", value = v))
-        end
-        for v in c.natural_samples
-            v > cap && continue
-            push!(hist_rows,
-                (panel = panel, kind = "natural chain", value = v))
-        end
-        push!(vline_rows,
-            (panel = panel,
-                kind = "actual = $(c.actual_future)",
-                value = Float64(c.actual_future)))
+        groupby(:panel)
+        @transform :cap = quantile(:value, 0.99)
+        @rsubset :value <= :cap
+        @select :panel :kind :value
     end
-    df_hist = DataFrame(hist_rows)
-    df_vline = DataFrame(vline_rows)
+    df_vline = @chain controlled begin
+        DataFrame(panel = string.(getfield.(_, :obs_date)),
+            kind = "realised",
+            value = Float64.(getfield.(_, :actual_future)))
+    end
     hist_spec = data(df_hist) *
                 mapping(:value => "Future cases";
-                    color = :kind => "kind", col = :panel) *
+                    color = :kind, col = :panel) *
                 visual(Hist; bins = 30, normalization = :pdf, alpha = 0.4)
     vline_spec = data(df_vline) *
-                 mapping(:value; color = :kind => "kind",
-                     col = :panel) *
+                 mapping(:value; color = :kind, col = :panel) *
                  visual(VLines; linewidth = 3)
     draw(hist_spec + vline_spec;
         facet = (linkxaxes = :none, linkyaxes = :none),
@@ -439,12 +402,9 @@ end
 # week before the cut-off, so for those sources the chain is far from
 # complete and most of their expected offspring still lies in the
 # future.
-# Their R(t) is also more prior-driven (few visible offspring near the
-# cut-off), so the per-source rate is itself wide.
-# Both effects funnel a lot of variance into the predicted total.
 # At Dec 31 the late-onset sources are fewer and most of their
 # expected offspring chains have already completed, so each source
-# contributes far less to the future window.
+# contributes less to the future window.
 # By Jan 14 the late-December sources have had two further weeks for
 # their offspring to surface, so the completeness factor pins their
 # per-source rate more tightly and the predictive distribution
@@ -468,3 +428,16 @@ end
 # carry meaningful pipeline mass. See the
 # [Limitations page](limitations.md) for the real-time fitting
 # caveats.
+#
+# !!! note "Per-source intervention rules"
+#
+#     The scenarios above set a single intervention date (or none)
+#     that applies to every source. `intervention_time` also accepts
+#     a `Vector{Date}` of length `N` — one cut-off per observed
+#     source — for cases where isolation policies differ across
+#     individuals. An aggressive contact-tracing scenario in which
+#     each case is isolated on or shortly after their own symptom
+#     onset could be encoded by passing a per-source vector derived
+#     from `ll_rt.onset_date`. We do not have direct evidence of
+#     per-case isolation in the Epuyén outbreak so we do not run
+#     this scenario here, but the API supports it.
