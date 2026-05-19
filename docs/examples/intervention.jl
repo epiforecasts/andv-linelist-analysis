@@ -35,16 +35,15 @@ Logging.disable_logging(Logging.Info)
 
 # ## Setup
 #
-# Load the line list, trim to the 18-case wave (real-time view at
-# `obs_date`), and build the model inputs and weekly knot grid.
+# Load the closed-out line list and build the model inputs and weekly
+# knot grid. The intervention timing is a model-side argument, not a
+# data cut-off — the fits see the full outbreak.
 
-obs_date = Date("2018-12-31")
-intervention_date = obs_date
+intervention_date = Date("2018-12-31")
 ll = load_linelist();
 t0_ref = minimum(ll.onset_date) - Day(60)
-ll_rt = filter_realtime(ll, obs_date)
-d_rt = build_data(ll_rt; obs_time = obs_date, t0 = t0_ref)
-edges_rt = prepare_rt_edges(t0_ref; obs_time = obs_date)
+d = build_data(ll; t0 = t0_ref)
+edges = prepare_rt_edges(t0_ref)
 intervention_day = Float64(Dates.value(intervention_date - t0_ref))
 seed = 20260512
 
@@ -98,11 +97,11 @@ end
 # Three joint fits on the same real-time view, identical seed,
 # differing only in the R(t) submodel.
 
-m_rw = joint_model(d_rt, edges_rt)
-m_step = joint_model(d_rt, edges_rt;
-    rt = step_rt_submodel(edges_rt, intervention_day))
-m_shock = joint_model(d_rt, edges_rt;
-    rt = rw_plus_shock_rt_submodel(edges_rt, intervention_day))
+m_rw = joint_model(d, edges)
+m_step = joint_model(d, edges;
+    rt = step_rt_submodel(edges, intervention_day))
+m_shock = joint_model(d, edges;
+    rt = rw_plus_shock_rt_submodel(edges, intervention_day))
 
 chn_rw = sample_fit(m_rw; seed = seed)
 chn_step = sample_fit(m_step; seed = seed)
@@ -229,7 +228,7 @@ end
 ## Identify the first knot at or after `intervention_day`. With the
 ## real-time grid the cut-off is the last edge, so this is the final
 ## knot index.
-intervention_idx = findfirst(e -> e >= intervention_day, edges_rt)
+intervention_idx = findfirst(e -> e >= intervention_day, edges)
 
 effect_df = vcat(
     effect_size_rows(post_step;
@@ -299,7 +298,7 @@ waic_df = let
     for (name, chn) in (("RW (current)", chn_rw),
         ("step (intervention only)", chn_step),
         ("RW + post-shock", chn_shock))
-        ll = pointwise_z_loglik(chn, d_rt, edges_rt)
+        ll = pointwise_z_loglik(chn, d, edges)
         w = waic(ll)
         push!(rows, (; scenario = name, w...))
     end
@@ -326,7 +325,4 @@ end
 #
 # A fourth scenario varying the right-truncation correction on the
 # delay distributions is discussed in
-# [issue #48](https://github.com/epiforecasts/andv-linelist-analysis/issues/48);
-# it is out of scope for this page because the interaction between
-# delay truncation and intervention timing needs more care than the
-# fit-side change covered here.
+# [issue #48](https://github.com/epiforecasts/andv-linelist-analysis/issues/48).

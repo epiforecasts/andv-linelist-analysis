@@ -120,15 +120,15 @@ function post_long(post, params; scenario, fit)
 end
 
 let
-    params = [:μ_inc, :σ_inc, :μ_δ, :σ_δ, :k]
+    params = [:μ_inc, :σ_inc, :μ_δ, :σ_δ, :k, :σ_rw]
     baseline = fits[1]
-    df = @chain fits begin
+    df = @chain fits[2:end] begin
         map(_) do f
             vcat(
                 post_long(f.post, params;
                     scenario = f.name, fit = f.name),
                 post_long(baseline.post, params;
-                    scenario = f.name, fit = "baseline (reference)"))
+                    scenario = f.name, fit = "baseline"))
         end
         reduce(vcat, _)
     end

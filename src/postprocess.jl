@@ -95,6 +95,7 @@ function summarise(chn)
     μ_δ = vec(collect(chn[:μ_δ]));
     σ_δ = vec(collect(chn[:σ_δ]))
     k_s = vec(collect(chn[:k]))
+    σ_rw = vec(collect(chn[:σ_rw]))
 
     mean_inc = exp.(μ_inc .+ σ_inc .^ 2 ./ 2)
     var_inc = exp.(2μ_inc .+ σ_inc .^ 2) .* (exp.(σ_inc .^ 2) .- 1)
@@ -108,7 +109,7 @@ function summarise(chn)
 
     log_R_chain = vector_chain(chn, :log_R)
 
-    return (; μ_inc, σ_inc, μ_δ, σ_δ, k = k_s, log_R_chain,
+    return (; μ_inc, σ_inc, μ_δ, σ_δ, k = k_s, σ_rw, log_R_chain,
         mean_gi_si, sd_gi_si, p_pre)
 end
 
