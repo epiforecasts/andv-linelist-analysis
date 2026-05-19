@@ -110,7 +110,7 @@ Implemented in `truncation_model`; ``p`` uses the `ConvolvedDelays` distribution
 ```math
 \begin{aligned}
 \log R_1 &\sim \mathrm{Normal}(\log 1.5,\ 1) \\
-\sigma_{\mathrm{rw}} &\sim \mathrm{Normal}_+(0,\ 0.5) \\
+\sigma_{\mathrm{rw}} &\sim \mathrm{Normal}_+(0,\ 0.2) \\
 \varepsilon_b &\sim \mathrm{Normal}(0,\ 1), \quad b = 1, \ldots, B - 1 \\
 \log R_b &= \log R_1 + \sigma_{\mathrm{rw}} \sum_{j=1}^{b-1} \varepsilon_j.
 \end{aligned}
@@ -119,6 +119,8 @@ Implemented in `truncation_model`; ``p`` uses the `ConvolvedDelays` distribution
 Between knots, ``\log R(t)`` is linearly interpolated.
 The reported ``R(t)`` is the *case reproduction number* indexed by source symptom onset.
 Implemented in `random_walk_rt_model`.
+
+The ``\sigma_{\mathrm{rw}} \sim \mathrm{Normal}_+(0, 0.2)`` prior reflects our experience estimating transmission intensity across a range of outbreaks: at weekly knot spacing it puts the typical weekly innovation SD around 5 % per day, with the 95th percentile near 15 % per day — wide enough to accommodate outbreak-scale ``R(t)`` swings while ruling out biologically implausible per-week step sizes.
 
 ### Negative-Binomial dispersion
 
