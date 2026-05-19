@@ -42,8 +42,8 @@ the published table.
 | R2 | Report quantiles of the fitted distribution (e.g. 95th, 99th percentile) | ✓ | `summary_table` reports the 95th and 99th percentiles of the fitted incubation period with 95% CrIs. See *Key outputs* in [Analysis walkthrough](analysis.md). |
 | R3 | State the probability density function / family explicitly | ✓ | [Model](model.md) writes out `Inc ∼ LogNormal(μ_inc, σ_inc)`, `δ ∼ Normal(μ_δ, σ_δ)`, and the offspring `NegativeBinomial(R, k)` parameterisation. |
 | R4 | Report credible or confidence intervals (typically 90% or 95%) | ✓ | 95% credible intervals throughout. The interval level is stated in the README and [Analysis walkthrough](analysis.md). |
-| R5 | Include contextual information (sample size, epidemic curve, control measures, location, time) | Partial | Sample size (34 cases), location (Epuyén, Argentina), and outbreak window (2018–19) are reported in the README, [index](index.md), and [Analysis walkthrough](analysis.md). The epidemic curve is rendered by `plot_data`. Public-health control measures (cordon, contact tracing) are referenced via the Martínez et al. citation but not summarised in the docs. Tracked as **proposed issue: "Add a short context paragraph on Epuyén outbreak control measures with citations"**. |
-| R6 | Report demographic and exposure-route summaries of the contributing cases | Not yet | The line list does not carry age/sex/exposure-route covariates beyond `source_case` attribution, so no demographic breakdown is shown. Tracked as **proposed issue: "Document demographic/exposure-route information available in the source publication and add a static summary table"**. |
+| R5 | Include contextual information (sample size, epidemic curve, control measures, location, time) | ✓ | Sample size (34 cases), location (Epuyén, Argentina), and outbreak window (2018–19) are reported in the README, [index](index.md), and [Analysis walkthrough](analysis.md). The epidemic curve is rendered by `plot_data`. Public-health control measures (cordon, contact tracing) are taken from the upstream paper and not duplicated here; readers are pointed to [Martínez et al. 2020](https://doi.org/10.1056/NEJMoa2009040) for the operational summary. |
+| R6 | Report demographic and exposure-route summaries of the contributing cases | Not yet | The line list does not carry age/sex/exposure-route covariates beyond `source_case` attribution, so no demographic breakdown is shown. Tracked in [#88](https://github.com/epiforecasts/andv-linelist-analysis/issues/88). |
 | R7 | Share code and (anonymised) data in an open repository | ✓ | Code is on GitHub at `epiforecasts/andv-linelist-analysis`; the hand-encoded line list is shipped in `data/linelist.csv` and loaded by `load_linelist`. License is in `LICENSE`. |
 | R8 | Provide the line-list-format data with the boundaries required for re-estimation (exposure / onset windows, attributed source) | ✓ | `data/linelist.csv` contains `exposure_lower`, `exposure_upper`, `onset_date` (with the `_alt` sensitivity rows), and `source_case` / `Z` columns. The parser `load_linelist` and the data-construction step `build_data` in `src/data.jl` are documented in the [API Reference](api.md). |
 | R9 | Document known limitations / sources of residual bias | ✓ | A dedicated [Limitations page](limitations.md) covers right-truncation of long incubation periods, prior dependence of offspring dispersion `k`, the high-certainty filter on `Z`, prior-driven late `R(t)` bins, and real-time-fitting caveats (geography, severity, reporting delay, under-ascertainment, pre-symptomatic transmission with an unobserved source, ongoing zoonosis). |
@@ -51,8 +51,10 @@ the published table.
 ## Summary
 
 Of the items extracted from the Charniga et al. checklist, the joint
-model and its documentation cover most directly. The main gaps are
-multi-distribution model comparison (E4), stratification by subgroup
-(E7), trace/rank plots (E8), an explicit context paragraph on control
-measures (R5), and demographic/exposure-route summaries (R6). Each of
-these has a proposed tracking issue listed above.
+model and its documentation cover most directly. The remaining gaps
+are multi-distribution model comparison (E4, tracked in
+[#86](https://github.com/epiforecasts/andv-linelist-analysis/issues/86)),
+stratification by subgroup (E7,
+[#87](https://github.com/epiforecasts/andv-linelist-analysis/issues/87)),
+and demographic/exposure-route summaries (R6,
+[#88](https://github.com/epiforecasts/andv-linelist-analysis/issues/88)).
