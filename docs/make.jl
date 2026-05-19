@@ -42,6 +42,12 @@ Literate.markdown(joinpath(@__DIR__, "examples", "realtime.jl"),
     flavor = Literate.DocumenterFlavor(),
     mdstrings = true, credit = false)
 
+Literate.markdown(joinpath(@__DIR__, "examples", "prior_sensitivity.jl"),
+    LITERATE_OUT;
+    name = "prior_sensitivity",
+    flavor = Literate.DocumenterFlavor(),
+    mdstrings = true, credit = false)
+
 makedocs(;
     # Short label for the rendered Vitepress sidebar header and browser tab.
     # The full descriptive title lives as the h1 of `docs/src/index.md`, so
@@ -59,6 +65,7 @@ makedocs(;
         "Limitations" => "limitations.md",
         "Analysis walkthrough" => "analysis.md",
         "Real-time monitoring" => "realtime.md",
+        "Prior sensitivity" => "prior_sensitivity.md",
         "Reporting best practices" => "charniga.md",
         "API Reference" => "api.md"
     ],
