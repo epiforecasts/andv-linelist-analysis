@@ -16,20 +16,159 @@ The `R(t)` reported here is the case reproduction number indexed by source sympt
 Onset is the natural choice for these data: fitted transmission timing is tightly clustered around source onset (`μ_δ ≈ 0`, `σ_δ ≈ 0.6 d`), so a case's offspring are infected within roughly a day of the case becoming symptomatic.
 Because transmission is so concentrated at onset, this mostly coincides with the instantaneous reproduction number indexed by infection date.
 
-## Latent variables and priors
+## Submodels
 
-Each case has two continuous latent variables.
-`T_onset[i]` has a uniform prior over the recorded onset window, which is one day wide if only a single onset date was recorded.
-`T_inf[i]` has a uniform prior over the exposure window for sourced cases, or over an 80-day pre-onset window for the zoonotic index.
+The joint model decomposes into independent components.
+Each subsection below states the math first and names the code entry point at the end.
+Notation: ``\mathrm{Normal}_+(\mu, \sigma)`` denotes a Normal truncated to non-negative values.
 
-| Quantity | Distribution | Priors |
-|---|---|---|
-| Incubation period (`T_onset − T_inf`) | LogNormal | log-mean ~ Normal(3.0, 0.5), log-SD ~ half-Normal(0, 0.5) |
-| Transmission timing relative to source onset (`T_inf(sec) − T_onset(src)`) | Normal | mean ~ Normal(0, 5), SD ~ half-Normal(0, 1) |
-| Offspring count `Z` per case | Negative-Binomial with mean `R(t)` and dispersion `k` | `k` ~ half-Normal(0.3, 0.5) |
-| `log R(t)` at weekly knots, linearly interpolated between them | Random walk | first knot ~ Normal(log 1.5, 1); innovation SD ~ half-Normal(0, 0.5) |
+### Incubation period
 
-A per-pair constraint enforces `T_inf(secondary) > T_inf(source)` so the generation interval is positive.
+```math
+\begin{aligned}
+\mu_{\mathrm{inc}} &\sim \mathrm{Normal}(3.0,\ 0.5) \\
+\sigma_{\mathrm{inc}} &\sim \mathrm{Normal}_+(0,\ 0.5) \\
+\mathrm{Inc} &\sim \mathrm{LogNormal}(\mu_{\mathrm{inc}},\ \sigma_{\mathrm{inc}}).
+\end{aligned}
+```
 
-Inference uses NUTS, 4 chains, 1000 post-warmup samples each, `target_accept = 0.95`.
+Implemented in `incubation_model`.
+
+### Transmission timing
+
+The per-pair gap ``\delta = T_{\mathrm{inf}}(\mathrm{sec}) - T_{\mathrm{onset}}(\mathrm{src})`` can be negative (pre-symptomatic transmission).
+
+```math
+\begin{aligned}
+\mu_\delta &\sim \mathrm{Normal}(0,\ 5) \\
+\sigma_\delta &\sim \mathrm{Normal}_+(0,\ 1) \\
+\delta &\sim \mathrm{Normal}(\mu_\delta,\ \sigma_\delta).
+\end{aligned}
+```
+
+Implemented in `transmission_delta_model`.
+
+### Latent infection and onset times
+
+Each case ``i`` has two continuous latents.
+``T_{\mathrm{onset}}[i]`` is uniform over the recorded onset window ``[L_i, U_i]``.
+``T_{\mathrm{inf}}[i]`` is uniform over the exposure window for sourced cases (or an 80-day pre-onset window for the index), capped above by ``T_{\mathrm{onset}}[i]``:
+
+```math
+\begin{aligned}
+T_{\mathrm{onset}}[i] &\sim \mathrm{Uniform}(L_i,\ U_i) \\
+T_{\mathrm{inf}}[i] &\sim
+\begin{cases}
+\mathrm{Uniform}\bigl(L_i - 80,\ T_{\mathrm{onset}}[i]\bigr) & \mathrm{src}(i) = 0 \\
+\mathrm{Uniform}\bigl(\ell_i,\ \min(u_i,\ T_{\mathrm{onset}}[i])\bigr) & \mathrm{src}(i) \ne 0
+\end{cases}
+\end{aligned}
+```
+
+where ``[\ell_i, u_i]`` is the recorded exposure window.
+A per-pair constraint ``T_{\mathrm{inf}}[i] > T_{\mathrm{inf}}(\mathrm{src}(i))`` enforces a positive generation interval.
+For each case ``i`` the submodel adds
+
+```math
+\log \mathrm{pdf}\bigl(\mathrm{Inc},\ T_{\mathrm{onset}}[i] - T_{\mathrm{inf}}[i]\bigr)
+```
+
+and, for sourced cases, also
+
+```math
+\log \mathrm{pdf}\bigl(\delta,\ T_{\mathrm{inf}}[i] - T_{\mathrm{onset}}(\mathrm{src}(i))\bigr).
+```
+
+Implemented in `latent_times_model`.
+
+### Real-time truncation
+
+Active only when an `obs_time` cut-off is set.
+Two contributions.
+
+First, the right-truncation on the index Inc, on the observation event ``T_{\mathrm{inf}}[i] + \mathrm{Inc} \le \mathrm{obs\_time}``:
+
+```math
+-\sum_{i: \mathrm{src}(i) = 0} \log \mathrm{cdf}\bigl(\mathrm{Inc},\ \mathrm{obs\_time} - T_{\mathrm{inf}}[i]\bigr).
+```
+
+Sourced cases need no such factor; their exposure window already bounds ``T_{\mathrm{inf}}[i]`` below ``T_{\mathrm{onset}}[i] \le \mathrm{obs\_time}``.
+
+Second, the per-pair offspring-completeness denominator.
+With ``p_j = \mathrm{cdf}\bigl(\delta + \mathrm{Inc}(\mathrm{sec}),\ \mathrm{obs\_time} - T_{\mathrm{onset}}[j]\bigr)``, each sourced case ``i`` contributes
+
+```math
+-\log p_{\mathrm{src}(i)}.
+```
+
+Implemented in `truncation_model`; ``p`` uses the `ConvolvedDelays` distribution.
+
+### Reproduction number
+
+``\log R`` evolves as a random walk on weekly knots ``b = 1, \ldots, B``:
+
+```math
+\begin{aligned}
+\log R_1 &\sim \mathrm{Normal}(\log 1.5,\ 1) \\
+\sigma_{\mathrm{rw}} &\sim \mathrm{Normal}_+(0,\ 0.5) \\
+\varepsilon_b &\sim \mathrm{Normal}(0,\ 1), \quad b = 1, \ldots, B - 1 \\
+\log R_b &= \log R_1 + \sigma_{\mathrm{rw}} \sum_{j=1}^{b-1} \varepsilon_j.
+\end{aligned}
+```
+
+Between knots, ``\log R(t)`` is linearly interpolated.
+The reported ``R(t)`` is the *case reproduction number* indexed by source symptom onset.
+Implemented in `random_walk_rt_model`.
+
+### Negative-Binomial dispersion
+
+The standard ``1/\sqrt k`` reparameterisation:
+
+```math
+\begin{aligned}
+\phi^{-1/2} &\sim \mathrm{Normal}_+(0,\ 1) \\
+k &= 1 / (\phi^{-1/2})^2.
+\end{aligned}
+```
+
+Implemented in `nb_dispersion_model`.
+
+### Case likelihood
+
+For each case ``i`` with onset ``T_{\mathrm{onset}}[i]`` falling in bin ``b(i)``:
+
+```math
+Z_{\mathrm{obs}}[i] \sim \mathrm{NegBin}\!\bigl(k,\ \exp(\log R_{b(i)})\cdot p_i\bigr)
+```
+
+with the offspring-completeness ``p_i = 1`` in retrospective mode and ``p_i = \mathrm{cdf}\bigl(\delta + \mathrm{Inc}(\mathrm{sec}),\ \mathrm{obs\_time} - T_{\mathrm{onset}}[i]\bigr)`` in real-time mode.
+The Negative-Binomial is mean–dispersion parameterised so ``\mathbb{E}[Z_{\mathrm{obs}}[i]] = \exp(\log R_{b(i)})\cdot p_i`` and ``\mathrm{Var}[Z_{\mathrm{obs}}[i]] = \exp(\log R_{b(i)})\cdot p_i \cdot (1 + \exp(\log R_{b(i)})\cdot p_i / k)``.
+Implemented in `case_model`.
+
+## Inference
+
+NUTS, 4 chains, 1000 post-warmup samples each, `target_accept = 0.95`.
 Default seed: 20260508.
+Reverse-mode AD via Mooncake.
+
+## Real-time predictions
+
+Two counterfactual predictors give posterior-predictive future onset counts conditional on a real-time fit at cut-off `obs_time`.
+Both reuse the same Gamma–Poisson conjugate update on each source's true offspring rate.
+
+For source ``i`` with onset at ``T_{\mathrm{onset}}[i]`` let ``\Delta_p[i] = \mathrm{obs\_time} - T_{\mathrm{onset}}[i]`` (observation horizon) and ``\Delta_q[i]`` the intervention horizon (defaults to ``\Delta_p[i]``; equals ``+\infty`` under the natural chain).
+The latent rate of source ``i``'s offspring follows the conjugate posterior
+
+```math
+\lambda_i \mid Z_{\mathrm{obs}}[i], k, R_i, p_i \;\sim\; \mathrm{Gamma}\!\left(k + Z_{\mathrm{obs}}[i],\ \frac{R_i}{k + R_i\,p_i}\right) \quad (\text{scale form}),
+```
+
+with ``p_i = \mathrm{cdf}(\mathrm{ConvolvedDelays}(\mathrm{inc}, \delta),\ \Delta_p[i])``.
+Future onsets are then
+
+```math
+Z_{\mathrm{future}}[i] \sim \mathrm{Poisson}(\lambda_i\,\pi_i),\quad
+\pi_i = \Pr(\delta \le \Delta_q[i] \wedge \delta + \mathrm{Inc} > \Delta_p[i]) = \mathrm{cdf}(\delta,\ \Delta_q[i]) - \mathrm{cdf}(\mathrm{ConvolvedDelays}(\mathrm{inc}, \delta),\ \Delta_p[i];\ \mathtt{upper\_\delta} = \Delta_q[i]).
+```
+
+The controlled-outbreak default ``\Delta_q = \Delta_p`` gives ``\pi = q - p`` with ``q_i = \mathrm{cdf}(\delta, \Delta_p[i])``; the natural-chain limit ``\Delta_q \to +\infty`` gives ``\pi = 1 - p``.

@@ -22,16 +22,23 @@ DocMeta.setdocmeta!(
 # which trips on bare `{T}` in the Julia code.
 let ll = load_linelist()
     d = build_data(ll)
-    src = @code_string TransmissionLinelist.joint_model(d, bin_edges_day(d.t0))
+    src = @code_string TransmissionLinelist.joint_model(d, prepare_rt_edges(d.t0))
     write(joinpath(@__DIR__, "examples", "joint_model_source.jl"), src)
 end
 
-# Render the executable walkthrough through Literate so figures and tables are
-# generated at build time from a single source script.
-const LITERATE_SRC = joinpath(@__DIR__, "examples", "analysis.jl")
+# Render the executable walkthroughs through Literate so figures and tables
+# are generated at build time from a single source script each.
 const LITERATE_OUT = joinpath(@__DIR__, "src")
-Literate.markdown(LITERATE_SRC, LITERATE_OUT;
+
+Literate.markdown(joinpath(@__DIR__, "examples", "analysis.jl"),
+    LITERATE_OUT;
     name = "analysis",
+    flavor = Literate.DocumenterFlavor(),
+    mdstrings = true, credit = false)
+
+Literate.markdown(joinpath(@__DIR__, "examples", "realtime.jl"),
+    LITERATE_OUT;
+    name = "realtime",
     flavor = Literate.DocumenterFlavor(),
     mdstrings = true, credit = false)
 
@@ -51,6 +58,7 @@ makedocs(;
         "Model" => "model.md",
         "Limitations" => "limitations.md",
         "Analysis walkthrough" => "analysis.md",
+        "Real-time monitoring" => "realtime.md",
         "API Reference" => "api.md"
     ],
     format = DocumenterVitepress.MarkdownVitepress(;

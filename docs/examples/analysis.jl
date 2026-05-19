@@ -29,11 +29,11 @@ Random.seed!(20260508)
 # ## Load the line list
 #
 # `load_linelist` parses the bundled CSV and drops the `_alt` sensitivity rows.
-# `build_data` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset); `bin_edges_day` returns the weekly R(t) knot dates as day offsets.
+# `build_data` re-encodes exposure / onset windows as day offsets from `t0` (60 days before the first onset), and `prepare_rt_edges` builds the weekly R(t) knot dates from the same origin. Passing those into `joint_model` instantiates the Turing model directly.
 
 ll = load_linelist()
 d = build_data(ll)
-edges = bin_edges_day(d.t0)
+edges = prepare_rt_edges(d.t0)
 model = joint_model(d, edges)
 
 @chain ll begin
@@ -62,7 +62,7 @@ plot_prior_predictives()
 
 # ## Fitting
 #
-# `sample_fit` wraps the package's default NUTS configuration: Enzyme reverse-mode AD, chains initialised from the prior, 1000 post-warmup draws across 4 chains, `target_accept = 0.95`.
+# `sample_fit` wraps the package's default NUTS configuration: Mooncake reverse-mode AD, chains initialised from the prior, 1000 post-warmup draws across 4 chains, `target_accept = 0.95`.
 
 chn = sample_fit(model)
 
@@ -115,8 +115,8 @@ plot_inc_sense_check(chn, d)
 # The left panel compares frequencies of each `Z` value against the observed line list.
 # The right column has three stacked subpanels — one per discrete test statistic (`sum(Z)`, `max(Z)`, `count(Z = 0)`) — each showing the histogram of the replicated statistic with the observed value as a dashed vertical rule.
 
-plot_z_ppc(chn, d)
+plot_z_ppc(model, chn, d)
 
 # Numeric values for each test statistic — observed, replicated median + 95% CrI, and the two-sided Bayesian posterior-predictive p-value `2 · min(P(T_rep ≥ T_obs), P(T_rep ≤ T_obs))`.
 
-z_ppc_summary(chn, d)
+z_ppc_summary(model, chn, d)

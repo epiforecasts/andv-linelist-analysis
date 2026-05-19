@@ -83,8 +83,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Build the named-tuple of posterior draws consumed by [`save_posterior`](@ref)
-and print the headline summary table via [`summary_table`](@ref).
+Build the named-tuple of posterior draws consumed by [`save_posterior`](@ref).
+Call [`summary_table`](@ref) directly to print the headline summary.
 
 # Arguments
 - `chn`: FlexiChain returned by [`sample_fit`](@ref).
@@ -108,11 +108,52 @@ function summarise(chn)
 
     log_R_chain = vector_chain(chn, :log_R)
 
-    show(stdout, "text/plain", summary_table(chn))
-    println()
-
     return (; μ_inc, σ_inc, μ_δ, σ_δ, k = k_s, log_R_chain,
         mean_gi_si, sd_gi_si, p_pre)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Quantile band for R(t) across knots from one posterior.
+Returns a `DataFrame` with one row per bin and columns `bin`, `lo`, `med`,
+`hi` taken from the three quantiles `q` of `exp.(post.log_R_chain[b])`.
+
+# Arguments
+- `post`: posterior summary named tuple from [`summarise`](@ref).
+
+# Keyword Arguments
+- `q`: three-tuple of lower, central, and upper quantiles.
+"""
+function rt_band(post; q = (0.1, 0.5, 0.9))
+    chain = post.log_R_chain
+    bins = collect(eachindex(chain))
+    lo = [quantile(exp.(chain[b]), q[1]) for b in bins]
+    med = [quantile(exp.(chain[b]), q[2]) for b in bins]
+    hi = [quantile(exp.(chain[b]), q[3]) for b in bins]
+    return DataFrame(bin = bins, lo = lo, med = med, hi = hi)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Single-row summary of predictive `samples`.
+Returns a `NamedTuple` `(med, lo, hi, mean)` with `med`, `lo`, `hi`
+taken from the quantiles `q` and rounded to `Int`, and `mean` the raw
+sample mean.
+
+# Arguments
+- `samples`: vector of predictive draws (typically integer counts).
+
+# Keyword Arguments
+- `q`: three-tuple of lower, central, and upper quantiles.
+"""
+function summarise_predictive(samples::AbstractVector{<:Real};
+        q = (0.1, 0.5, 0.9))
+    med = Int(round(quantile(samples, q[2])))
+    lo = Int(round(quantile(samples, q[1])))
+    hi = Int(round(quantile(samples, q[3])))
+    return (; med, lo, hi, mean = mean(samples))
 end
 
 # ---------------------------------------------------------------------------

@@ -10,14 +10,34 @@ _default_theme() = merge(theme_latexfonts(), Theme(fontsize = 12))
 
 _with_theme(f) = with_theme(f, _default_theme())
 
+# Saving a Makie figure needs a Makie backend (e.g. CairoMakie) loaded
+# at the call site. Look up `save` dynamically so the package itself
+# doesn't depend on a particular backend.
+function _save_makie_figure(fig, path)
+    backend = nothing
+    for name in (:CairoMakie, :GLMakie, :WGLMakie)
+        if isdefined(Main, name)
+            backend = getfield(Main, name)
+            break
+        end
+    end
+    if backend === nothing
+        @warn "No Makie backend loaded in Main; skipping figure save" path
+        return path
+    end
+    Base.invokelatest(backend.save, path, fig; px_per_unit = 2.0)
+    return path
+end
+
 """
-    plot_data(ll)
+$(TYPEDSIGNATURES)
 
 Two-panel view of the raw line list: epicurve by ISO week of onset (left)
 and exposure windows against onset dates (right). Returns a `Makie.Figure`.
 
 # Arguments
-- `ll`: line-list `DataFrame` from [`load_linelist`](@ref).
+- `ll`: line-list `DataFrame` with `onset_date`, `exposure_lower`, and
+  `exposure_upper` columns.
 """
 function plot_data(ll)
     weekly = @chain DataFrame(week = ll.onset_date) begin
@@ -124,7 +144,7 @@ end
 _draws(chn, name::Symbol) = vec(collect(chn[name]))
 
 """
-    summary_table(chn)
+$(TYPEDSIGNATURES)
 
 Posterior summary `DataFrame` for the headline quantities: incubation mean,
 95th and 99th percentiles, transmission timing μ_δ / σ_δ, GI / SI mean and
@@ -132,7 +152,7 @@ SD, and Negative-Binomial dispersion k. Columns: `quantity`, `median`,
 `lower_95`, `upper_95`.
 
 # Arguments
-- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 """
 function summary_table(chn)
     μ_inc = _draws(chn, :μ_inc)
@@ -176,7 +196,7 @@ function summary_table(chn)
 end
 
 """
-    diagnostics_table(chn)
+$(TYPEDSIGNATURES)
 
 Single-row `DataFrame` summarising sampler diagnostics: maximum R̂, minimum
 bulk ESS, divergence count, and wall-clock sampling time in seconds. The
@@ -186,7 +206,7 @@ the maximum over chains. Returns `missing` for the runtime if the chain
 carries no timing metadata.
 
 # Arguments
-- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 """
 function diagnostics_table(chn)
     d = diagnostics(chn)
@@ -201,17 +221,17 @@ function diagnostics_table(chn)
 end
 
 """
-    plot_pair(chn; thin = 2)
+$(TYPEDSIGNATURES)
 
 Corner plot of the population scalars `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`, `k`
 via PairPlots.jl. Returns a Makie `Figure` (requires a Makie backend such
 as CairoMakie loaded at the call site).
 
 # Arguments
-- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 
 # Keyword Arguments
-- `thin`: keep every `thin`-th draw before plotting.
+- `thin`: stride applied to the posterior draws before plotting.
 """
 function plot_pair(chn; thin::Int = 2)
     tbl = @chain DataFrame(
@@ -280,7 +300,7 @@ function _pp_panel_hist_only!(ax, samples; bins = 50)
 end
 
 """
-    plot_predictive_distributions(chn; rng = Random.MersenneTwister(1))
+$(TYPEDSIGNATURES)
 
 Two-by-two panel of the implied population distributions under the
 posterior for incubation period, transmission timing δ, generation
@@ -298,10 +318,10 @@ per draw. GI and SI show the predictive-sample histogram only. Returns a
 `Makie.Figure`.
 
 # Arguments
-- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 
 # Keyword Arguments
-- `rng`: RNG used to draw the per-draw predictive samples.
+- `rng`: RNG used to draw one predictive sample per posterior draw.
 """
 function plot_predictive_distributions(chn; rng = Random.MersenneTwister(1))
     samples = _ppc_frame(chn; rng)
@@ -354,7 +374,7 @@ function plot_predictive_distributions(chn; rng = Random.MersenneTwister(1))
 end
 
 """
-    plot_rt(chn; n_draws_plot = 100, ymax = 4.0)
+$(TYPEDSIGNATURES)
 
 Spaghetti plot of R(t) over the weekly knots. Each thinned posterior draw
 is a piecewise-linear trajectory through `(knot_date[b], exp(log_R[b]))`.
@@ -365,11 +385,12 @@ AlgebraOfGraphics with `group = :draw`, which is the idiomatic way to
 spell "one line per draw" once the data is tidy.
 
 # Arguments
-- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
 
 # Keyword Arguments
-- `n_draws_plot`: maximum number of draws to plot.
-- `ymax`: upper y-axis limit.
+- `n_draws_plot`: target number of posterior draws to thin to before
+  plotting.
+- `ymax`: upper limit of the R(t) y-axis.
 """
 function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
     log_R = vector_chain(chn, :log_R)
@@ -377,7 +398,7 @@ function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
     step = max(1, n_draws ÷ n_draws_plot)
     idx = collect(1:step:n_draws)
 
-    knot_dates = BIN_EDGES
+    knot_dates = BIN_EDGES[1:length(log_R)]
     xs = Float64[Dates.value(d) for d in knot_dates]
 
     # Long form: one row per (draw, knot). `draw` is the only grouping
@@ -412,7 +433,7 @@ function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
 end
 
 """
-    plot_delta_sense_check(chn, data)
+$(TYPEDSIGNATURES)
 
 Sense-check the per-pair posterior of δ against the fitted population
 `Normal(μ_δ, σ_δ)`. For each sourced pair, take the posterior of
@@ -421,8 +442,8 @@ plot the histogram of those per-pair medians with the population density
 overlaid. Returns a `Makie.Figure`.
 
 # Arguments
-- `chn`: FlexiChain returned by [`sample_fit`](@ref).
-- `d`: model data tuple from [`build_data`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
+- `d`: the augmented data NamedTuple from [`build_data`](@ref).
 """
 function plot_delta_sense_check(chn, d)
     t_inf = vector_chain(chn, :T_inf)
@@ -472,13 +493,14 @@ function plot_delta_sense_check(chn, d)
 end
 
 """
-    plot_z_ppc(chn, data; rng = Random.MersenneTwister(1), edges = bin_edges_day(data.t0))
+    plot_z_ppc(model, chn, data; rng = Random.MersenneTwister(1), edges = prepare_rt_edges(data.t0))
 
 Posterior-predictive check for the observed offspring counts `Zobs`. For
 each posterior draw `d` and each case `i`, samples a replicated offspring
-count `Z_rep[i, d] ~ NegativeBinomial(k[d], k[d]/(k[d] + R_i))`, where
-`R_i = exp(clamp(log_R_at(T_onset[i, d], edges, log_R[:, d]), -50, 50))`.
-The clamp matches the model's likelihood.
+count via [`posterior_predictive`](@ref) dispatched on
+`model.defaults.cases`. For the default [`case_model`](@ref) this is
+`Z_rep[i, d] ~ NegativeBinomial(k[d], k[d]/(k[d] + R_i))`, where
+`R_i = exp(log_R_at(T_onset[i, d], edges, log_R[:, d]))`.
 
 Joint-draw: `T_onset[i]`, `log_R[:]`, and `k` are taken from the same
 posterior draw, so the PPC reflects full posterior uncertainty in case
@@ -501,14 +523,21 @@ Returns a `Makie.Figure`.
 # Joint-draw posterior-predictive replication of Z. Returns an
 # `(n_draws × N)` matrix where each row is one replicated line list under
 # the model's Negative-Binomial likelihood, using the same draw of
-# `(T_inf, log_R, k)`.
-function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
-        edges = bin_edges_day(d.t0))
+# `(T_inf, log_R, k)`. Dispatches `posterior_predictive` on
+# `model.defaults.cases` so alternative obs submodels are honoured.
+function _z_ppc_replicate(model, chn, d; rng = Random.MersenneTwister(1),
+        edges = nothing)
     k_draws = _draws(chn, :k)
     log_R = vector_chain(chn, :log_R)
     t_onset = vector_chain(chn, :T_onset)
     n_draws = length(k_draws)
     N = d.N
+    Zobs = d.Zobs
+
+    knots = edges === nothing ?
+            prepare_rt_edges(d.t0)[1:length(log_R)] : edges
+
+    cases_sub = model.defaults.cases
 
     Z_rep = Matrix{Int}(undef, n_draws, N)
     for d_idx in 1:n_draws
@@ -516,18 +545,16 @@ function _z_ppc_replicate(chn, d; rng = Random.MersenneTwister(1),
         k_d = k_draws[d_idx]
         for i in 1:N
             t_i = t_onset[i][d_idx]
-            lr = log_R_at(t_i, edges, logR_d)
-            R_i = exp(clamp(lr, -50.0, 50.0))
-            p = k_d / (k_d + R_i)
-            Z_rep[d_idx, i] = rand(rng, NegativeBinomial(k_d, p))
+            R_i = exp(log_R_at(t_i, knots, logR_d))
+            Z_rep[d_idx, i] = posterior_predictive(cases_sub, rng,
+                k_d, Zobs[i], R_i, 1.0, 1.0)
         end
     end
     return Z_rep
 end
 
 """
-    z_ppc_summary(chn, d; rng = Random.MersenneTwister(1),
-                  edges = bin_edges_day(d.t0))
+$(TYPEDSIGNATURES)
 
 Companion to `plot_z_ppc` returning a `DataFrame` of numeric
 posterior-predictive summaries for three discrete test statistics —
@@ -538,17 +565,22 @@ posterior-predictive summaries for three discrete test statistics —
 Bayesian posterior-predictive p-value.
 
 # Arguments
-- `chn`: FlexiChain returned by [`sample_fit`](@ref).
-- `d`: model data tuple from [`build_data`](@ref).
+- `model`: the [`joint_model`](@ref) instance that produced `chn`; its
+  `defaults.cases` field dispatches the per-case posterior-predictive
+  draw.
+- `chn`: a sampled chain from [`joint_model`](@ref).
+- `d`: the augmented data NamedTuple from [`build_data`](@ref).
 
 # Keyword Arguments
-- `rng`: RNG used to draw the replicated `Z_rep` per posterior draw.
-- `edges`: knot day offsets, defaults to [`bin_edges_day`](@ref)(`d.t0`).
+- `rng`: RNG used to replicate the offspring counts.
+- `edges`: weekly knot edges; defaults to `nothing`, in which case
+  the knots are taken from `prepare_rt_edges(d.t0)[1:length(log_R)]`
+  inside `_z_ppc_replicate`.
 """
-function z_ppc_summary(chn, d;
+function z_ppc_summary(model, chn, d;
         rng = Random.MersenneTwister(1),
-        edges = bin_edges_day(d.t0))
-    Z_rep = _z_ppc_replicate(chn, d; rng, edges)
+        edges = nothing)
+    Z_rep = _z_ppc_replicate(model, chn, d; rng, edges)
     n_draws = size(Z_rep, 1)
     Zobs = d.Zobs
 
@@ -579,25 +611,28 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Posterior-predictive check for the offspring count `Z`. For each draw,
-simulates `Z_rep[i] ~ NegativeBinomial(k, k/(k+R_i))` at the same draw's
-latents and overlays the replicated frequencies + test statistics
-(`sum(Z)`, `max(Z)`, `count(Z=0)`) on the observed values. Returns a
-Makie `Figure`.
+Posterior predictive check for offspring counts `Z`. Replicates `Z` from
+the joint posterior and overlays the simulated counts against the
+observed counts per case.
 
 # Arguments
-- `chn`: FlexiChain returned by [`sample_fit`](@ref).
-- `d`: model data tuple from [`build_data`](@ref).
+- `model`: the [`joint_model`](@ref) instance that produced `chn`; its
+  `defaults.cases` field dispatches the per-case posterior-predictive
+  draw.
+- `chn`: a sampled chain from [`joint_model`](@ref).
+- `d`: the augmented data NamedTuple from [`build_data`](@ref).
 
 # Keyword Arguments
-- `rng`: RNG used to draw replicated `Z_rep` per posterior draw.
-- `edges`: knot day offsets, defaults to [`bin_edges_day`](@ref)(`d.t0`).
+- `rng`: RNG used for the posterior draws.
+- `edges`: weekly knot edges; defaults to `nothing`, in which case
+  the knots are taken from `prepare_rt_edges(d.t0)[1:length(log_R)]`
+  inside `_z_ppc_replicate`.
 """
-function plot_z_ppc(chn, d;
+function plot_z_ppc(model, chn, d;
         rng = Random.MersenneTwister(1),
-        edges = bin_edges_day(d.t0))
+        edges = nothing)
     N = d.N
-    Z_rep = _z_ppc_replicate(chn, d; rng, edges)
+    Z_rep = _z_ppc_replicate(model, chn, d; rng, edges)
     n_draws = size(Z_rep, 1)
 
     Zobs = d.Zobs
@@ -680,7 +715,7 @@ function plot_z_ppc(chn, d;
 end
 
 """
-    plot_inc_sense_check(chn, data; n_density_draws = 200)
+$(TYPEDSIGNATURES)
 
 Sense-check the per-case posterior of the incubation period against the
 fitted population `LogNormal(μ_inc, σ_inc)`. For each case, takes the
@@ -690,11 +725,12 @@ plots the histogram of those per-case medians with the median PDF (and
 `Makie.Figure`.
 
 # Arguments
-- `chn`: FlexiChain returned by [`sample_fit`](@ref).
-- `data`: model data tuple from [`build_data`](@ref).
+- `chn`: a sampled chain from [`joint_model`](@ref).
+- `data`: the augmented data NamedTuple from [`build_data`](@ref).
 
 # Keyword Arguments
-- `n_density_draws`: number of posterior draws used for the density ribbon.
+- `n_density_draws`: target number of posterior draws to thin to when
+  building the population density ribbon.
 """
 function plot_inc_sense_check(chn, data; n_density_draws::Int = 200)
     t_inf = vector_chain(chn, :T_inf)
@@ -736,7 +772,7 @@ function plot_inc_sense_check(chn, data; n_density_draws::Int = 200)
 end
 
 """
-    plot_prior_predictives(; n = 5000, rng = Random.MersenneTwister(0))
+$(TYPEDSIGNATURES)
 
 Prior-predictive panel: histograms of Inc, δ, and GI/SI drawn from the
 package's independent priors on `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`. Returns a
@@ -749,8 +785,8 @@ tails don't squash the bars; rather than per-facet axis limits, the
 input is pre-clipped to the window for each panel.
 
 # Keyword Arguments
-- `n`: number of prior draws to simulate.
-- and any other keyword arguments forwarded to the panel construction.
+- `n`: number of prior draws per quantity.
+- `rng`: RNG used to draw the prior samples.
 """
 function plot_prior_predictives(; n::Int = 5000,
         rng = Random.MersenneTwister(0))
@@ -787,23 +823,4 @@ function plot_prior_predictives(; n::Int = 5000,
         draw!(fig[1, 1], spec; facet = (linkxaxes = :none, linkyaxes = :none))
         fig
     end
-end
-
-# Saving a Makie figure needs a Makie backend (e.g. CairoMakie) loaded at
-# the call site. Look the `save` method up dynamically so the package
-# itself doesn't depend on a particular backend.
-function _save_makie_figure(fig, path)
-    backend = nothing
-    for name in (:CairoMakie, :GLMakie, :WGLMakie)
-        if isdefined(Main, name)
-            backend = getfield(Main, name)
-            break
-        end
-    end
-    if backend === nothing
-        @warn "No Makie backend loaded in Main; skipping figure save" path
-        return path
-    end
-    Base.invokelatest(backend.save, path, fig; px_per_unit = 2.0)
-    return path
 end
