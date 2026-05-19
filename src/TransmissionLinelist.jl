@@ -25,6 +25,10 @@ using Makie: Makie, Figure, Axis, Legend, Theme, Auto, BarPlot, Hist,
              lines!, scatter!, hist!, hlines!, vlines!, band!,
              barplot!, rangebars!,
              axislegend, rowsize!, colsize!
+# CairoMakie is the default Makie backend so `julia -m TransmissionLinelist`
+# and `using TransmissionLinelist` save figures without the caller having
+# to load a backend explicitly.
+using CairoMakie: CairoMakie
 using Printf: @printf, @sprintf
 using Random: Random
 using Statistics: quantile, mean, std

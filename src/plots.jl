@@ -1,8 +1,8 @@
 ## Package-level plotting and summary-table helpers shared by the analysis
 ## walkthrough and the CLI. Every function returns a Makie `Figure` so the
-## caller decides whether to render inline or write to disk. A Makie backend
-## (e.g. CairoMakie) must be loaded at the call site to render or save
-## figures.
+## caller decides whether to render inline or write to disk. CairoMakie is
+## loaded as the default backend by the top-level module; pass a different
+## Makie backend module via `analyse(; backend = ...)` to override.
 
 # Apply a consistent theme to every figure produced here without mutating
 # the user's global Makie theme.
@@ -224,8 +224,7 @@ end
 $(TYPEDSIGNATURES)
 
 Corner plot of the population scalars `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`, `k`
-via PairPlots.jl. Returns a Makie `Figure` (requires a Makie backend such
-as CairoMakie loaded at the call site).
+via PairPlots.jl. Returns a Makie `Figure`.
 
 # Arguments
 - `chn`: a sampled chain from [`joint_model`](@ref).
@@ -906,4 +905,9 @@ function plot_prior_predictives(; n::Int = 5000,
         draw!(fig[1, 1], spec; facet = (linkxaxes = :none, linkyaxes = :none))
         fig
     end
+end
+
+function _save_figure(fig, path)
+    Makie.save(path, fig; px_per_unit = 2.0)
+    return path
 end

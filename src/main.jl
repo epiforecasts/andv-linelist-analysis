@@ -59,6 +59,9 @@ into `figures/`. Returns `(chain, post)`.
 - `seed`: random seed.
 - `progress`: show a NUTS progress bar.
 - `plots`: skip all figure generation when `false`.
+- `backend`: Makie backend module to activate before saving figures
+  (default `CairoMakie`). Pass e.g. `GLMakie` to override; the caller is
+  responsible for having loaded the module.
 """
 function analyse(;
         data = LINELIST_PATH,
@@ -70,7 +73,8 @@ function analyse(;
         chains = 4,
         seed = 20260508,
         progress = true,
-        plots = true
+        plots = true,
+        backend = CairoMakie
 )
     ll = data isa DataFrame ? data : load_linelist(data)
     if obs_time !== nothing
@@ -93,19 +97,21 @@ function analyse(;
         @warn "plots=false; --figures path ignored" figures
     end
     if plots
+        backend.activate!()
         mkpath(figures)
-        _save_makie_figure(plot_rt(chn; t0 = d.t0, edges = edges),
+        _save_figure(plot_rt(chn; t0 = d.t0, edges = edges),
             joinpath(figures, "Rt.png"))
-        _save_makie_figure(plot_delta_sense_check(chn, d),
+        _save_figure(plot_delta_sense_check(chn, d),
             joinpath(figures, "delta_sense_check.png"))
-        _save_makie_figure(plot_inc_sense_check(chn, d),
+        _save_figure(plot_inc_sense_check(chn, d),
             joinpath(figures, "inc_sense_check.png"))
-        _save_makie_figure(plot_z_ppc(m, chn, d),
+        _save_figure(plot_z_ppc(m, chn, d),
             joinpath(figures, "z_ppc.png"))
-        _save_makie_figure(plot_prior_predictives(), joinpath(figures, "prior_predictives.png"))
-        _save_makie_figure(plot_predictive_distributions(chn),
+        _save_figure(plot_prior_predictives(),
+            joinpath(figures, "prior_predictives.png"))
+        _save_figure(plot_predictive_distributions(chn),
             joinpath(figures, "predictive_distributions.png"))
-        _save_makie_figure(plot_pair(chn), joinpath(figures, "pairplot.png"))
+        _save_figure(plot_pair(chn), joinpath(figures, "pairplot.png"))
     end
 
     return chn, post
