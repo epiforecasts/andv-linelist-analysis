@@ -12,6 +12,7 @@ Manifest.toml
 docs/src/analysis.md
 docs/src/realtime.md
 docs/src/prior_sensitivity.md
+docs/src/intervention.md
 docs/examples/joint_model_source.jl
 
 # Model outputs are regenerable by analyse(); published as release assets
