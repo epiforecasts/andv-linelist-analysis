@@ -204,8 +204,7 @@ end
     plot_pair(chn; thin = 2)
 
 Corner plot of the population scalars `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`, `k`
-via PairPlots.jl. Returns a Makie `Figure` (requires a Makie backend such
-as CairoMakie loaded at the call site).
+via PairPlots.jl. Returns a Makie `Figure`.
 
 # Arguments
 - `chn`: FlexiChain returned by [`sample_fit`](@ref).

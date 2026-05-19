@@ -93,7 +93,8 @@ function analyse(;
         _save_figure(plot_inc_sense_check(chn, d),
             joinpath(figures, "inc_sense_check.png"))
         _save_figure(plot_z_ppc(chn, d), joinpath(figures, "z_ppc.png"))
-        _save_figure(plot_prior_predictives(), joinpath(figures, "prior_predictives.png"))
+        _save_figure(plot_prior_predictives(),
+            joinpath(figures, "prior_predictives.png"))
         _save_figure(plot_predictive_distributions(chn),
             joinpath(figures, "predictive_distributions.png"))
         _save_figure(plot_pair(chn), joinpath(figures, "pairplot.png"))
