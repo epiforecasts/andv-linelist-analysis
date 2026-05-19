@@ -115,9 +115,9 @@ function chain_long(chn, params)
     end
 end
 
-let
+delays_marginals_df = let
     params = [:μ_inc, :σ_inc, :μ_δ, :σ_δ]
-    df = @chain delays_fits begin
+    @chain delays_fits begin
         map(_) do fit
             t = @transform(chain_long(fit.chn_dly_truth, params),
                 :obs_date=string(fit.obs_date),
@@ -129,8 +129,13 @@ let
         end
         reduce(vcat, _)
     end
-    plot_marginal_overlay(df)
-end
+end;
+
+# One 2×2 layout (over `obs_date`) per delay parameter.
+[plot_marginal_overlay(
+     @rsubset(delays_marginals_df, :param == String(p));
+     layout_col = :obs_date, size_kw = (1400, 1100))
+ for p in ["μ_inc", "σ_inc", "μ_δ", "σ_δ"]]
 
 # ## Joint fits
 #
@@ -251,7 +256,7 @@ function post_long(post, params; obs_date, fit)
     return rows
 end
 
-let
+joint_marginals_df = let
     params = [:μ_inc, :σ_inc, :μ_δ, :σ_δ, :k]
     df = @chain joint_fits begin
         map(_) do fit
@@ -274,9 +279,14 @@ let
         @rsubset :param == "k" && isfinite(:value)
         quantile(_.value, 0.99)
     end
-    df_capped = @rsubset(df, :param != "k" || :value <= k_cap)
-    plot_marginal_overlay(df_capped; size_kw = (1900, 1500))
-end
+    @rsubset(df, :param != "k" || :value <= k_cap)
+end;
+
+# One 2×2 layout (over `obs_date`) per joint-fit parameter.
+[plot_marginal_overlay(
+     @rsubset(joint_marginals_df, :param == String(p));
+     layout_col = :obs_date, size_kw = (1400, 1100))
+ for p in ["μ_inc", "σ_inc", "μ_δ", "σ_δ", "k"]]
 
 # ## Controlled-outbreak projection
 #
@@ -304,16 +314,14 @@ end
 
 cutoff_18 = Date("2018-12-31")
 
-controlled = map(joint_fits) do fit
-    strict = predict_controlled_outbreak(
-        fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
+function controlled_predictions(fit; corrected::Bool)
+    strict = predict_controlled_outbreak(fit; corrected = corrected,
         obs_time = fit.obs_date, t0 = t0_ref,
         intervention_time = cutoff_18)
-    at_obs = predict_controlled_outbreak(
-        fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
+    at_obs = predict_controlled_outbreak(fit; corrected = corrected,
         obs_time = fit.obs_date, t0 = t0_ref)
-    natural = predict_natural_chain_outbreak(
-        fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt;
+    natural = predict_natural_chain_outbreak(fit;
+        corrected = corrected,
         obs_time = fit.obs_date, t0 = t0_ref)
     (; fit.obs_date, fit.n_rt,
         strict_samples = strict.future_samples,
@@ -321,7 +329,12 @@ controlled = map(joint_fits) do fit
         natural_samples = natural.future_samples,
         at_obs_per_source = at_obs,
         actual_future = realised_future_count(ll, fit.obs_date))
-end;
+end
+
+controlled = [controlled_predictions(fit; corrected = true)
+              for fit in joint_fits];
+controlled_truth = [controlled_predictions(fit; corrected = false)
+                    for fit in joint_fits];
 
 # Per-source breakdown for the intervention-at-cut-off counterfactual
 # at the latest `obs_date`: shows which sources drive the projected
@@ -329,8 +342,8 @@ end;
 
 per_source_predictive_summary(controlled[end].at_obs_per_source)
 
-controlled_df = let
-    rows = map(controlled) do c
+function controlled_summary_df(pred)
+    rows = map(pred) do c
         s = summarise_predictive(c.strict_samples)
         a = summarise_predictive(c.at_obs_samples)
         n = summarise_predictive(c.natural_samples)
@@ -350,13 +363,25 @@ controlled_df = let
     DataFrame(rows)
 end
 
+controlled_df = controlled_summary_df(controlled)
+
 #-
 
-let
+controlled_df_truth = controlled_summary_df(controlled_truth)
+
+#-
+
+# The histogram below is drawn TWICE: once from the corrected real-time
+# fit (what an analyst would see in real time) and once from the
+# counterfactual retro fit (what a perfect-information analyst with
+# exposure-aware filtering would see). Both use a 2×2 layout over
+# `obs_date` to match the R(t) overlay panel above.
+
+function plot_controlled_hist(pred; size_kw = (1500, 1200))
     kinds = [(:strict_samples, "intervention 2018-12-31"),
         (:at_obs_samples, "intervention at cut-off"),
         (:natural_samples, "no intervention")]
-    df_hist = @chain controlled begin
+    df_hist = @chain pred begin
         mapreduce(vcat, _) do c
             mapreduce(vcat, kinds) do (field, label)
                 DataFrame(panel = string(c.obs_date), kind = label,
@@ -368,22 +393,32 @@ let
         @rsubset :value <= :cap
         @select :panel :kind :value
     end
-    df_vline = @chain controlled begin
+    df_vline = @chain pred begin
         DataFrame(panel = string.(getfield.(_, :obs_date)),
             kind = "realised",
             value = Float64.(getfield.(_, :actual_future)))
     end
     hist_spec = data(df_hist) *
                 mapping(:value => "Future cases";
-                    color = :kind, col = :panel) *
+                    color = :kind, layout = :panel) *
                 visual(Hist; bins = 30, normalization = :pdf, alpha = 0.4)
     vline_spec = data(df_vline) *
-                 mapping(:value; color = :kind, col = :panel) *
+                 mapping(:value; color = :kind, layout = :panel) *
                  visual(VLines; linewidth = 3)
     draw(hist_spec + vline_spec;
         facet = (linkxaxes = :none, linkyaxes = :none),
-        figure = (; size = (1900, 400)))
+        figure = (; size = size_kw))
 end
+
+# Corrected real-time predictive distribution (top).
+plot_controlled_hist(controlled)
+
+#-
+
+# Counterfactual retro predictive distribution (below): same scenarios,
+# but conditioned on the counterfactual retro fit at each cut-off.
+
+plot_controlled_hist(controlled_truth)
 
 # ### Why the Jan 7 predictive is wider than Dec 31, and how Jan 14 tightens
 #

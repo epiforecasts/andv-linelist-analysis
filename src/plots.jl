@@ -840,11 +840,15 @@ columns = `:param`) and the prior sensitivity walkthrough (rows =
 """
 function plot_marginal_overlay(df; size_kw = (1500, 1200),
         row_col::Symbol = :obs_date, col_col::Symbol = :param,
+        layout_col::Union{Nothing, Symbol} = nothing,
         bins::Integer = 30)
-    spec = data(df) *
-           mapping(:value => "value", color = :fit => "fit",
-               row = row_col, col = col_col) *
+    base = data(df) *
            visual(Hist; bins = bins, normalization = :pdf, alpha = 0.4)
+    spec = layout_col === nothing ?
+           base * mapping(:value => "value", color = :fit => "fit",
+        row = row_col, col = col_col) :
+           base * mapping(:value => "value", color = :fit => "fit",
+        layout = layout_col)
     return draw(spec;
         facet = (linkxaxes = :colwise, linkyaxes = :none),
         figure = (; size = size_kw))
