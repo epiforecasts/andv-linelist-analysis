@@ -17,9 +17,11 @@ using TransmissionLinelist
 using Chain
 using DataFrames
 using DataFramesMeta
+using Distributions: LogNormal
 using FlexiChains
 using Printf
 using Random
+using Statistics: quantile
 using CairoMakie
 using AlgebraOfGraphics
 using PairPlots
@@ -120,3 +122,108 @@ plot_z_ppc(model, chn, d)
 # Numeric values for each test statistic — observed, replicated median + 95% CrI, and the two-sided Bayesian posterior-predictive p-value `2 · min(P(T_rep ≥ T_obs), P(T_rep ≤ T_obs))`.
 
 z_ppc_summary(model, chn, d)
+
+# ## Comparison with Martínez et al. 2020
+#
+# The line list used here is hand-encoded from Table S2 of [Martínez et al. 2020](https://doi.org/10.1056/NEJMoa2009040), so the joint model and the source paper are fitted to the same outbreak.
+# The table below places our posterior estimates next to the values that the NEJM paper reports for the same outbreak, with our column built directly from the fitted chain in scope (`chn`).
+# Martínez values are pasted from the abstract and main text of the paper; where the paper does not report a quantity we estimate, the study columns are left as `missing` rather than fabricated.
+# Our `our_80_ci` column is the central 80% credible interval (10th–90th percentile across posterior draws), chosen as a band that is comparable in tail mass to the empirical 9–40 day incubation range reported by the paper.
+
+post = summarise(chn)
+
+inc_median = exp.(post.μ_inc)
+inc_q95 = [quantile(LogNormal(post.μ_inc[i], post.σ_inc[i]), 0.95)
+           for i in eachindex(post.μ_inc)]
+rt_peak = [maximum(exp(post.log_R_chain[b][i])
+           for b in eachindex(post.log_R_chain))
+           for i in eachindex(post.μ_inc)]
+
+q10(x) = quantile(x, 0.1)
+q50(x) = quantile(x, 0.5)
+q90(x) = quantile(x, 0.9)
+fmt2(x) = @sprintf("%.2f", x)
+ci80(x) = string(fmt2(q10(x)), "–", fmt2(q90(x)))
+
+martinez_rows = [
+    (parameter = "Incubation period — median (d)",
+        study_value = "21",
+        study_ci = "range 9–40",
+        our_median = fmt2(q50(inc_median)),
+        our_80_ci = ci80(inc_median),
+        notes = "Martínez reports the empirical median and range of " *
+                "observed incubation periods; our value is the median " *
+                "of the fitted LogNormal."),
+    (parameter = "Incubation period — μ_inc (log-scale mean)",
+        study_value = "missing",
+        study_ci = "missing",
+        our_median = fmt2(q50(post.μ_inc)),
+        our_80_ci = ci80(post.μ_inc),
+        notes = "Martínez does not fit a parametric incubation " *
+                "distribution, so no log-scale mean is reported."),
+    (parameter = "Incubation period — σ_inc (log-scale SD)",
+        study_value = "missing",
+        study_ci = "missing",
+        our_median = fmt2(q50(post.σ_inc)),
+        our_80_ci = ci80(post.σ_inc),
+        notes = "Not reported by Martínez (no parametric " *
+                "distribution fitted)."),
+    (parameter = "Incubation period — 95th percentile (d)",
+        study_value = "missing",
+        study_ci = "missing",
+        our_median = fmt2(q50(inc_q95)),
+        our_80_ci = ci80(inc_q95),
+        notes = "Martínez reports the maximum observed value (40 d) " *
+                "rather than a fitted 95th percentile."),
+    (parameter = "Serial interval — mean (d)",
+        study_value = "missing",
+        study_ci = "missing",
+        our_median = fmt2(q50(post.mean_gi_si)),
+        our_80_ci = ci80(post.mean_gi_si),
+        notes = "Martínez does not report a serial-interval " *
+                "distribution; our SI mean and SD are derived from " *
+                "the joint posterior over δ and the incubation period."),
+    (parameter = "Serial interval — SD (d)",
+        study_value = "missing",
+        study_ci = "missing",
+        our_median = fmt2(q50(post.sd_gi_si)),
+        our_80_ci = ci80(post.sd_gi_si),
+        notes = "As above; GI and SI share the same marginal in this " *
+                "model so the same row covers the generation interval."),
+    (parameter = "Generation interval — mean (d)",
+        study_value = "missing",
+        study_ci = "missing",
+        our_median = fmt2(q50(post.mean_gi_si)),
+        our_80_ci = ci80(post.mean_gi_si),
+        notes = "Martínez does not report a generation-interval " *
+                "distribution."),
+    (parameter = "Offspring dispersion k",
+        study_value = "missing",
+        study_ci = "missing",
+        our_median = fmt2(q50(post.k)),
+        our_80_ci = ci80(post.k),
+        notes = "Martínez identifies three super-spreaders " *
+                "qualitatively but does not fit a Negative-Binomial " *
+                "dispersion."),
+    (parameter = "Maximum R(t) over weekly knots",
+        study_value = "2.12",
+        study_ci = "missing",
+        our_median = fmt2(q50(rt_peak)),
+        our_80_ci = ci80(rt_peak),
+        notes = "Martínez reports a pre-intervention R of 2.12 " *
+                "(falling to 0.96 after isolation); no CI given. " *
+                "Our value is the per-draw maximum of exp(log_R) " *
+                "across weekly knots, so it sits above any single " *
+                "weekly posterior median."),
+    (parameter = "Secondary attack rate",
+        study_value = "missing",
+        study_ci = "missing",
+        our_median = "missing",
+        our_80_ci = "missing",
+        notes = "Martínez describes super-spreading qualitatively " *
+                "without a numeric SAR; our model targets R(t) and " *
+                "k rather than a per-contact attack rate, so neither " *
+                "side reports a comparable value.")
+]
+
+DataFrame(martinez_rows)
