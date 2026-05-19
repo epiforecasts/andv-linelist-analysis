@@ -814,6 +814,45 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Faceted overlay of marginal posterior histograms across fits. Designed for
+side-by-side comparison of multiple chains: one row per value of `row_col`,
+one column per value of `col_col`, with one coloured histogram per `:fit`
+level inside each panel.
+
+`df` must be long-form with at least the columns `:value`, `:fit`, plus
+the `row_col` and `col_col` columns. The histogram is normalised to a
+PDF so overlaid fits with different sample sizes share a y-axis.
+
+Used by the real-time monitoring walkthrough (rows = `:obs_date`,
+columns = `:param`) and the prior sensitivity walkthrough (rows =
+`:scenario`, columns = `:param`).
+
+# Arguments
+- `df`: long-form `DataFrame` of posterior draws.
+
+# Keyword Arguments
+- `size_kw`: figure size tuple passed to AoG's `figure` keyword.
+- `row_col`: name of the column used for the facet rows. Defaults to
+  `:obs_date`.
+- `col_col`: name of the column used for the facet columns. Defaults to
+  `:param`.
+- `bins`: number of histogram bins per panel.
+"""
+function plot_marginal_overlay(df; size_kw = (1500, 1200),
+        row_col::Symbol = :obs_date, col_col::Symbol = :param,
+        bins::Integer = 30)
+    spec = data(df) *
+           mapping(:value => "value", color = :fit => "fit",
+               row = row_col, col = col_col) *
+           visual(Hist; bins = bins, normalization = :pdf, alpha = 0.4)
+    return draw(spec;
+        facet = (linkxaxes = :colwise, linkyaxes = :none),
+        figure = (; size = size_kw))
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Prior-predictive panel: histograms of Inc, δ, and GI/SI drawn from the
 package's independent priors on `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`. Returns a
 `Makie.Figure`.

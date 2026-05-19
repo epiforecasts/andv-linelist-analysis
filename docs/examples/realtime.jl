@@ -102,17 +102,8 @@ end;
 # panel, the right-truncation on Inc and δ alone is enough to recover
 # the population delays from the truncated observations.
 
-# Shared marginal-overlay helper used by both this delays-only plot
-# and the joint-fit version further down.
-function plot_marginal_overlay(df; size_kw = (1500, 1200))
-    spec = data(df) *
-           mapping(:value => "value", color = :fit => "fit",
-               row = :obs_date, col = :param) *
-           visual(Hist; bins = 30, normalization = :pdf, alpha = 0.4)
-    return draw(spec;
-        facet = (linkxaxes = :colwise, linkyaxes = :none),
-        figure = (; size = size_kw))
-end
+# The shared marginal-overlay helper `plot_marginal_overlay` is exported
+# from the package (see `src/plots.jl`).
 
 # Long-form DataFrame of scalar parameter draws from a FlexiChain,
 # selecting on `params` via FlexiChains' VarName indexing.

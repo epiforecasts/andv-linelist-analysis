@@ -7,6 +7,7 @@ using TransmissionLinelist: ConvolvedDelays
 using DifferentiationInterface: AutoMooncake, AutoForwardDiff,
                                 value_and_gradient
 using Mooncake: Mooncake
+using DataFrames: DataFrames
 
 include("test_realtime.jl")
 include("test_recovery.jl")
@@ -88,5 +89,16 @@ end
                       occursin("Keyword Arguments", text)
             end
         end
+    end
+
+    @testset "plot_marginal_overlay returns a figure-grid" begin
+        df = DataFrames.DataFrame(
+            value = vcat(randn(50), randn(50) .+ 1),
+            fit = vcat(fill("a", 50), fill("b", 50)),
+            scenario = fill("s1", 100),
+            param = fill("x", 100))
+        fg = TransmissionLinelist.plot_marginal_overlay(df;
+            row_col = :scenario, col_col = :param)
+        @test fg !== nothing
     end
 end
