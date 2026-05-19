@@ -116,22 +116,38 @@ end
 $(TYPEDSIGNATURES)
 
 Quantile band for R(t) across knots from one posterior.
-Returns a `DataFrame` with one row per bin and columns `bin`, `lo`, `med`,
+Returns a `DataFrame` with one row per knot and columns `bin`, `lo`, `med`,
 `hi` taken from the three quantiles `q` of `exp.(post.log_R_chain[b])`.
+When `t0` is supplied, an additional `:date` column maps each knot to its
+calendar date via `t0 + Day(edges[b])` (using `prepare_rt_edges(t0)` when
+`edges` is not given).
 
 # Arguments
 - `post`: posterior summary named tuple from [`summarise`](@ref).
 
 # Keyword Arguments
 - `q`: three-tuple of lower, central, and upper quantiles.
+- `t0`: time origin (`Date`) for the fit. When supplied, the returned
+  frame includes a `:date` column for plotting on a calendar-date axis.
+- `edges`: knot positions in days from `t0`, as returned by
+  [`prepare_rt_edges`](@ref). Defaults to `prepare_rt_edges(t0)`.
 """
-function rt_band(post; q = (0.1, 0.5, 0.9))
+function rt_band(post; q = (0.1, 0.5, 0.9),
+        t0::Union{Nothing, Date} = nothing,
+        edges::Union{Nothing, AbstractVector} = nothing)
     chain = post.log_R_chain
     bins = collect(eachindex(chain))
     lo = [quantile(exp.(chain[b]), q[1]) for b in bins]
     med = [quantile(exp.(chain[b]), q[2]) for b in bins]
     hi = [quantile(exp.(chain[b]), q[3]) for b in bins]
-    return DataFrame(bin = bins, lo = lo, med = med, hi = hi)
+    df = DataFrame(bin = bins, lo = lo, med = med, hi = hi)
+    if t0 !== nothing
+        e = edges === nothing ? prepare_rt_edges(t0) : edges
+        length(e) >= length(bins) ||
+            error("length(edges)=$(length(e)) < n_knots=$(length(bins))")
+        df.date = Date[t0 + Day(round(Int, e[b])) for b in bins]
+    end
+    return df
 end
 
 """

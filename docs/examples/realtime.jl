@@ -204,19 +204,20 @@ end
 #
 # One panel per `obs_date` with the corrected real-time fit, the
 # counterfactual retrospective, and the full retrospective overlaid.
-# Posterior medians with 80% CrI ribbons. Bin indices are comparable
-# across panels because `t0_ref` is shared.
+# Posterior medians with 80% CrI ribbons. Knot dates are comparable
+# across panels because `t0_ref` is shared; the truncated real-time
+# grids share the same calendar anchor as the full retrospective.
 
 let
     band_rows = DataFrame[]
     for fit in joint_fits
         panel_fits = [
-            ("counterfactual retro", fit.post_truth),
-            ("corrected real-time", fit.post_rt),
-            ("full retrospective", post_retro_full)
+            ("counterfactual retro", fit.post_truth, fit.edges_rt),
+            ("corrected real-time", fit.post_rt, fit.edges_rt),
+            ("full retrospective", post_retro_full, edges_ref)
         ]
-        for (name, post) in panel_fits
-            tbl = rt_band(post)
+        for (name, post, edges) in panel_fits
+            tbl = rt_band(post; t0 = t0_ref, edges = edges)
             tbl.fit .= name
             tbl.obs_date .= string(fit.obs_date)
             push!(band_rows, tbl)
@@ -224,19 +225,21 @@ let
     end
     df = reduce(vcat, band_rows)
     band_spec = data(df) *
-                mapping(:bin => "Bin index",
+                mapping(:date => "Date",
                     :lo => "R(t) (80% CrI)", :hi;
                     color = :fit, layout = :obs_date) *
                 visual(Band; alpha = 0.2)
     line_spec = data(df) *
-                mapping(:bin => "Bin index",
+                mapping(:date => "Date",
                     :med => "R(t) (80% CrI)";
                     color = :fit, layout = :obs_date) *
                 visual(Lines; linewidth = 2)
-    draw(band_spec + line_spec;
-        axis = (; limits = (nothing, (0.0, 4.0))),
+    fg = draw(band_spec + line_spec;
+        axis = (; limits = (nothing, (0.0, 4.0)),
+            xticklabelrotation = π / 6),
         facet = (; linkxaxes = :all, linkyaxes = :all),
         figure = (; size = (1800, 1100)))
+    fg
 end
 
 # ## Population posteriors per cut-off

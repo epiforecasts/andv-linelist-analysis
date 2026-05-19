@@ -94,7 +94,8 @@ function analyse(;
     end
     if plots
         mkpath(figures)
-        _save_makie_figure(plot_rt(chn), joinpath(figures, "Rt.png"))
+        _save_makie_figure(plot_rt(chn; t0 = d.t0, edges = edges),
+            joinpath(figures, "Rt.png"))
         _save_makie_figure(plot_delta_sense_check(chn, d),
             joinpath(figures, "delta_sense_check.png"))
         _save_makie_figure(plot_inc_sense_check(chn, d),

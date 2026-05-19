@@ -378,11 +378,15 @@ $(TYPEDSIGNATURES)
 
 Spaghetti plot of R(t) over the weekly knots. Each thinned posterior draw
 is a piecewise-linear trajectory through `(knot_date[b], exp(log_R[b]))`.
-Knot dates come from `BIN_EDGES` (data.jl). Returns a `Makie.Figure`.
+Returns a `Makie.Figure`.
 
 Per-draw spaghetti is built as a long-form `DataFrame` and drawn via
 AlgebraOfGraphics with `group = :draw`, which is the idiomatic way to
 spell "one line per draw" once the data is tidy.
+
+Knot dates default to `BIN_EDGES` (data.jl). Pass `t0` (with optional
+`edges`) to recover the calendar dates from a real-time fit whose knot
+grid was truncated at the observation cut-off.
 
 # Arguments
 - `chn`: a sampled chain from [`joint_model`](@ref).
@@ -391,28 +395,35 @@ spell "one line per draw" once the data is tidy.
 - `n_draws_plot`: target number of posterior draws to thin to before
   plotting.
 - `ymax`: upper limit of the R(t) y-axis.
+- `t0`: time origin (`Date`) for the fit. When supplied, the x-axis is
+  mapped to calendar dates `t0 + Day(edges[b])`. Defaults to the package
+  retrospective grid `BIN_EDGES`.
+- `edges`: knot positions in days from `t0`, as returned by
+  [`prepare_rt_edges`](@ref). Defaults to `prepare_rt_edges(t0)` when `t0`
+  is supplied.
 """
-function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
+function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0,
+        t0::Union{Nothing, Date} = nothing,
+        edges::Union{Nothing, AbstractVector} = nothing)
     log_R = vector_chain(chn, :log_R)
     n_draws = length(log_R[1])
     step = max(1, n_draws ÷ n_draws_plot)
     idx = collect(1:step:n_draws)
 
-    knot_dates = BIN_EDGES[1:length(log_R)]
-    xs = Float64[Dates.value(d) for d in knot_dates]
+    knot_dates = _knot_dates(length(log_R); t0, edges)
 
     # Long form: one row per (draw, knot). `draw` is the only grouping
     # variable, so AoG draws one piecewise-linear trajectory per draw.
     df = DataFrame(
-        draw = repeat(idx; inner = length(xs)),
-        t = repeat(xs; outer = length(idx)),
+        draw = repeat(idx; inner = length(knot_dates)),
+        date = repeat(knot_dates; outer = length(idx)),
         R = vcat([[exp(log_R[b][d]) for b in eachindex(log_R)] for d in idx]...)
     )
 
     return _with_theme() do
         fig = Figure(; size = (1000, 500))
         spec = data(df) *
-               mapping(:t => "Date of symptom onset",
+               mapping(:date => "Date",
                    :R => "R(t)",
                    group = :draw => nonnumeric) *
                visual(Lines, color = (:steelblue, 0.25), linewidth = 1.6)
@@ -422,14 +433,43 @@ function plot_rt(chn; n_draws_plot::Int = 100, ymax::Real = 4.0)
         ax = only(ag).axis
         hlines!(ax, [1.0]; color = :grey, linestyle = :dash)
 
-        # Date-formatted x ticks.
-        n = length(knot_dates)
-        keep = unique(round.(Int, range(1, n; length = min(n, 7))))
-        ax.xticks = (Dates.value.(knot_dates[keep]),
-            string.(knot_dates[keep]))
-        ax.xticklabelrotation = π / 6
+        _set_date_xticks!(ax, knot_dates)
         fig
     end
+end
+
+# Resolve knot calendar dates for a chain with `n_knots` log_R entries.
+# Priority: explicit `edges` + `t0` → `prepare_rt_edges(t0)` truncated to
+# `n_knots` → `BIN_EDGES[1:n_knots]` (the retrospective default).
+function _knot_dates(n_knots::Int; t0::Union{Nothing, Date} = nothing,
+        edges::Union{Nothing, AbstractVector} = nothing)
+    if edges !== nothing
+        t0 === nothing &&
+            error("`edges` requires `t0` to convert offsets to dates")
+        length(edges) >= n_knots ||
+            error("length(edges)=$(length(edges)) < n_knots=$n_knots")
+        return Date[t0 + Day(round(Int, edges[b])) for b in 1:n_knots]
+    end
+    if t0 !== nothing
+        e = prepare_rt_edges(t0)
+        length(e) >= n_knots ||
+            error("default knot grid has $(length(e)) entries; need $n_knots")
+        return Date[t0 + Day(round(Int, e[b])) for b in 1:n_knots]
+    end
+    return BIN_EDGES[1:n_knots]
+end
+
+# Pin the x-axis ticks to a readable subset of `knot_dates` rendered as
+# ISO date strings. AoG's default Date recipe would print epoch integers
+# here because the underlying values are `Date` numerics; switching to an
+# explicit tick set keeps the rendered labels human-readable.
+function _set_date_xticks!(ax, knot_dates::AbstractVector{Date})
+    n = length(knot_dates)
+    keep = unique(round.(Int, range(1, n; length = min(n, 7))))
+    ax.xticks = (Dates.value.(knot_dates[keep]),
+        string.(knot_dates[keep]))
+    ax.xticklabelrotation = π / 6
+    return ax
 end
 
 """
