@@ -95,7 +95,11 @@ function summarise(chn)
     μ_δ = vec(collect(chn[:μ_δ]));
     σ_δ = vec(collect(chn[:σ_δ]))
     k_s = vec(collect(chn[:k]))
-    σ_rw = vec(collect(chn[:σ_rw]))
+    σ_rw = try
+        vec(collect(chn[:σ_rw]))
+    catch
+        missing
+    end
 
     mean_inc = exp.(μ_inc .+ σ_inc .^ 2 ./ 2)
     var_inc = exp.(2μ_inc .+ σ_inc .^ 2) .* (exp.(σ_inc .^ 2) .- 1)
