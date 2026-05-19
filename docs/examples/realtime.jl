@@ -131,11 +131,8 @@ delays_marginals_df = let
     end
 end;
 
-# One 2×2 layout (over `obs_date`) per delay parameter.
-[plot_marginal_overlay(
-     @rsubset(delays_marginals_df, :param == String(p));
-     layout_col = :obs_date, size_kw = (1400, 1100))
- for p in ["μ_inc", "σ_inc", "μ_δ", "σ_δ"]]
+plot_marginal_overlay(delays_marginals_df;
+    size_kw = (1600, 1300))
 
 # ## Joint fits
 #
@@ -282,11 +279,8 @@ joint_marginals_df = let
     @rsubset(df, :param != "k" || :value <= k_cap)
 end;
 
-# One 2×2 layout (over `obs_date`) per joint-fit parameter.
-[plot_marginal_overlay(
-     @rsubset(joint_marginals_df, :param == String(p));
-     layout_col = :obs_date, size_kw = (1400, 1100))
- for p in ["μ_inc", "σ_inc", "μ_δ", "σ_δ", "k"]]
+plot_marginal_overlay(joint_marginals_df;
+    size_kw = (1800, 1300))
 
 # ## Controlled-outbreak projection
 #
