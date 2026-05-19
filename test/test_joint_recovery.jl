@@ -42,27 +42,11 @@ using Statistics: median, quantile
 using Dates: Date, Day
 using Turing: Turing, DynamicPPL
 
-# Extract simulated offspring counts from the NamedTuple returned by
-# `rand(MersenneTwister(seed), fixed_model)`. `case_model` declares
-# `Z[i] ~ safe_nb(...)` so each sampled `Z[i]` appears under a VarName
-# whose string form is `"Z[i]"`. We match by string to stay decoupled
-# from AbstractPPL's internal VarName API.
-function _extract_Zobs(sim, N::Integer)
-    Z = Vector{Int}(undef, N)
-    seen = falses(N)
-    for (k, v) in pairs(sim)
-        ks = string(k)
-        if startswith(ks, "Z[") && endswith(ks, "]")
-            idx = parse(Int, ks[3:(end - 1)])
-            Z[idx] = Int(v)
-            seen[idx] = true
-        end
-    end
-    all(seen) ||
-        error("rand() returned only $(count(seen))/$N Z values; " *
-              "indices missing: $(findall(!, seen))")
-    return Z
-end
+# Simulated offspring counts come back from
+# `rand(MersenneTwister(seed), fixed_model)` as a NamedTuple keyed by
+# VarName; `TransmissionLinelist.extract_simulated_Zobs` is the
+# package-level helper that turns that NamedTuple into a `Vector{Int}`
+# of length `d.N`.
 
 # Common truth for both retrospective and real-time tests. Modest σ_rw
 # so the simulated outbreak doesn't blow up exponentially over the
@@ -109,7 +93,7 @@ end
         _with_missing_Zobs(d_obs), edges)
     fixed = DynamicPPL.fix(sim_model, _JOINT_TRUTH)
     sim = rand(MersenneTwister(_RECOVERY_SEED), fixed)
-    Z_sim = _extract_Zobs(sim, d_obs.N)
+    Z_sim = TransmissionLinelist.extract_simulated_Zobs(sim, d_obs.N)
 
     # Step 2: refit on the simulated counts and check coverage.
     d_sim = _with_Zobs(d_obs, Z_sim)
@@ -147,7 +131,7 @@ end
         _with_missing_Zobs(d_obs), edges)
     fixed = DynamicPPL.fix(sim_model, _JOINT_TRUTH)
     sim = rand(MersenneTwister(_RECOVERY_SEED), fixed)
-    Z_sim = _extract_Zobs(sim, d_obs.N)
+    Z_sim = TransmissionLinelist.extract_simulated_Zobs(sim, d_obs.N)
 
     # Step 2: refit on the simulated counts. `obs_time` is preserved
     # through `merge`, so the real-time truncation fires during the

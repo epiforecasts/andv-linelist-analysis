@@ -153,6 +153,42 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Extract simulated offspring counts `Zobs` from the NamedTuple returned by
+`rand(rng, fix(joint_model(...), truth))`. `case_model` declares
+`Z[i] ~ safe_nb(...)`, so each sampled `Z[i]` appears under a VarName
+whose string form is `"Z[i]"`. Matching by string form keeps the helper
+decoupled from AbstractPPL's internal VarName API.
+
+Used by simulation-based recovery checks (see the sim-recovery
+walkthrough and `test/test_joint_recovery.jl`) to round-trip a fixed
+truth through the joint generative model and back into a refit.
+
+# Arguments
+- `sim`: NamedTuple of sampled values returned by `rand` on a `fix`-ed
+  `joint_model`.
+- `N`: number of cases in the line list (`d.N`); used to allocate the
+  result and to validate that every `Z[i]` was sampled.
+"""
+function extract_simulated_Zobs(sim, N::Integer)
+    Z = Vector{Int}(undef, N)
+    seen = falses(N)
+    for (k, v) in pairs(sim)
+        ks = string(k)
+        if startswith(ks, "Z[") && endswith(ks, "]")
+            idx = parse(Int, ks[3:(end - 1)])
+            Z[idx] = Int(v)
+            seen[idx] = true
+        end
+    end
+    all(seen) ||
+        error("rand() returned only $(count(seen))/$N Z values; " *
+              "indices missing: $(findall(!, seen))")
+    return Z
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Single-row summary of predictive `samples`.
 Returns a `NamedTuple` `(med, lo, hi, mean)` with `med`, `lo`, `hi`
 taken from the quantiles `q` and rounded to `Int`, and `mean` the raw
