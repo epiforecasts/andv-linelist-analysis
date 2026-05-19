@@ -74,14 +74,18 @@ makedocs(;
     pages = [
         "Home" => "index.md",
         "Model" => "model.md",
-        "Limitations" => "limitations.md",
-        "Analysis walkthrough" => "analysis.md",
-        "Real-time monitoring" => "realtime.md",
-        "Sim recovery" => "sim_recovery.md",
-        "Prior sensitivity" => "prior_sensitivity.md",
-        "Intervention-aware R(t)" => "intervention.md",
-        "Reporting best practices" => "charniga.md",
-        "API Reference" => "api.md"
+        "Walkthroughs" => [
+            "Analysis" => "analysis.md",
+            "Real-time monitoring" => "realtime.md",
+            "Sim recovery" => "sim_recovery.md",
+            "Prior sensitivity" => "prior_sensitivity.md",
+            "Intervention-aware R(t)" => "intervention.md"
+        ],
+        "Reference" => [
+            "Limitations" => "limitations.md",
+            "Reporting best practices" => "charniga.md",
+            "API" => "api.md"
+        ]
     ],
     format = DocumenterVitepress.MarkdownVitepress(;
         repo = "github.com/epiforecasts/andv-linelist-analysis",
