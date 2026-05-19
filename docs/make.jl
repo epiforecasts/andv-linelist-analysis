@@ -42,6 +42,12 @@ Literate.markdown(joinpath(@__DIR__, "examples", "realtime.jl"),
     flavor = Literate.DocumenterFlavor(),
     mdstrings = true, credit = false)
 
+Literate.markdown(joinpath(@__DIR__, "examples", "sim_recovery.jl"),
+    LITERATE_OUT;
+    name = "sim_recovery",
+    flavor = Literate.DocumenterFlavor(),
+    mdstrings = true, credit = false)
+
 Literate.markdown(joinpath(@__DIR__, "examples", "prior_sensitivity.jl"),
     LITERATE_OUT;
     name = "prior_sensitivity",
@@ -71,6 +77,7 @@ makedocs(;
         "Limitations" => "limitations.md",
         "Analysis walkthrough" => "analysis.md",
         "Real-time monitoring" => "realtime.md",
+        "Sim recovery" => "sim_recovery.md",
         "Prior sensitivity" => "prior_sensitivity.md",
         "Intervention-aware R(t)" => "intervention.md",
         "Reporting best practices" => "charniga.md",
