@@ -59,9 +59,6 @@ into `figures/`. Returns `(chain, post)`.
 - `seed`: random seed.
 - `progress`: show a NUTS progress bar.
 - `plots`: skip all figure generation when `false`.
-- `backend`: Makie backend module to activate before saving figures
-  (default `CairoMakie`). Pass e.g. `GLMakie` to override; the caller is
-  responsible for having loaded the module.
 """
 function analyse(;
         data = LINELIST_PATH,
@@ -73,8 +70,7 @@ function analyse(;
         chains = 4,
         seed = 20260508,
         progress = true,
-        plots = true,
-        backend = CairoMakie
+        plots = true
 )
     ll = data isa DataFrame ? data : load_linelist(data)
     if obs_time !== nothing
@@ -97,7 +93,6 @@ function analyse(;
         @warn "plots=false; --figures path ignored" figures
     end
     if plots
-        backend.activate!()
         mkpath(figures)
         _save_figure(plot_rt(chn; t0 = d.t0, edges = edges),
             joinpath(figures, "Rt.png"))

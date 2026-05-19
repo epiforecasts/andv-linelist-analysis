@@ -1,33 +1,13 @@
 ## Package-level plotting and summary-table helpers shared by the analysis
 ## walkthrough and the CLI. Every function returns a Makie `Figure` so the
 ## caller decides whether to render inline or write to disk. CairoMakie is
-## loaded as the default backend by the top-level module; pass a different
-## Makie backend module via `analyse(; backend = ...)` to override.
+## loaded as the default backend by the top-level module.
 
 # Apply a consistent theme to every figure produced here without mutating
 # the user's global Makie theme.
 _default_theme() = merge(theme_latexfonts(), Theme(fontsize = 12))
 
 _with_theme(f) = with_theme(f, _default_theme())
-
-# Saving a Makie figure needs a Makie backend (e.g. CairoMakie) loaded
-# at the call site. Look up `save` dynamically so the package itself
-# doesn't depend on a particular backend.
-function _save_makie_figure(fig, path)
-    backend = nothing
-    for name in (:CairoMakie, :GLMakie, :WGLMakie)
-        if isdefined(Main, name)
-            backend = getfield(Main, name)
-            break
-        end
-    end
-    if backend === nothing
-        @warn "No Makie backend loaded in Main; skipping figure save" path
-        return path
-    end
-    Base.invokelatest(backend.save, path, fig; px_per_unit = 2.0)
-    return path
-end
 
 """
 $(TYPEDSIGNATURES)
