@@ -114,15 +114,12 @@ function plot_marginal_overlay(df; size_kw = (1500, 1200))
         figure = (; size = size_kw))
 end
 
-# Long-form DataFrame of scalar parameter draws from a FlexiChain.
-# Pulls every iter / chain / param via `FlexiChains.Long`, then keeps
-# only the requested scalar parameter names.
+# Long-form DataFrame of scalar parameter draws from a FlexiChain,
+# selecting on `params` via FlexiChains' VarName indexing.
 function chain_long(chn, params)
-    wanted = Set(params)
-    @chain DataFrame(FlexiChains.Long(chn)) begin
-        @rtransform :param_sym = DynamicPPL.getsym(:param)
-        @rsubset :param_sym in wanted
-        @rtransform :param = String(:param_sym)
+    vns = [DynamicPPL.VarName{p}() for p in params]
+    @chain DataFrame(FlexiChains.Long(chn[vns])) begin
+        @rtransform :param = String(DynamicPPL.getsym(:param))
         @select :iter :chain :param :value
     end
 end
@@ -182,10 +179,8 @@ end;
 # `case_model` half of the likelihood.
 
 function diag_row(chn, obs_date, fit_kind, n_cases)
-    d = first(diagnostics_table(chn))
-    return (; obs_date, fit_kind, N_cases = n_cases,
-        rhat_max = d.rhat_max, n_divergent = d.divergences,
-        wall_sec = d.runtime_seconds)
+    merge((; obs_date, fit_kind, N_cases = n_cases),
+        first(diagnostics_table(chn)))
 end
 
 diag_df = let
@@ -231,16 +226,17 @@ let
     band_spec = data(df) *
                 mapping(:bin => "Bin index",
                     :lo => "R(t) (80% CrI)", :hi;
-                    color = :fit, col = :obs_date) *
+                    color = :fit, layout = :obs_date) *
                 visual(Band; alpha = 0.2)
     line_spec = data(df) *
                 mapping(:bin => "Bin index",
                     :med => "R(t) (80% CrI)";
-                    color = :fit, col = :obs_date) *
+                    color = :fit, layout = :obs_date) *
                 visual(Lines; linewidth = 2)
     draw(band_spec + line_spec;
         axis = (; limits = (nothing, (0.0, 4.0))),
-        figure = (; size = (1900, 500)))
+        facet = (; linkxaxes = :all, linkyaxes = :all),
+        figure = (; size = (1800, 1100)))
 end
 
 # ## Population posteriors per cut-off
