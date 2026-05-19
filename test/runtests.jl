@@ -12,6 +12,7 @@ using DataFrames: DataFrames
 include("test_realtime.jl")
 include("test_recovery.jl")
 include("test_submodel_recovery.jl")
+include("test_joint_recovery.jl")
 include("test_jet.jl")
 
 @testset "Aqua.jl meta-tests" begin
