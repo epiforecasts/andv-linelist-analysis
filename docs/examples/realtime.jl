@@ -10,12 +10,8 @@
 # The real-time machinery in `joint_model` corrects for these via per-case right-truncation on Inc and δ and an offspring-completeness adjustment on the NB offspring count, expressed as the cdf of the [`ConvolvedDelays`](@ref) distribution `δ + Inc(sec)`.
 # The adjustment is the probability that an offspring's chain has completed by the cut-off, conditional on the source's onset time.
 # The argument is `obs_time − T_onset[src]`, not `obs_time − T_inf[src]` — the source's own incubation is a sampled latent already scored, so the offspring delay reduces to `δ + Inc(sec)`.
-# This page validates the corrections by fitting the same outbreak at three real-time cut-offs and overlaying the resulting R(t) posteriors and population marginals against a counterfactual retrospective and the full closed-out fit.
+# This page validates the corrections by fitting the same outbreak at four real-time cut-offs and overlaying the resulting R(t) posteriors and population marginals against a counterfactual retrospective and the full closed-out fit.
 # It also runs a **delays-only diagnostic** at each cut-off — fitting just the incubation and δ submodels — so that if the full joint fit collapses, we can tell whether the pathology lives in the delay submodels or in the R(t) / `case_model` half of the likelihood.
-#
-# The workflow is sequenced so the delays-only fits at each cut-off are inspected first.
-# If the delay submodels diverge at a cut-off, the joint fit is hopeless and the reader can stop there.
-# Only once the delay parameters look well-identified does the page move on to the joint fits and their downstream diagnostics, R(t) overlays, population marginals, and controlled-outbreak projection.
 #
 # Real-time-specific caveats are listed in the [Limitations page](limitations.md)
 # under the "Real-time fitting caveats" heading.
@@ -23,30 +19,36 @@
 using TransmissionLinelist
 using AlgebraOfGraphics: data, mapping, visual, draw
 using DataFrames: DataFrame, nrow
+using DataFramesMeta: @chain, @rtransform, @rsubset, @select, @transform,
+                      @combine, @subset
 using Dates: Dates, Date, Day
 using Random
 using Statistics: quantile
 using CairoMakie
 using CairoMakie: Band, Lines, Hist, VLines
+using FlexiChains: FlexiChains
+using Turing: DynamicPPL
 using Logging: Logging
 
 Random.seed!(20260512)
-# Silence the NUTS "Found initial step size" Info logs that would
-# otherwise clutter the rendered example output.
+## Silence the NUTS "Found initial step size" Info logs that would
+## otherwise clutter the rendered example output.
 Logging.disable_logging(Logging.Info)
 
 # ## Setup
 #
-# Three cut-offs are used: 31 December 2018 (about three weeks into the
-# outbreak), 7 January 2019, and 14 January 2019.
+# Four cut-offs are used: 31 December 2018 (about three weeks into the
+# outbreak), 7 January 2019, 14 January 2019, and 21 January 2019.
 # Together they show successive stages of inference as the
 # offspring-completeness window expands: at Dec 31 most late-December
 # sources have had little time to seed offspring; at Jan 7 the
 # completeness factor for those sources has begun to fill in; by
-# Jan 14 the late-December chains have largely played out, so R(t) at
-# the late-December knots should sharpen toward the retrospective.
+# Jan 14 the late-December chains have largely played out; and by
+# Jan 21 the early-January chains have also matured, so R(t) at
+# those knots should sharpen toward the retrospective.
 
-obs_dates = [Date("2018-12-31"), Date("2019-01-07"), Date("2019-01-14")]
+obs_dates = [Date("2018-12-31"), Date("2019-01-07"),
+    Date("2019-01-14"), Date("2019-01-21")]
 ll = load_linelist();
 t0_ref = minimum(ll.onset_date) - Day(60)
 edges_ref = prepare_rt_edges(t0_ref)
@@ -87,11 +89,9 @@ preps = [prepare_at(ll, obs_date) for obs_date in obs_dates];
 # no chance.
 
 delays_fits = map(preps) do prep
-    chn_dly_truth = sample_fit(delays_only_model(prep.d_truth);
-        seed = seed)
-    chn_dly_rt = sample_fit(delays_only_model(prep.d_rt);
-        seed = seed)
-    merge(prep, (; chn_dly_truth, chn_dly_rt))
+    fit_dly(d) = sample_fit(delays_only_model(d); seed = seed)
+    merge(prep, (; chn_dly_truth = fit_dly(prep.d_truth),
+        chn_dly_rt = fit_dly(prep.d_rt)))
 end;
 
 # ## Delays-only population posteriors per cut-off
@@ -103,9 +103,8 @@ end;
 # the population delays from the truncated observations.
 
 # Shared marginal-overlay helper used by both this delays-only plot
-# and the joint-fit version further down. AlgebraOfGraphics spec with
-# per-column free x-axis so each parameter's scale is its own.
-function plot_marginal_overlay(df; size_kw = (1500, 950))
+# and the joint-fit version further down.
+function plot_marginal_overlay(df; size_kw = (1500, 1200))
     spec = data(df) *
            mapping(:value => "value", color = :fit => "fit",
                row = :obs_date, col = :param) *
@@ -115,24 +114,34 @@ function plot_marginal_overlay(df; size_kw = (1500, 950))
         figure = (; size = size_kw))
 end
 
+# Long-form DataFrame of scalar parameter draws from a FlexiChain.
+# Pulls every iter / chain / param via `FlexiChains.Long`, then keeps
+# only the requested scalar parameter names.
+function chain_long(chn, params)
+    wanted = Set(params)
+    @chain DataFrame(FlexiChains.Long(chn)) begin
+        @rtransform :param_sym = DynamicPPL.getsym(:param)
+        @rsubset :param_sym in wanted
+        @rtransform :param = String(:param_sym)
+        @select :iter :chain :param :value
+    end
+end
+
 let
     params = [:μ_inc, :σ_inc, :μ_δ, :σ_δ]
-    rows = NamedTuple[]
-    for fit in delays_fits
-        row_fits = [
-            ("counterfactual retro", fit.chn_dly_truth),
-            ("corrected real-time", fit.chn_dly_rt)
-        ]
-        for (name, chn) in row_fits, p in params
-
-            for v in vec(collect(chn[p]))
-                push!(rows,
-                    (obs_date = string(fit.obs_date),
-                        fit = name, param = String(p), value = v))
-            end
+    df = @chain delays_fits begin
+        map(_) do fit
+            t = @transform(chain_long(fit.chn_dly_truth, params),
+                :obs_date=string(fit.obs_date),
+                :fit="counterfactual retro")
+            r = @transform(chain_long(fit.chn_dly_rt, params),
+                :obs_date=string(fit.obs_date),
+                :fit="corrected real-time")
+            vcat(t, r)
         end
+        reduce(vcat, _)
     end
-    plot_marginal_overlay(DataFrame(rows))
+    plot_marginal_overlay(df)
 end
 
 # ## Joint fits
@@ -152,12 +161,13 @@ chn_retro_full = sample_fit(joint_model(d_retro, edges_ref);
 post_retro_full = summarise(chn_retro_full);
 
 joint_fits = map(delays_fits) do prep
-    m_truth = joint_model(prep.d_truth, prep.edges_rt)
-    m_rt = joint_model(prep.d_rt, prep.edges_rt)
-    chn_truth = sample_fit(m_truth; seed = seed)
-    chn_rt = sample_fit(m_rt; seed = seed)
+    fit_jnt(d) = sample_fit(joint_model(d, prep.edges_rt); seed = seed)
+    chn_truth = fit_jnt(prep.d_truth)
+    chn_rt = fit_jnt(prep.d_rt)
     merge(prep,
-        (; m_truth, m_rt, chn_truth, chn_rt,
+        (; m_truth = joint_model(prep.d_truth, prep.edges_rt),
+            m_rt = joint_model(prep.d_rt, prep.edges_rt),
+            chn_truth, chn_rt,
             post_truth = summarise(chn_truth),
             post_rt = summarise(chn_rt)))
 end;
@@ -173,32 +183,26 @@ end;
 
 function diag_row(chn, obs_date, fit_kind, n_cases)
     d = first(diagnostics_table(chn))
-    return merge((; obs_date, fit_kind, N_cases = n_cases),
-        (; rhat_max = d.rhat_max,
-            n_divergent = d.divergences,
-            wall_sec = d.runtime_seconds))
+    return (; obs_date, fit_kind, N_cases = n_cases,
+        rhat_max = d.rhat_max, n_divergent = d.divergences,
+        wall_sec = d.runtime_seconds)
 end
 
 diag_df = let
-    rows = NamedTuple[]
-    push!(rows,
-        diag_row(chn_retro_full, missing,
-            "full retro (joint)", nrow(ll)))
-    for (dly, jnt) in zip(delays_fits, joint_fits)
-        push!(rows,
+    full = [diag_row(chn_retro_full, missing,
+        "full retro (joint)", nrow(ll))]
+    per_cut = mapreduce(vcat, zip(delays_fits, joint_fits)) do (dly, jnt)
+        [
             diag_row(dly.chn_dly_truth, dly.obs_date,
-                "retro (delays only)", dly.n_truth))
-        push!(rows,
+                "retro (delays only)", dly.n_truth),
             diag_row(dly.chn_dly_rt, dly.obs_date,
-                "realtime (delays only)", dly.n_rt))
-        push!(rows,
+                "realtime (delays only)", dly.n_rt),
             diag_row(jnt.chn_truth, jnt.obs_date,
-                "retro (joint)", jnt.n_truth))
-        push!(rows,
+                "retro (joint)", jnt.n_truth),
             diag_row(jnt.chn_rt, jnt.obs_date,
-                "realtime (joint)", jnt.n_rt))
+                "realtime (joint)", jnt.n_rt)]
     end
-    DataFrame(rows)
+    DataFrame(vcat(full, per_cut))
 end
 
 # ## R(t) per cut-off
@@ -236,7 +240,7 @@ let
                 visual(Lines; linewidth = 2)
     draw(band_spec + line_spec;
         axis = (; limits = (nothing, (0.0, 4.0))),
-        figure = (; size = (1500, 500)))
+        figure = (; size = (1900, 500)))
 end
 
 # ## Population posteriors per cut-off
@@ -246,36 +250,42 @@ end
 # the counterfactual retro density on each panel, the corrections are
 # recovering the population from the truncated observations.
 
+# Long-form DataFrame of scalar parameter draws from a `summarise`
+# posterior NamedTuple (one Vector{Float64} per param).
+function post_long(post, params; obs_date, fit)
+    rows = mapreduce(vcat, params) do p
+        vals = getproperty(post, p)
+        DataFrame(obs_date = string(obs_date), fit = fit,
+            param = String(p), value = collect(vals))
+    end
+    return rows
+end
+
 let
     params = [:μ_inc, :σ_inc, :μ_δ, :σ_δ, :k]
+    df = @chain joint_fits begin
+        map(_) do fit
+            vcat(
+                post_long(fit.post_truth, params;
+                    obs_date = fit.obs_date,
+                    fit = "counterfactual retro"),
+                post_long(fit.post_rt, params;
+                    obs_date = fit.obs_date,
+                    fit = "corrected real-time"),
+                post_long(post_retro_full, params;
+                    obs_date = fit.obs_date,
+                    fit = "full retrospective"))
+        end
+        reduce(vcat, _)
+    end
     ## Cap `k` at its 99% quantile (pooled across fits) so the long
     ## right tail doesn't compress the other panels visually.
-    all_k = Float64[]
-    for fit in joint_fits,
-        post in
-        (fit.post_truth, fit.post_rt, post_retro_full)
-
-        append!(all_k, getproperty(post, :k))
+    k_cap = @chain df begin
+        @rsubset :param == "k" && isfinite(:value)
+        quantile(_.value, 0.99)
     end
-    k_cap = quantile(filter(!isnan, all_k), 0.99)
-    rows = NamedTuple[]
-    for fit in joint_fits
-        row_fits = [
-            ("counterfactual retro", fit.post_truth),
-            ("corrected real-time", fit.post_rt),
-            ("full retrospective", post_retro_full)
-        ]
-        for (name, post) in row_fits, p in params
-
-            for v in getproperty(post, p)
-                p === :k && v > k_cap && continue
-                push!(rows,
-                    (obs_date = string(fit.obs_date),
-                        fit = name, param = String(p), value = v))
-            end
-        end
-    end
-    plot_marginal_overlay(DataFrame(rows); size_kw = (1500, 1200))
+    df_capped = @rsubset(df, :param != "k" || :value <= k_cap)
+    plot_marginal_overlay(df_capped; size_kw = (1900, 1500))
 end
 
 # ## Controlled-outbreak projection
@@ -321,11 +331,6 @@ end
 # `Vector{Date}` derived from `ll_rt.onset_date`. We do not have
 # direct evidence of per-case isolation in the Epuyén outbreak so we
 # do not run this scenario here, but the API supports it.
-
-# `predict_*_outbreak` is pure in the fit (model + chain + posterior +
-# the `d` it was fit on). The realised future count comes from a
-# separate call to `realised_future_count(ll, obs_date)`, so the
-# comparator is decoupled from the prediction.
 
 cutoff_18 = Date("2018-12-31")
 
@@ -424,7 +429,7 @@ let
                  visual(VLines; linewidth = 3)
     draw(hist_spec + vline_spec;
         facet = (linkxaxes = :none, linkyaxes = :none),
-        figure = (; size = (1500, 400)))
+        figure = (; size = (1900, 400)))
 end
 
 # ### Why the Jan 7 predictive is wider than Dec 31, and how Jan 14 tightens
@@ -445,6 +450,8 @@ end
 # per-source rate more tightly and the predictive distribution
 # narrows even though the late-cut-off sources themselves remain
 # pipeline-heavy.
+# By Jan 21 the same is true of the early-January cohort, so the
+# predictive tightens further toward the realised count.
 #
 # ### Why the upper tail is wide even under the strict counterfactual
 #
