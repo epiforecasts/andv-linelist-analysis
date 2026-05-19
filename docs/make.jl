@@ -59,6 +59,7 @@ makedocs(;
         "Limitations" => "limitations.md",
         "Analysis walkthrough" => "analysis.md",
         "Real-time monitoring" => "realtime.md",
+        "Reporting best practices" => "charniga.md",
         "API Reference" => "api.md"
     ],
     format = DocumenterVitepress.MarkdownVitepress(;
