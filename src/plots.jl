@@ -1,8 +1,8 @@
 ## Package-level plotting and summary-table helpers shared by the analysis
 ## walkthrough and the CLI. Every function returns a Makie `Figure` so the
-## caller decides whether to render inline or write to disk. A Makie backend
-## (e.g. CairoMakie) must be loaded at the call site to render or save
-## figures.
+## caller decides whether to render inline or write to disk. CairoMakie is
+## loaded as the default backend by the top-level module; pass a different
+## Makie backend module via `analyse(; backend = ...)` to override.
 
 # Apply a consistent theme to every figure produced here without mutating
 # the user's global Makie theme.
@@ -789,21 +789,7 @@ function plot_prior_predictives(; n::Int = 5000,
     end
 end
 
-# Saving a Makie figure needs a Makie backend (e.g. CairoMakie) loaded at
-# the call site. Look the `save` method up dynamically so the package
-# itself doesn't depend on a particular backend.
-function _save_makie_figure(fig, path)
-    backend = nothing
-    for name in (:CairoMakie, :GLMakie, :WGLMakie)
-        if isdefined(Main, name)
-            backend = getfield(Main, name)
-            break
-        end
-    end
-    if backend === nothing
-        @warn "No Makie backend loaded in Main; skipping figure save" path
-        return path
-    end
-    Base.invokelatest(backend.save, path, fig; px_per_unit = 2.0)
+function _save_figure(fig, path)
+    Makie.save(path, fig; px_per_unit = 2.0)
     return path
 end
