@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish results
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+      - name: Instantiate project
+        run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - name: Run analysis
+        run: julia --project=. -t auto -m TransmissionLinelist
+      - name: Bundle results
+        run: |
+          set -euo pipefail
+          for d in output figures; do
+            if [ ! -d "$d" ] || [ -z "$(ls -A "$d")" ]; then
+              echo "::error::expected directory '$d' is missing or empty after analyse()"
+              exit 1
+            fi
+          done
+          mkdir -p release-bundle
+          cp -r output figures release-bundle/
+          (cd release-bundle && zip -r ../results.zip .)
+      - name: Publish rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: main-latest
+          name: "Latest main results"
+          body: |
+            Posterior and figures regenerated from `analyse()` at ${{ github.sha }}.
+
+            Rolling release — overwritten on every push to `main`.
+            For a rendered walkthrough see
+            https://epiforecasts.io/andv-linelist-analysis/dev/analysis.
+          files: results.zip
+          make_latest: 'false'
+          draft: false
+          prerelease: false
