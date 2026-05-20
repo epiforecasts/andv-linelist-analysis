@@ -76,6 +76,15 @@ diagnostics_table(chn)
 
 summary_table(chn)
 
+# ## Offspring counts over time
+#
+# Each case is plotted at its observed offspring count `Z` (with small vertical jitter to break ties) against time.
+# Thin segments are posterior draws of the latent infection time `T_inf` joined to the latent onset time `T_onset`; filled dots are the posterior medians of `T_inf` and hollow dots the medians of `T_onset`.
+# Index and sourced cases are coloured separately.
+# This is a direct view of what the model has to explain before R(t) enters the picture.
+
+plot_z_dumbbell(chn, d)
+
 # ## R(t) over weekly knots
 #
 # Spaghetti of thinned posterior draws through the weekly knots (linearly interpolated); reverts to the prior in late-January knots where cases are thin (see Limitations).
