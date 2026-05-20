@@ -468,7 +468,7 @@ function plot_z_dumbbell(chn, d; n_draws_plot::Int = 60,
             for j in 1:step:n_post
                 lines!(ax,
                     [Dates.value(to_date(t_inf[i][j])),
-                     Dates.value(to_date(t_onset[i][j]))],
+                        Dates.value(to_date(t_onset[i][j]))],
                     [ycenter, ycenter];
                     color = (col, 0.08), linewidth = 1.0)
             end
@@ -501,8 +501,8 @@ function plot_z_dumbbell(chn, d; n_draws_plot::Int = 60,
         ]
         axislegend(ax, legend_elems,
             ["Index case — date infected",
-             "Onward case — date infected",
-             "Date of symptom onset"];
+                "Onward case — date infected",
+                "Date of symptom onset"];
             position = :rt)
         fig
     end
