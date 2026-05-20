@@ -444,7 +444,7 @@ function plot_z_dumbbell(chn, d; n_draws_plot::Int = 60,
     return _with_theme() do
         fig = Figure(; size = (1000, 520))
         ax = Axis(fig[1, 1];
-            title = "Offspring counts over time",
+            title = "Observed offspring counts over time",
             subtitle = "Each case gets $n_draws_plot thin posterior draws of " *
                        "(T_inf, T_onset). Wide smear = uncertain timing.",
             xlabel = "Date",
