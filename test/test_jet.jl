@@ -94,10 +94,14 @@ const _REPORT_OPT_CALLS = [
                 Tuple{Float64, Float64, Vector{Float64},
                     Normal{Float64}, Normal{Float64}}})),
     # Predictive draw used inside the per-source future-onset loop.
-    (TransmissionLinelist.posterior_predictive,
+    (TransmissionLinelist.predict_future_offspring,
         (typeof(TransmissionLinelist.case_model),
             MersenneTwister, Float64, Int,
             Float64, Float64, Float64)),
+    # Posterior-predictive replication used inside `_z_ppc_replicate`.
+    (TransmissionLinelist.replicate_offspring,
+        (typeof(TransmissionLinelist.case_model),
+            MersenneTwister, Float64, Float64, Float64)),
     # Post-processing helpers.
     (TransmissionLinelist.qci, (Vector{Float64},)),
     (TransmissionLinelist.summarise_predictive, (Vector{Float64},)),

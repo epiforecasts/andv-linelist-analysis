@@ -166,13 +166,20 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Posterior-predictive draw for a single case under the [`case_model`](@ref)
-negative-binomial likelihood. Uses the Gamma-Poisson conjugate structure
-of NB: `λ ~ Gamma(k + Z_obs, R / (k + R · p_i))`, then
-`Poisson(λ · prob)`. Real-time predictors dispatch on the joint
+Predict the number of *future* offspring from a source case under the
+[`case_model`](@ref) likelihood. The Gamma posterior on the source's
+latent rate `λ` conditional on the `Z_obs` already-attributed offspring
+(with completion probability `p_i`) is
+`λ | Z_obs ~ Gamma(k + Z_obs, R / (k + R · p_i))`, and the future count
+is then `Poisson(λ · prob)`. Real-time predictors dispatch on the joint
 model's observation-submodel constructor (`model.defaults.cases`) so
-alternative obs models (e.g. Poisson, beta-binomial) can supply their
-own `posterior_predictive` methods without editing the predictor.
+alternative obs models can supply their own methods without editing the
+predictor.
+
+This is **not** the posterior-predictive replication used by
+[`plot_z_ppc`](@ref); for that, see [`replicate_offspring`](@ref), which
+draws a fresh `Z_rep` from the likelihood at the chain's `(k, R)` draw
+without conditioning on `Z_obs`.
 
 # Arguments
 - `cases_sub`: the observation-submodel constructor stored on
@@ -185,10 +192,39 @@ own `posterior_predictive` methods without editing the predictor.
 - `prob`: per-source future-onset thinning probability (e.g.
   `q_i − p_i` for the controlled counterfactual).
 """
-function posterior_predictive(::typeof(case_model),
+function predict_future_offspring(::typeof(case_model),
         rng, k, Z_obs, R, p_i, prob)
     λ = rand(rng, Gamma(k + Z_obs, R / (k + R * p_i)))
     return rand(rng, Poisson(λ * prob))
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Draw a fresh offspring count `Z_rep` from the [`case_model`](@ref)
+likelihood `safe_nb(k, R · p_i)` for a single source at a posterior
+draw of `(k, R, p_i)`. Used by [`plot_z_ppc`](@ref) and
+[`z_ppc_summary`](@ref) for posterior-predictive checking; `p_i = 1`
+recovers the retrospective NB(k, R) likelihood, while real-time mode
+applies the offspring-completeness thinning `R · p_i` to match the
+fitted likelihood.
+
+Unlike [`predict_future_offspring`](@ref), this draw does **not**
+condition on the source's observed count — `Z_obs` already informs the
+posterior on `(k, R)` through the chain, and a PPC replicates from
+`p(Z | θ)` at posterior draws of `θ`, not from `p(Z | θ, Z_obs)`.
+
+# Arguments
+- `cases_sub`: the observation-submodel constructor stored on
+  `joint_model`'s defaults; here `typeof(case_model)`.
+- `rng`: RNG used for the NB draw.
+- `k`: per-draw NB dispersion `k`.
+- `R`: per-source rate `R_i = exp(log_R_at(T_onset_i, edges, log_R))`.
+- `p_i`: offspring-completeness probability for this source; `1.0` in
+  retrospective mode.
+"""
+function replicate_offspring(::typeof(case_model), rng, k, R, p_i)
+    return rand(rng, safe_nb(k, R * p_i))
 end
 
 """
@@ -358,7 +394,8 @@ surfaced via `:=` from inside `case_model`.
 - `cases`: observation-submodel constructor invoked as
   `cases(d.Zobs, edges, delays.T_onset, delays.p; rt, dispersion)`.
   Defaults to [`case_model`](@ref). Exposed on `model.defaults.cases`
-  so real-time predictors can dispatch [`posterior_predictive`](@ref)
+  so real-time predictors and the PPC dispatch
+  [`predict_future_offspring`](@ref) and [`replicate_offspring`](@ref)
   on the obs submodel.
 """
 @model function joint_model(d, edges;

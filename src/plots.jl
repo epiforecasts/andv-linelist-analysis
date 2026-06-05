@@ -326,8 +326,8 @@ function plot_predictive_distributions(chn; rng = Random.MersenneTwister(1))
 
         local last_inferred = nothing
         local last_pred = nothing
-        for (k, (title, xs, dists, samps, xlabel)) in
-            enumerate(parametric_panels)
+        for (k,
+            (title, xs, dists, samps, xlabel)) in enumerate(parametric_panels)
             row, col = fldmod1(k, 2)
             ax = Axis(fig[row, col]; title = title, xlabel = xlabel,
                 ylabel = "density",
@@ -516,10 +516,13 @@ end
 
 Posterior-predictive check for the observed offspring counts `Zobs`. For
 each posterior draw `d` and each case `i`, samples a replicated offspring
-count via [`posterior_predictive`](@ref) dispatched on
+count via [`replicate_offspring`](@ref) dispatched on
 `model.defaults.cases`. For the default [`case_model`](@ref) this is
-`Z_rep[i, d] ~ NegativeBinomial(k[d], k[d]/(k[d] + R_i))`, where
-`R_i = exp(log_R_at(T_onset[i, d], edges, log_R[:, d]))`.
+`Z_rep[i, d] ~ NegativeBinomial(k[d], k[d]/(k[d] + R_eff))`, where
+`R_eff = R_i · p_i` with `R_i = exp(log_R_at(T_onset[i, d], edges, log_R[:, d]))`
+and `p_i = cdf(ConvolvedDelays(inc, δ), obs_time − T_onset[i])` in
+real-time mode (`p_i = 1` retrospectively), matching the
+`case_model` likelihood.
 
 Joint-draw: `T_onset[i]`, `log_R[:]`, and `k` are taken from the same
 posterior draw, so the PPC reflects full posterior uncertainty in case
@@ -542,22 +545,30 @@ Returns a `Makie.Figure`.
 # Joint-draw posterior-predictive replication of Z. Returns an
 # `(n_draws × N)` matrix where each row is one replicated line list under
 # the model's Negative-Binomial likelihood, using the same draw of
-# `(T_inf, log_R, k)`. Dispatches `posterior_predictive` on
+# `(T_inf, log_R, k)`. Dispatches `replicate_offspring` on
 # `model.defaults.cases` so alternative obs submodels are honoured.
+# In real-time mode (`d.obs_time !== nothing`), the per-case
+# offspring-completeness `p_i = cdf(ConvolvedDelays(inc, δ), obs_time − T_onset)`
+# is computed per draw from `model.defaults.{incubation, transmission}`
+# and applied as `R_eff = R · p_i`, matching the likelihood in
+# `case_model`.
 function _z_ppc_replicate(model, chn, d; rng = Random.MersenneTwister(1),
         edges = nothing)
-    k_draws = _draws(chn, :k)
     log_R = vector_chain(chn, :log_R)
+    knots = edges === nothing ?
+            prepare_rt_edges(d.t0)[1:length(log_R)] : edges
+    if d.obs_time === nothing
+        return _z_ppc_replicate_retro(model, chn, d, knots, log_R, rng)
+    end
+    return _z_ppc_replicate_realtime(model, chn, d, knots, log_R, rng)
+end
+
+function _z_ppc_replicate_retro(model, chn, d, knots, log_R, rng)
+    cases_sub = model.defaults.cases
+    k_draws = _draws(chn, :k)
     t_onset = vector_chain(chn, :T_onset)
     n_draws = length(k_draws)
     N = d.N
-    Zobs = d.Zobs
-
-    knots = edges === nothing ?
-            prepare_rt_edges(d.t0)[1:length(log_R)] : edges
-
-    cases_sub = model.defaults.cases
-
     Z_rep = Matrix{Int}(undef, n_draws, N)
     for d_idx in 1:n_draws
         logR_d = [log_R[b][d_idx] for b in eachindex(log_R)]
@@ -565,8 +576,39 @@ function _z_ppc_replicate(model, chn, d; rng = Random.MersenneTwister(1),
         for i in 1:N
             t_i = t_onset[i][d_idx]
             R_i = exp(log_R_at(t_i, knots, logR_d))
-            Z_rep[d_idx, i] = posterior_predictive(cases_sub, rng,
-                k_d, Zobs[i], R_i, 1.0, 1.0)
+            Z_rep[d_idx, i] = replicate_offspring(cases_sub, rng,
+                k_d, R_i, 1.0)
+        end
+    end
+    return Z_rep
+end
+
+function _z_ppc_replicate_realtime(model, chn, d, knots, log_R, rng)
+    cases_sub = model.defaults.cases
+    inc_sub = model.defaults.incubation
+    δ_sub = model.defaults.transmission
+    k_draws = _draws(chn, :k)
+    t_onset = vector_chain(chn, :T_onset)
+    μ_inc = _draws(chn, :μ_inc)
+    σ_inc = _draws(chn, :σ_inc)
+    μ_δ = _draws(chn, :μ_δ)
+    σ_δ = _draws(chn, :σ_δ)
+    n_draws = length(k_draws)
+    N = d.N
+    Z_rep = Matrix{Int}(undef, n_draws, N)
+    for d_idx in 1:n_draws
+        logR_d = [log_R[b][d_idx] for b in eachindex(log_R)]
+        k_d = k_draws[d_idx]
+        T_d = [t_onset[i][d_idx] for i in 1:N]
+        inc = DynamicPPL.fix(inc_sub,
+            (; μ_inc = μ_inc[d_idx], σ_inc = σ_inc[d_idx]))().dist
+        δd = DynamicPPL.fix(δ_sub,
+            (; μ_δ = μ_δ[d_idx], σ_δ = σ_δ[d_idx]))().dist
+        p_vec = cdf(ConvolvedDelays(inc, δd), d.obs_time .- T_d)
+        for i in 1:N
+            R_i = exp(log_R_at(T_d[i], knots, logR_d))
+            Z_rep[d_idx, i] = replicate_offspring(cases_sub, rng,
+                k_d, R_i, p_vec[i])
         end
     end
     return Z_rep
@@ -879,7 +921,8 @@ function plot_prior_predictives(; n::Int = 5000,
         fig = Figure(; size = (1500, 400))
         spec = data(df) *
                mapping(:value => "value",
-                   col = :panel_idx => AlgebraOfGraphics.renamer(title_pairs...)) *
+                   col = :panel_idx =>
+                       AlgebraOfGraphics.renamer(title_pairs...)) *
                visual(Hist; bins = 100, normalization = :pdf,
                    color = :steelblue)
         draw!(fig[1, 1], spec; facet = (linkxaxes = :none, linkyaxes = :none))
