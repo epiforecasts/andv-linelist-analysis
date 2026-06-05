@@ -100,7 +100,7 @@ function analyse(;
             joinpath(figures, "delta_sense_check.png"))
         _save_figure(plot_inc_sense_check(chn, d),
             joinpath(figures, "inc_sense_check.png"))
-        _save_figure(plot_z_ppc(m, chn, d),
+        _save_figure(plot_z_ppc(m, chn, d; edges = edges),
             joinpath(figures, "z_ppc.png"))
         _save_figure(plot_prior_predictives(),
             joinpath(figures, "prior_predictives.png"))

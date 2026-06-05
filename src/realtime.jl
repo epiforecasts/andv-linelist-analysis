@@ -243,7 +243,7 @@ end
 _intervention_offsets(::NaturalChain, obs_offset, T_d, t0, N) = fill(Inf, N)
 
 function _predict_future_onsets(model, chn, post, d;
-        obs_time::Date, t0::Date,
+        obs_time::Date,
         intervention_time = nothing,
         rng = Random.MersenneTwister(2026))
     edges = prepare_rt_edges(d.t0; obs_time = obs_time)
@@ -281,7 +281,7 @@ function _predict_future_onsets(model, chn, post, d;
             R_i = R_vec[i]
             p_i = p_vec[i]
             prob = _pipeline_probability(inc, δd, Δ_q[i], Δ_p[i])
-            future_per_source[d_idx, i] = posterior_predictive(
+            future_per_source[d_idx, i] = predict_future_offspring(
                 cases_sub, rng, k_d, Z_obs[i], R_i, p_i, prob)
         end
     end
@@ -357,7 +357,6 @@ into a `DataFrame` for downstream diagnostics.
 
 # Keyword Arguments
 - `obs_time`: cut-off `Date`.
-- `t0`: time origin `Date`.
 - `intervention_time`: when transmission stops. Three forms are
   accepted:
   - `nothing` (default): intervention coincides with `obs_time` for
@@ -375,12 +374,12 @@ into a `DataFrame` for downstream diagnostics.
 - `rng`: RNG used for posterior-predictive draws.
 """
 function predict_controlled_outbreak(model, chn, post, d;
-        obs_time::Date, t0::Date,
+        obs_time::Date,
         intervention_time::Union{Nothing, Date,
             AbstractVector{<:Date}} = nothing,
         rng = Random.MersenneTwister(2026))
     return _predict_future_onsets(model, chn, post, d;
-        obs_time = obs_time, t0 = t0,
+        obs_time = obs_time,
         intervention_time = intervention_time, rng = rng)
 end
 
@@ -395,13 +394,13 @@ pass `corrected = false` for the counterfactual retro fit.
 """
 function predict_controlled_outbreak(fit::NamedTuple;
         corrected::Bool = true,
-        obs_time::Date, t0::Date,
+        obs_time::Date,
         intervention_time::Union{Nothing, Date,
             AbstractVector{<:Date}} = nothing,
         rng = Random.MersenneTwister(2026))
     fields = corrected ? _rt_fields(fit) : _truth_fields(fit)
     return predict_controlled_outbreak(fields...;
-        obs_time = obs_time, t0 = t0,
+        obs_time = obs_time,
         intervention_time = intervention_time, rng = rng)
 end
 
@@ -437,14 +436,13 @@ into a `DataFrame` for downstream diagnostics.
 
 # Keyword Arguments
 - `obs_time`: cut-off `Date`.
-- `t0`: time origin `Date`.
 - `rng`: RNG used for posterior-predictive draws.
 """
 function predict_natural_chain_outbreak(model, chn, post, d;
-        obs_time::Date, t0::Date,
+        obs_time::Date,
         rng = Random.MersenneTwister(2026))
     return _predict_future_onsets(model, chn, post, d;
-        obs_time = obs_time, t0 = t0,
+        obs_time = obs_time,
         intervention_time = NaturalChain(), rng = rng)
 end
 
@@ -458,11 +456,11 @@ counterfactual retro fit.
 """
 function predict_natural_chain_outbreak(fit::NamedTuple;
         corrected::Bool = true,
-        obs_time::Date, t0::Date,
+        obs_time::Date,
         rng = Random.MersenneTwister(2026))
     fields = corrected ? _rt_fields(fit) : _truth_fields(fit)
     return predict_natural_chain_outbreak(fields...;
-        obs_time = obs_time, t0 = t0, rng = rng)
+        obs_time = obs_time, rng = rng)
 end
 
 _rt_fields(fit) = (fit.m_rt, fit.chn_rt, fit.post_rt, fit.d_rt)

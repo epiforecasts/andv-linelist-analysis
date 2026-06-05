@@ -117,11 +117,11 @@ plot_inc_sense_check(chn, d)
 # The left panel compares frequencies of each `Z` value against the observed line list.
 # The right column has three stacked subpanels — one per discrete test statistic (`sum(Z)`, `max(Z)`, `count(Z = 0)`) — each showing the histogram of the replicated statistic with the observed value as a dashed vertical rule.
 
-plot_z_ppc(model, chn, d)
+plot_z_ppc(model, chn, d; edges = edges)
 
 # Numeric values for each test statistic — observed, replicated median + 95% CrI, and the two-sided Bayesian posterior-predictive p-value `2 · min(P(T_rep ≥ T_obs), P(T_rep ≤ T_obs))`.
 
-z_ppc_summary(model, chn, d)
+z_ppc_summary(model, chn, d; edges = edges)
 
 # ## Comparison with Martínez et al. 2020
 #

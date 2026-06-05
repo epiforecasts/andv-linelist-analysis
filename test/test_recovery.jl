@@ -186,9 +186,9 @@ end
         samples = 200, chains = 2, seed = 20260512, progress = false)
     post = TransmissionLinelist.summarise(chn)
     strict = TransmissionLinelist.predict_controlled_outbreak(
-        m, chn, post, d_rt; obs_time = obs_date, t0 = t0)
+        m, chn, post, d_rt; obs_time = obs_date)
     natural = TransmissionLinelist.predict_natural_chain_outbreak(
-        m, chn, post, d_rt; obs_time = obs_date, t0 = t0)
+        m, chn, post, d_rt; obs_time = obs_date)
     @test length(strict.future_samples) == length(natural.future_samples)
     @test all(>=(0), strict.future_samples)
     @test all(>=(0), natural.future_samples)
@@ -228,12 +228,12 @@ end
     earlier = obs_date - Day(7)
     s_scalar = TransmissionLinelist.predict_controlled_outbreak(
         m, chn, post, d_rt;
-        obs_time = obs_date, t0 = t0,
+        obs_time = obs_date,
         intervention_time = earlier,
         rng = Random.MersenneTwister(42))
     s_obs = TransmissionLinelist.predict_controlled_outbreak(
         m, chn, post, d_rt;
-        obs_time = obs_date, t0 = t0,
+        obs_time = obs_date,
         rng = Random.MersenneTwister(42))
     @test mean(s_scalar.future_samples) <= mean(s_obs.future_samples)
 
@@ -243,7 +243,7 @@ end
     vec_same = fill(earlier, d_rt.N)
     s_vec = TransmissionLinelist.predict_controlled_outbreak(
         m, chn, post, d_rt;
-        obs_time = obs_date, t0 = t0,
+        obs_time = obs_date,
         intervention_time = vec_same,
         rng = Random.MersenneTwister(42))
     @test s_vec.future_samples == s_scalar.future_samples
@@ -251,7 +251,7 @@ end
     # Length-mismatched Vector{Date} throws.
     @test_throws ArgumentError TransmissionLinelist.predict_controlled_outbreak(
         m, chn, post, d_rt;
-        obs_time = obs_date, t0 = t0,
+        obs_time = obs_date,
         intervention_time = fill(earlier, d_rt.N + 1),
         rng = Random.MersenneTwister(42))
 end
@@ -280,19 +280,19 @@ end
 
     pos = TransmissionLinelist.predict_controlled_outbreak(
         m, chn, post, d_rt;
-        obs_time = obs_date, t0 = t0,
+        obs_time = obs_date,
         rng = Random.MersenneTwister(42))
     conv = TransmissionLinelist.predict_controlled_outbreak(fit;
-        obs_time = obs_date, t0 = t0,
+        obs_time = obs_date,
         rng = Random.MersenneTwister(42))
     @test conv.future_samples == pos.future_samples
 
     nat_pos = TransmissionLinelist.predict_natural_chain_outbreak(
         m, chn, post, d_rt;
-        obs_time = obs_date, t0 = t0,
+        obs_time = obs_date,
         rng = Random.MersenneTwister(99))
     nat_conv = TransmissionLinelist.predict_natural_chain_outbreak(fit;
-        obs_time = obs_date, t0 = t0,
+        obs_time = obs_date,
         rng = Random.MersenneTwister(99))
     @test nat_conv.future_samples == nat_pos.future_samples
 
@@ -301,7 +301,7 @@ end
     # smoke test, the two NamedTuple calls must agree.
     conv_truth = TransmissionLinelist.predict_controlled_outbreak(fit;
         corrected = false,
-        obs_time = obs_date, t0 = t0,
+        obs_time = obs_date,
         rng = Random.MersenneTwister(42))
     @test conv_truth.future_samples == conv.future_samples
 end

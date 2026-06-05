@@ -310,13 +310,13 @@ cutoff_18 = Date("2018-12-31")
 
 function controlled_predictions(fit; corrected::Bool)
     strict = predict_controlled_outbreak(fit; corrected = corrected,
-        obs_time = fit.obs_date, t0 = t0_ref,
+        obs_time = fit.obs_date,
         intervention_time = cutoff_18)
     at_obs = predict_controlled_outbreak(fit; corrected = corrected,
-        obs_time = fit.obs_date, t0 = t0_ref)
+        obs_time = fit.obs_date)
     natural = predict_natural_chain_outbreak(fit;
         corrected = corrected,
-        obs_time = fit.obs_date, t0 = t0_ref)
+        obs_time = fit.obs_date)
     (; fit.obs_date, fit.n_rt,
         strict_samples = strict.future_samples,
         at_obs_samples = at_obs.future_samples,
