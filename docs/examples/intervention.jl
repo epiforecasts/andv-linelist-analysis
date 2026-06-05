@@ -119,7 +119,8 @@ post_shock = summarise(chn_shock)
 
 diag_df = let
     rows = []
-    for (name, chn) in (("RW (current)", chn_rw),
+    for (name,
+        chn) in (("RW (current)", chn_rw),
         ("step (intervention only)", chn_step),
         ("RW + post-shock", chn_shock))
         push!(rows, merge((; scenario = name),
@@ -138,7 +139,8 @@ end
 
 let
     band_rows = DataFrame[]
-    for (name, post) in (("RW (current)", post_rw),
+    for (name,
+        post) in (("RW (current)", post_rw),
         ("step (intervention only)", post_step),
         ("RW + post-shock", post_shock))
         tbl = rt_band(post)
@@ -295,7 +297,8 @@ end
 
 waic_df = let
     rows = []
-    for (name, chn) in (("RW (current)", chn_rw),
+    for (name,
+        chn) in (("RW (current)", chn_rw),
         ("step (intervention only)", chn_step),
         ("RW + post-shock", chn_shock))
         ll = pointwise_z_loglik(chn, d, edges)

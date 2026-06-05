@@ -117,8 +117,8 @@ end
     logR0_post = _chain_vec(chn, :log_R_init)
     k_post = _chain_vec(chn, :k)
 
-    for (post, truth_val) in
-        [(σ_rw_post, σ_rw_true),
+    for (post,
+        truth_val) in [(σ_rw_post, σ_rw_true),
         (logR0_post, log_R_init_true),
         (k_post, 4.0)]
         lo, hi = quantile(post, [0.025, 0.975])
