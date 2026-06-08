@@ -36,6 +36,12 @@ jobs:
       - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Multi-threaded NUTS: matches `MCMCThreads()` in `sample_fit`
+          # so the 4 chains run in parallel rather than serially. GitHub
+          # `ubuntu-latest` runners have 4 vCPUs since 2024, so chains
+          # = threads = 4 is the right pairing. Same sample count as
+          # the default; this is purely a parallelism unlock.
+          JULIA_NUM_THREADS: '4'
       - name: Upload docs as workflow artefact
         if: always()
         uses: actions/upload-artifact@v4
