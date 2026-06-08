@@ -68,6 +68,14 @@ plot_prior_predictives()
 
 chn = sample_fit(model)
 
+# Drop a compact regression snapshot to `output/regression/analysis.csv` for
+# the docs CI to diff against the [checked-in baseline](https://github.com/epiforecasts/andv-linelist-analysis/tree/main/regression-baseline).
+# Flags any future PR whose fit drifts outside MCMC noise.
+
+save_regression_summary(
+    joinpath(@__DIR__, "..", "..", "output",
+        "regression", "analysis.csv"), chn)
+
 # ## Diagnostics
 #
 # Maximum R̂, minimum bulk ESS, divergence count, and wall-clock sampling time (seconds, approximated by the slowest chain under `MCMCThreads`).

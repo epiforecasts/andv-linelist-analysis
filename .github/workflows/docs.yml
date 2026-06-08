@@ -43,6 +43,50 @@ jobs:
           name: docs-build-pr-${{ github.event.pull_request.number || github.run_id }}
           path: docs/build/1
           retention-days: 14
+      - name: Upload regression summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-summary
+          path: output/regression
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Diff regression summary against baseline
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/regression-report
+          python3 scripts/regression_diff.py \
+            regression-baseline \
+            output/regression \
+            --out /tmp/regression-report/report.md
+      - name: Comment regression summary on PR
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = '/tmp/regression-report/report.md';
+            if (!fs.existsSync(path)) { core.info('no report'); return; }
+            const body = fs.readFileSync(path, 'utf8') +
+              '\n\n<!-- regression-summary-marker -->\n';
+            const pr_number = context.issue.number;
+            const { owner, repo } = context.repo;
+            const comments = await github.rest.issues.listComments({
+              owner, repo, issue_number: pr_number });
+            const existing = comments.data.find(c =>
+              c.body && c.body.includes('regression-summary-marker'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr_number, body });
+            }
       - name: Summarise docs preview links
         if: github.event_name == 'pull_request'
         run: |

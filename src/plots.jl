@@ -203,6 +203,74 @@ end
 """
 $(TYPEDSIGNATURES)
 
+Long-form `DataFrame` snapshot of the headline posterior, sampler
+diagnostics, and per-knot R(t) for use by the docs CI regression check:
+each PR build dumps one of these per walkthrough and a follow-up CI
+step diffs the result against a checked-in baseline (or the latest
+`main` build) to flag drift in the headline numbers.
+
+Columns:
+- `section`: one of `"headline"`, `"diagnostics"`, `"rt"`.
+- `quantity`: row label — matches `summary_table`'s `quantity` for
+  headline rows, `"R_knot_<b>"` for rt rows, `"rhat_max"` / `"ess_min"`
+  / `"divergences"` for diagnostics.
+- `median`, `lower_95`, `upper_95`: posterior median and 95% CrI.
+  Diagnostic rows store the scalar in `median` with `NaN` bounds.
+
+# Arguments
+- `chn`: a sampled chain from [`joint_model`](@ref).
+"""
+function regression_summary(chn)
+    head = summary_table(chn)
+    diag = diagnostics_table(chn)
+    log_R = vector_chain(chn, :log_R)
+    head_rows = DataFrame(
+        section = fill("headline", nrow(head)),
+        quantity = head.quantity,
+        median = head.median,
+        lower_95 = head.lower_95,
+        upper_95 = head.upper_95
+    )
+    diag_rows = DataFrame(
+        section = fill("diagnostics", 3),
+        quantity = ["rhat_max", "ess_min", "divergences"],
+        median = [Float64(first(diag.rhat_max)),
+            Float64(first(diag.ess_min)),
+            Float64(first(diag.divergences))],
+        lower_95 = fill(NaN, 3),
+        upper_95 = fill(NaN, 3)
+    )
+    rt_rows = DataFrame(
+        section = fill("rt", length(log_R)),
+        quantity = ["R_knot_$b" for b in eachindex(log_R)],
+        median = [quantile(exp.(log_R[b]), 0.5) for b in eachindex(log_R)],
+        lower_95 = [quantile(exp.(log_R[b]), 0.025)
+                    for b in eachindex(log_R)],
+        upper_95 = [quantile(exp.(log_R[b]), 0.975)
+                    for b in eachindex(log_R)]
+    )
+    return vcat(head_rows, diag_rows, rt_rows)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Write `regression_summary(chn)` to a CSV at `path`. Creates the parent
+directory if needed.
+
+# Arguments
+- `path`: output CSV path.
+- `chn`: a sampled chain from [`joint_model`](@ref).
+"""
+function save_regression_summary(path, chn)
+    mkpath(dirname(path))
+    CSV.write(path, regression_summary(chn))
+    return path
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Corner plot of the population scalars `μ_inc`, `σ_inc`, `μ_δ`, `σ_δ`, `k`
 via PairPlots.jl. Returns a Makie `Figure`.
 
