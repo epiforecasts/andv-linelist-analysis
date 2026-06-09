@@ -57,6 +57,7 @@ export vector_chain, summarise, save_posterior, rt_band, summarise_predictive,
        extract_simulated_Zobs, regression_summary, save_regression_summary
 export plot_data, plot_rt, plot_pair, plot_predictive_distributions
 export plot_delta_sense_check, plot_inc_sense_check, plot_z_ppc
+export plot_z_dumbbell
 export plot_prior_predictives, plot_marginal_overlay
 export z_ppc_summary
 export analyse, sample_fit, main

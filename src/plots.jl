@@ -520,6 +520,104 @@ function _set_date_xticks!(ax, knot_dates::AbstractVector{Date})
 end
 
 """
+    plot_z_dumbbell(chn, d; n_draws_plot = 60, jitter = 0.35,
+                     rng = Random.MersenneTwister(20260518))
+
+Offspring count `Z` plotted against time, with one horizontal dumbbell
+per case running from the latent infection time `T_inf` to the latent
+onset time `T_onset`. Each case is drawn at its `Zobs` value (with small
+vertical jitter to break ties); thin segments overlay `n_draws_plot`
+posterior pairs, and two dots mark the posterior medians of `T_inf`
+(filled) and `T_onset` (hollow). Index and sourced cases are coloured
+separately. Returns a Makie `Figure`.
+
+# Arguments
+- `chn`: FlexiChain returned by [`sample_fit`](@ref).
+- `d`: model data tuple from [`build_data`](@ref).
+
+# Keyword Arguments
+- `n_draws_plot`: posterior draws drawn as thin segments per case.
+- `jitter`: half-range of vertical jitter on the `Z` axis.
+- `rng`: RNG used for jitter and draw subsampling.
+"""
+function plot_z_dumbbell(chn, d; n_draws_plot::Int = 60,
+        jitter::Real = 0.35,
+        rng = Random.MersenneTwister(20260518))
+    t_inf = vector_chain(chn, :T_inf)
+    t_onset = vector_chain(chn, :T_onset)
+    to_date = x -> d.t0 + Day(round(Int, x))
+
+    col_index = "#c0392b"
+    col_sourced = "#2c3e50"
+
+    return _with_theme() do
+        fig = Figure(; size = (1000, 520))
+        ax = Axis(fig[1, 1];
+            title = "Observed offspring counts over time",
+            subtitle = "Each case gets $n_draws_plot thin posterior draws of " *
+                       "(T_inf, T_onset). Wide smear = uncertain timing.",
+            xlabel = "Date",
+            ylabel = "Observed offspring count Z",
+            yticks = 0:maximum(d.Zobs))
+
+        med_inf = [to_date(quantile(t_inf[i], 0.5)) for i in 1:d.N]
+        med_onset = [to_date(quantile(t_onset[i], 0.5)) for i in 1:d.N]
+        med_inf_d = Dates.value.(med_inf)
+        med_onset_d = Dates.value.(med_onset)
+
+        for i in 1:d.N
+            is_index = d.source_idx[i] == 0
+            col = is_index ? col_index : col_sourced
+            mk = is_index ? :diamond : :circle
+
+            n_post = length(t_inf[i])
+            step = max(1, n_post ÷ n_draws_plot)
+            ycenter = float(d.Zobs[i]) + (rand(rng) - 0.5) * jitter
+
+            for j in 1:step:n_post
+                lines!(ax,
+                    [Dates.value(to_date(t_inf[i][j])),
+                        Dates.value(to_date(t_onset[i][j]))],
+                    [ycenter, ycenter];
+                    color = (col, 0.08), linewidth = 1.0)
+            end
+
+            scatter!(ax, [med_inf_d[i]], [ycenter];
+                color = col, marker = mk, markersize = 9)
+            scatter!(ax, [med_onset_d[i]], [ycenter];
+                color = :white, strokecolor = col, strokewidth = 2,
+                marker = :circle, markersize = 9)
+        end
+
+        # Biweekly Monday ticks across the observed range, formatted "d u".
+        all_dates = sort(unique(vcat(med_inf, med_onset)))
+        first_monday = first(all_dates) -
+                       Day(dayofweek(first(all_dates)) - 1)
+        last_date = last(all_dates)
+        tick_dates = first_monday:Day(14):last_date
+        ax.xticks = (Dates.value.(tick_dates),
+            Dates.format.(tick_dates, Dates.DateFormat("d u")))
+        ax.xticklabelrotation = π / 6
+
+        legend_elems = [
+            MarkerElement(color = col_index, marker = :diamond,
+                markersize = 10),
+            MarkerElement(color = col_sourced, marker = :circle,
+                markersize = 10),
+            MarkerElement(color = :white, marker = :circle,
+                markersize = 10,
+                strokecolor = col_sourced, strokewidth = 1.5)
+        ]
+        axislegend(ax, legend_elems,
+            ["Index case — date infected",
+                "Onward case — date infected",
+                "Date of symptom onset"];
+            position = :rt)
+        fig
+    end
+end
+
+"""
 $(TYPEDSIGNATURES)
 
 Sense-check the per-pair posterior of δ against the fitted population
