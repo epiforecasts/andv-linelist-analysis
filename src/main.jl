@@ -121,7 +121,7 @@ command-line arguments and forwards them to [`analyse`](@ref).
 # Arguments
 - `args`: vector of command-line argument strings.
 """
-function main(args)
+function (@main)(args)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
     @add_arg_table! s begin
         "--data", "-d"
