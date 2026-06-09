@@ -22,16 +22,41 @@ DocMeta.setdocmeta!(
 # which trips on bare `{T}` in the Julia code.
 let ll = load_linelist()
     d = build_data(ll)
-    src = @code_string TransmissionLinelist.joint_model(d, bin_edges_day(d.t0))
+    src = @code_string TransmissionLinelist.joint_model(d, prepare_rt_edges(d.t0))
     write(joinpath(@__DIR__, "examples", "joint_model_source.jl"), src)
 end
 
-# Render the executable walkthrough through Literate so figures and tables are
-# generated at build time from a single source script.
-const LITERATE_SRC = joinpath(@__DIR__, "examples", "analysis.jl")
+# Render the executable walkthroughs through Literate so figures and tables
+# are generated at build time from a single source script each.
 const LITERATE_OUT = joinpath(@__DIR__, "src")
-Literate.markdown(LITERATE_SRC, LITERATE_OUT;
+
+Literate.markdown(joinpath(@__DIR__, "examples", "analysis.jl"),
+    LITERATE_OUT;
     name = "analysis",
+    flavor = Literate.DocumenterFlavor(),
+    mdstrings = true, credit = false)
+
+Literate.markdown(joinpath(@__DIR__, "examples", "realtime.jl"),
+    LITERATE_OUT;
+    name = "realtime",
+    flavor = Literate.DocumenterFlavor(),
+    mdstrings = true, credit = false)
+
+Literate.markdown(joinpath(@__DIR__, "examples", "sim_recovery.jl"),
+    LITERATE_OUT;
+    name = "sim_recovery",
+    flavor = Literate.DocumenterFlavor(),
+    mdstrings = true, credit = false)
+
+Literate.markdown(joinpath(@__DIR__, "examples", "prior_sensitivity.jl"),
+    LITERATE_OUT;
+    name = "prior_sensitivity",
+    flavor = Literate.DocumenterFlavor(),
+    mdstrings = true, credit = false)
+
+Literate.markdown(joinpath(@__DIR__, "examples", "intervention.jl"),
+    LITERATE_OUT;
+    name = "intervention",
     flavor = Literate.DocumenterFlavor(),
     mdstrings = true, credit = false)
 
@@ -49,9 +74,18 @@ makedocs(;
     pages = [
         "Home" => "index.md",
         "Model" => "model.md",
-        "Limitations" => "limitations.md",
-        "Analysis walkthrough" => "analysis.md",
-        "API Reference" => "api.md"
+        "Walkthroughs" => [
+            "Analysis" => "analysis.md",
+            "Real-time monitoring" => "realtime.md",
+            "Sim recovery" => "sim_recovery.md",
+            "Prior sensitivity" => "prior_sensitivity.md",
+            "Intervention-aware R(t)" => "intervention.md"
+        ],
+        "Reference" => [
+            "Limitations" => "limitations.md",
+            "Reporting best practices" => "charniga.md",
+            "API" => "api.md"
+        ]
     ],
     format = DocumenterVitepress.MarkdownVitepress(;
         repo = "github.com/epiforecasts/andv-linelist-analysis",

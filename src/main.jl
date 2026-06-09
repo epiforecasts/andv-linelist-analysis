@@ -1,12 +1,15 @@
-## CLI entry point — called by `julia -m TransmissionLinelist`.
-## For interactive use, call analyse() directly with keyword arguments.
+## Package entry points.
+## - `sample_fit(model; ...)` runs NUTS on any Turing model.
+## - `analyse(; ...)` loads data, fits, summarises, and writes outputs.
+## - `main(args)` is the CLI entry point invoked by `julia -m TransmissionLinelist`.
 
 """
-    sample_fit(model; samples=1000, chains=4, target_accept=0.95,
-               seed=20260508, progress=false)
+$(TYPEDSIGNATURES)
 
-Run NUTS on `model` using the package's default Enzyme AD backend and
-`InitFromPrior()` chain initialisation. Returns the FlexiChain.
+Run NUTS on `model` and return the sampled chain.
+
+Uses Mooncake as the default AD backend and `InitFromPrior()` chain
+initialisation. Override `adtype` to swap backends (e.g. Enzyme).
 
 # Arguments
 - `model`: a Turing model, e.g. from [`joint_model`](@ref).
@@ -15,18 +18,20 @@ Run NUTS on `model` using the package's default Enzyme AD backend and
 - `samples`: NUTS samples per chain.
 - `chains`: number of parallel chains.
 - `target_accept`: NUTS acceptance target.
-- `seed`: random seed.
+- `seed`: optional random seed.
 - `progress`: show a NUTS progress bar.
+- `adtype`: AD backend for NUTS. Defaults to
+  `AutoMooncake(; config = Mooncake.Config())`.
 """
 function sample_fit(model;
-        samples = 1000,
-        chains = 4,
-        target_accept = 0.95,
-        seed = 20260508,
-        progress = false
+        samples::Integer = 1000,
+        chains::Integer = 4,
+        target_accept::Real = 0.95,
+        seed::Integer = 20260508,
+        progress::Bool = false,
+        adtype = AutoMooncake(; config = Mooncake.Config())
 )
     Random.seed!(seed)
-    adtype = AutoEnzyme(; mode = Enzyme.set_runtime_activity(Enzyme.Reverse))
     return sample(
         model,
         NUTS(target_accept; adtype), MCMCThreads(), samples, chains;
@@ -43,7 +48,10 @@ Load the line list, fit the joint model, save the posterior summary to
 into `figures/`. Returns `(chain, post)`.
 
 # Keyword Arguments
-- `data`: path to the line-list CSV.
+- `data`: path to the line-list CSV, or a pre-loaded `DataFrame`.
+- `obs_time`: optional real-time cut-off `Date`; omit for a retrospective fit.
+- `t0`: optional explicit time origin (`Date`); defaults to
+  `minimum(onset_date) - 60 d`.
 - `output`: directory for `posterior.csv`.
 - `figures`: directory for the figure PNGs.
 - `samples`: NUTS samples per chain.
@@ -51,48 +59,49 @@ into `figures/`. Returns `(chain, post)`.
 - `seed`: random seed.
 - `progress`: show a NUTS progress bar.
 - `plots`: skip all figure generation when `false`.
-- `backend`: Makie backend module to activate before saving figures
-  (default `CairoMakie`). Pass e.g. `GLMakie` to override; the caller is
-  responsible for having loaded the module.
 """
 function analyse(;
         data = LINELIST_PATH,
+        obs_time::Union{Nothing, Date} = nothing,
+        t0::Union{Nothing, Date} = nothing,
         output = OUTPUT_DIR,
         figures = FIGURES_DIR,
         samples = 1000,
         chains = 4,
         seed = 20260508,
         progress = true,
-        plots = true,
-        backend = CairoMakie
+        plots = true
 )
-    ll = load_linelist(data)
-    d = build_data(ll)
-    edges = bin_edges_day(d.t0)
-    @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx)
+    ll = data isa DataFrame ? data : load_linelist(data)
+    if obs_time !== nothing
+        ll = filter_realtime(ll, obs_time)
+    end
+    d = build_data(ll; obs_time = obs_time, t0 = t0)
+    edges = prepare_rt_edges(d.t0; obs_time = obs_time)
+    @info "Loaded line list" n_cases=d.N n_sources=sum(>(0), d.source_idx) obs_time=obs_time n_knots=length(edges)
 
-    chn = sample_fit(joint_model(d, edges);
-        samples = samples,
-        chains = chains,
-        seed = seed,
-        progress = progress
-    )
+    m = joint_model(d, edges)
+    chn = sample_fit(m;
+        samples, chains, seed, progress)
 
     post = summarise(chn)
+    show(stdout, "text/plain", summary_table(chn))
+    println()
     save_posterior(post, joinpath(output, "posterior.csv"))
 
     if !plots && figures != FIGURES_DIR
         @warn "plots=false; --figures path ignored" figures
     end
     if plots
-        backend.activate!()
         mkpath(figures)
-        _save_figure(plot_rt(chn), joinpath(figures, "Rt.png"))
+        _save_figure(plot_rt(chn; t0 = d.t0, edges = edges),
+            joinpath(figures, "Rt.png"))
         _save_figure(plot_delta_sense_check(chn, d),
             joinpath(figures, "delta_sense_check.png"))
         _save_figure(plot_inc_sense_check(chn, d),
             joinpath(figures, "inc_sense_check.png"))
-        _save_figure(plot_z_ppc(chn, d), joinpath(figures, "z_ppc.png"))
+        _save_figure(plot_z_ppc(m, chn, d; edges = edges),
+            joinpath(figures, "z_ppc.png"))
         _save_figure(plot_prior_predictives(),
             joinpath(figures, "prior_predictives.png"))
         _save_figure(plot_predictive_distributions(chn),
@@ -103,7 +112,16 @@ function analyse(;
     return chn, post
 end
 
-function (@main)(args)
+"""
+$(TYPEDSIGNATURES)
+
+CLI entry point invoked by `julia -m TransmissionLinelist`. Parses
+command-line arguments and forwards them to [`analyse`](@ref).
+
+# Arguments
+- `args`: vector of command-line argument strings.
+"""
+function main(args)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
     @add_arg_table! s begin
         "--data", "-d"
@@ -130,10 +148,16 @@ function (@main)(args)
         help = "random seed"
         arg_type = Int
         default = 20260508
+        "--obs-time"
+        help = "real-time cut-off date (ISO format, e.g. 2018-12-31); " *
+               "omit for a retrospective fit"
+        default = nothing
     end
     p = parse_args(args, s)
+    obs_time = p["obs-time"] === nothing ? nothing : Date(p["obs-time"])
     analyse(;
         data = p["data"],
+        obs_time = obs_time,
         output = p["output"],
         figures = p["figures"],
         samples = p["samples"],
@@ -142,5 +166,5 @@ function (@main)(args)
         progress = false,
         plots = !p["no-figures"]
     )
-    return 0  # exit code expected by `julia -m`
+    return 0
 end

@@ -16,6 +16,7 @@ Generation interval and serial interval are derived from the fitted distribution
 - [Model](model.md) — priors, data augmentation, GI / SI derivation.
 - [Limitations](limitations.md) — known caveats around exposure encoding, late R(t) bins, dispersion identifiability, and right-truncation.
 - [Analysis walkthrough](analysis.md) — runs the full analysis end to end.
+- [Real-time monitoring](realtime.md) — fitting with an observation cut-off.
 - [API Reference](api.md) — exported functions.
 
 ## Citing

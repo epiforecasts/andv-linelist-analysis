@@ -36,3 +36,121 @@ jobs:
       - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Multi-threaded NUTS: matches `MCMCThreads()` in `sample_fit`
+          # so the 4 chains run in parallel rather than serially. GitHub
+          # `ubuntu-latest` runners have 4 vCPUs since 2024, so chains
+          # = threads = 4 is the right pairing. Same sample count as
+          # the default; this is purely a parallelism unlock.
+          JULIA_NUM_THREADS: '4'
+      - name: Upload docs as workflow artefact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-build-pr-${{ github.event.pull_request.number || github.run_id }}
+          path: docs/build/1
+          retention-days: 14
+      - name: Upload regression summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-summary
+          path: output/regression
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Diff regression summary against baseline
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/regression-report
+          python3 scripts/regression_diff.py \
+            regression-baseline \
+            output/regression \
+            --out /tmp/regression-report/report.md
+      - name: Comment regression summary on PR
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = '/tmp/regression-report/report.md';
+            if (!fs.existsSync(path)) { core.info('no report'); return; }
+            const body = fs.readFileSync(path, 'utf8') +
+              '\n\n<!-- regression-summary-marker -->\n';
+            const pr_number = context.issue.number;
+            const { owner, repo } = context.repo;
+            const comments = await github.rest.issues.listComments({
+              owner, repo, issue_number: pr_number });
+            const existing = comments.data.find(c =>
+              c.body && c.body.includes('regression-summary-marker'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr_number, body });
+            }
+      - name: Summarise docs preview links
+        if: github.event_name == 'pull_request'
+        run: |
+          {
+            echo "## 📖 Documentation preview"
+            echo ""
+            echo "- **Live preview (gh-pages, same-repo PRs only):** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/previews/PR${{ github.event.pull_request.number }}/"
+            echo "- **Workflow artefact (any PR):** download \`docs-build-pr-${{ github.event.pull_request.number }}\` from this run page, then open \`index.html\` locally."
+            echo ""
+            echo "_This summary appears on every Documenter run; the bot comment below may not post on fork PRs._"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment PR with docs preview
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr_number = context.issue.number;
+            const repo_owner = context.repo.owner;
+            const repo_name = context.repo.repo;
+
+            const docs_url = `https://${repo_owner}.github.io/${repo_name}/previews/PR${pr_number}/`;
+
+            const comment_body = `
+            📖 **Documentation preview** is ready!
+
+            View the docs for this PR at: ${docs_url}
+
+            *This preview will be updated automatically when you push new commits.*
+            `;
+
+            // Get existing comments to avoid duplicates
+            const comments = await github.rest.issues.listComments({
+              owner: repo_owner,
+              repo: repo_name,
+              issue_number: pr_number
+            });
+
+            const bot_comment = comments.data.find(comment =>
+              comment.user.login === 'github-actions[bot]' &&
+              comment.body.includes('Documentation preview')
+            );
+
+            if (bot_comment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: repo_owner,
+                repo: repo_name,
+                comment_id: bot_comment.id,
+                body: comment_body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: repo_owner,
+                repo: repo_name,
+                issue_number: pr_number,
+                body: comment_body
+              });
+            }
