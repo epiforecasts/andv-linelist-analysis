@@ -48,4 +48,15 @@ export plot_prior_predictives
 export z_ppc_summary
 export analyse, sample_fit
 
+# `main` is declared as the package entry point via `(@main)` in main.jl, which
+# lets `julia -m TransmissionLinelist` run it. Julia records this with a module
+# flag, but that flag is not reliably preserved when the package is loaded from a
+# precompile cache rather than compiled in-process (e.g. in CI, where one step
+# precompiles and a separate step runs `-m`), causing `-m` to fail with "`main`
+# not declared as entry point". Re-assert the flag on load — `__init__` runs when
+# the package is imported, before Julia checks the entry point.
+function __init__()
+    global var"#__main_is_entrypoint__#" = true
+end
+
 end
