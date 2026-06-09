@@ -69,18 +69,28 @@ $(TYPEDSIGNATURES)
 
 Build the model input from a line-list `DataFrame`.
 
-Anchors all times in days relative to `t0 = minimum(onset_date) - 60 d` and
-encodes interval-censored onset and exposure windows as `[lo, hi)` pairs.
-Resolves the `source_case` column to integer indices into the line list
-(`0` denotes a zoonotic index case with no human source) and reads
-observed offspring counts from the `Z` column.
+Anchors all times in days relative to `t0` (defaults to
+`minimum(onset_date) - 60 d`) and encodes interval-censored onset and
+exposure windows as `[lo, hi)` pairs. Resolves the `source_case` column
+to integer indices into the line list (`0` denotes a zoonotic index case
+with no human source) and reads observed offspring counts from the `Z`
+column. When `obs_time` is supplied, encodes the per-case real-time
+cut-off in days relative to `t0`.
 
 # Arguments
 - `ll`: a `DataFrame` returned by [`load_linelist`](@ref).
 
+# Keyword Arguments
+- `obs_time`: optional real-time observation cut-off. Either a single
+  `Date` (broadcast to all cases) or an `AbstractVector` of `Date`s with
+  one entry per case. `nothing` (the default) collapses the model to its
+  retrospective form.
+- `t0`: optional explicit time origin. Defaults to
+  `minimum(onset_date) - 60 d`.
+
 # Returns
 A named tuple `(t0, onset_lo_day, onset_hi_day, exp_lo_day, exp_hi_day,
-source_idx, Zobs, N)` ready to pass to [`joint_model`](@ref).
+source_idx, Zobs, N, obs_time)` ready to pass to [`joint_model`](@ref).
 
 # Examples
 ```julia
@@ -89,8 +99,10 @@ d  = build_data(ll)
 d.N
 ```
 """
-function build_data(ll)
-    t0 = minimum(ll.onset_date) - Day(60)
+function build_data(
+        ll; obs_time::Union{Nothing, Date, AbstractVector} = nothing,
+        t0::Union{Nothing, Date} = nothing)
+    t0 = t0 === nothing ? minimum(ll.onset_date) - Day(60) : t0
 
     onset_lo_day = Float64.(Dates.value.(ll.onset_lower .- t0))
     onset_hi_day = Float64.(Dates.value.(ll.onset_upper .- t0)) .+ 1.0
@@ -103,54 +115,77 @@ function build_data(ll)
     id_to_idx = Dict(r.patient_id => i for (i, r) in enumerate(eachrow(ll)))
     source_idx = [ismissing(s) ? 0 : id_to_idx[string(s)] for s in source_id]
 
+    obs_time_day = _encode_obs_time(obs_time, t0, nrow(ll), exp_hi_day)
+
     # Zobs[i] is the observed offspring count of case i — the number of
     # secondaries in the line list attributed to i as their source. Read
     # directly from the Z column of the line list.
     return (; t0, onset_lo_day, onset_hi_day, exp_lo_day, exp_hi_day,
-        source_idx, Zobs = Int.(ll.Z), N = nrow(ll))
+        source_idx, Zobs = Int.(ll.Z), N = nrow(ll),
+        obs_time = obs_time_day)
+end
+
+# Encode the optional per-case observation cut-off into days since `t0`.
+# Returns nothing for a missing obs_time so the model collapses to the
+# retrospective form. A scalar Date broadcasts to all cases.
+function _encode_obs_time(::Nothing, t0, N, exp_hi_day)
+    return nothing
+end
+function _encode_obs_time(d::Date, t0, N, exp_hi_day)
+    return _encode_obs_time(fill(d, N), t0, N, exp_hi_day)
+end
+function _encode_obs_time(dates::AbstractVector, t0, N, exp_hi_day)
+    length(dates) == N ||
+        error("obs_time length $(length(dates)) != N=$N")
+    out = Vector{Float64}(undef, N)
+    for i in 1:N
+        d = dates[i]
+        ismissing(d) &&
+            error("obs_time[$i] is missing; supply a Date for every case")
+        out[i] = Float64(Dates.value(d - t0))
+        if !ismissing(exp_hi_day[i]) && out[i] < exp_hi_day[i]
+            error("obs_time[$i] ($(d)) precedes the upper exposure bound for that case")
+        end
+    end
+    return out
 end
 
 """
 $(TYPEDSIGNATURES)
 
-Return the weekly R(t) knot dates expressed as days relative to `t0`.
+Return the weekly R(t) knot positions expressed as days relative to `t0`.
 
 The knots span the outbreak in weekly steps; combined with [`log_R_at`](@ref)
 this defines the piecewise-linear log R(t) trajectory used by
 [`joint_model`](@ref).
 
+When `obs_time` is supplied, knots strictly after the cut-off are dropped
+and the final knot is set to the cut-off itself, so the last segment of
+the piecewise-linear log R(t) trajectory ends exactly at `obs_time`. This
+is the form needed for a real-time fit.
+
 # Arguments
 - `t0`: the model's time origin (the `t0` field of the tuple returned by
   [`build_data`](@ref)).
 
-# Returns
-A `Vector{Float64}` of length `length(BIN_EDGES)` giving the knot positions
-in days.
-"""
-bin_edges_day(t0) = Float64[Dates.value(d - t0) for d in BIN_EDGES]
-
-"""
-$(TYPEDSIGNATURES)
-
-Build the joint model from a line-list `ll`.
-
-Wraps [`build_data`](@ref), [`bin_edges_day`](@ref), and
-[`joint_model`](@ref) into a single call so the analysis walkthrough
-and CLI share the same model construction code path.
-
-# Arguments
-- `ll`: a line-list `DataFrame` as returned by [`load_linelist`](@ref).
+# Keyword Arguments
+- `obs_time`: optional real-time observation cut-off `Date`. `nothing`
+  (the default) returns the full weekly knot set for a retrospective fit.
 
 # Returns
-A 3-tuple `(model, d, edges)`: the Turing model, the augmented data
-named tuple from [`build_data`](@ref), and the weekly knot edges from
-[`bin_edges_day`](@ref).
+A `Vector{Float64}` of knot positions in days. Length equals
+`length(BIN_EDGES)` for `obs_time === nothing`, and at most that for a
+real-time fit.
 """
-function prepare_model(ll)
-    d = build_data(ll)
-    edges = bin_edges_day(d.t0)
-    model = joint_model(d, edges)
-    return (model, d, edges)
+function prepare_rt_edges(t0; obs_time::Union{Nothing, Date} = nothing)
+    edges = Float64[Dates.value(d - t0) for d in BIN_EDGES]
+    obs_time === nothing && return edges
+    obs_offset = Float64(Dates.value(obs_time - t0))
+    edges = edges[edges .<= obs_offset]
+    if isempty(edges) || edges[end] < obs_offset
+        push!(edges, obs_offset)
+    end
+    return edges
 end
 
 # Piecewise-linear interpolation: log_R[b] is the value at knot b, with
@@ -165,7 +200,7 @@ the endpoint values outside the knot range.
 
 # Arguments
 - `t`: time (in days from `t0`) at which to evaluate log R.
-- `knots`: knot positions in days, as returned by [`bin_edges_day`](@ref).
+- `knots`: knot positions in days, as returned by [`prepare_rt_edges`](@ref).
 - `log_R`: vector of log R values at each knot.
 
 # Returns
