@@ -1,7 +1,9 @@
 ## Package entry points.
 ## - `sample_fit(model; ...)` runs NUTS on any Turing model.
 ## - `analyse(; ...)` loads data, fits, summarises, and writes outputs.
-## - `main(args)` is the CLI entry point invoked by `julia -m TransmissionLinelist`.
+## - the `@main`-declared entry point is invoked by `julia -m TransmissionLinelist`.
+##   It is deliberately not exported, so `using TransmissionLinelist` does not bind
+##   it in `Main` and the runtime never auto-fires `analyse()` (see #43).
 
 """
 $(TYPEDSIGNATURES)
@@ -121,7 +123,7 @@ command-line arguments and forwards them to [`analyse`](@ref).
 # Arguments
 - `args`: vector of command-line argument strings.
 """
-function main(args)
+function (@main)(args)
     s = ArgParseSettings(; description = "Fit joint ANDV incubation/R(t) model")
     @add_arg_table! s begin
         "--data", "-d"
