@@ -44,14 +44,14 @@ jobs:
           JULIA_NUM_THREADS: '4'
       - name: Upload docs as workflow artefact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docs-build-pr-${{ github.event.pull_request.number || github.run_id }}
           path: docs/build/1
           retention-days: 14
       - name: Upload regression summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: regression-summary
           path: output/regression
