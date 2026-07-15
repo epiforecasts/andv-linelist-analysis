@@ -1,5 +1,5 @@
 ```@meta
-EditURL = "https://github.com/sbfnk/hantavirus/blob/main/MODEL.md"
+EditURL = "https://github.com/epiforecasts/andv-linelist-analysis/blob/main/MODEL.md"
 ```
 
 ```@eval
