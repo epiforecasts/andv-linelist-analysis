@@ -27,7 +27,7 @@ TransmissionLinelist = {path = ".."}
 
 [compat]
 ADTypes = "1.22"
-AlgebraOfGraphics = "0.10, 0.11, 0.12"
+AlgebraOfGraphics = "0.10, 0.11, 0.12, 0.13"
 CairoMakie = "0.15"
 Chain = "0.6, 1.0"
 CodeTracking = "3.0.2"
