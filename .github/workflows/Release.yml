@@ -26,7 +26,7 @@ jobs:
       - name: Instantiate project
         run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
       - name: Run analysis
-        run: julia --project=. -t auto -m TransmissionLinelist
+        run: julia --project=. -t auto -e 'using TransmissionLinelist; main(ARGS)'
       - name: Bundle results
         run: |
           set -euo pipefail
