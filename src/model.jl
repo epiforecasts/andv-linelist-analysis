@@ -131,7 +131,8 @@ then fail to differentiate.
 """
 function safe_nb(k, R)
     p = k / (k + R)
-    return NegativeBinomial(k, isfinite(p) ? max(p, eps(typeof(p))) : eps(typeof(p)))
+    return NegativeBinomial(k, isfinite(p) ? max(p, eps(typeof(p))) :
+                               eps(typeof(p)))
 end
 
 """
