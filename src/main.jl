@@ -117,7 +117,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-CLI entry point invoked by `julia -m TransmissionLinelist`. Parses
+CLI entry point invoked by
+`julia -e 'using TransmissionLinelist; main(ARGS)'`. Parses
 command-line arguments and forwards them to [`analyse`](@ref).
 
 # Arguments
