@@ -1,9 +1,8 @@
 name: Release
 
+# Manual only: the analysis is complete and its environment is pinned in the
+# tracked manifests. Run this by hand when picking the work back up.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
