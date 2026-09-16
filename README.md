@@ -62,6 +62,15 @@ transmission wave, observed offspring count `Z`, and free-text notes.
 
 ## Running
 
+`Manifest.toml` records the exact dependency versions the analysis was run
+with, resolved under Julia 1.12. Install them once:
+
+```
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
+```
+
+Then:
+
 ```
 julia --project=. -t auto -m TransmissionLinelist
 ```
