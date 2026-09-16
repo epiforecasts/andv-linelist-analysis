@@ -23,5 +23,7 @@ jobs:
           version: '1'
       - uses: julia-actions/cache@v3
       - name: Install JuliaFormatter
-        run: julia -e 'using Pkg; Pkg.add("JuliaFormatter")'
+        # Pinned: an unbounded install reformats the tree whenever
+        # JuliaFormatter changes its line-breaking, turning every PR red.
+        run: julia -e 'using Pkg; Pkg.add(name="JuliaFormatter", version="2.3")'
       - uses: pre-commit/action@v3.0.1

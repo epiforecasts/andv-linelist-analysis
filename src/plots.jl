@@ -1087,8 +1087,7 @@ function plot_prior_predictives(; n::Int = 5000,
         fig = Figure(; size = (1500, 400))
         spec = data(df) *
                mapping(:value => "value",
-                   col = :panel_idx =>
-                       AlgebraOfGraphics.renamer(title_pairs...)) *
+                   col = :panel_idx => AlgebraOfGraphics.renamer(title_pairs...)) *
                visual(Hist; bins = 100, normalization = :pdf,
                    color = :steelblue)
         draw!(fig[1, 1], spec; facet = (linkxaxes = :none, linkyaxes = :none))
