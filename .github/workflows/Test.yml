@@ -1,10 +1,9 @@
 name: Test
 
+# Manual only: the analysis is complete and its environment is pinned in the
+# tracked manifests. Run this by hand when picking the work back up.
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,7 +20,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
-          version: '1'
+          # Matches the julia_version recorded in the committed manifests.
+          version: '1.12'
       - uses: julia-actions/cache@v3
       - name: Instantiate test environment
         run: julia --project=test -e 'using Pkg; Pkg.instantiate()'

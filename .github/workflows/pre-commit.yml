@@ -1,10 +1,9 @@
 name: pre-commit
 
+# Manual only: the analysis is complete and its environment is pinned in the
+# tracked manifests. Run this by hand when picking the work back up.
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,5 +22,7 @@ jobs:
           version: '1'
       - uses: julia-actions/cache@v3
       - name: Install JuliaFormatter
-        run: julia -e 'using Pkg; Pkg.add("JuliaFormatter")'
+        # Pinned: an unbounded install reformats the tree whenever
+        # JuliaFormatter changes its line-breaking, turning every PR red.
+        run: julia -e 'using Pkg; Pkg.add(name="JuliaFormatter", version="2.3")'
       - uses: pre-commit/action@v3.0.1
