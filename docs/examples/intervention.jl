@@ -260,9 +260,9 @@ function pointwise_z_loglik(chn, d, edges)
     p_per_source = if d.obs_time !== nothing
         ## Reproduce the offspring-completeness thinning so the
         ## per-case rate matches the one inside `case_model`.
-        μ_inc = vec(collect(chn[:μ_inc]));
+        μ_inc = vec(collect(chn[:μ_inc]))
         σ_inc = vec(collect(chn[:σ_inc]))
-        μ_δ = vec(collect(chn[:μ_δ]));
+        μ_δ = vec(collect(chn[:μ_δ]))
         σ_δ = vec(collect(chn[:σ_δ]))
         function compute_p(dr, i)
             inc = LogNormal(μ_inc[dr], σ_inc[dr])

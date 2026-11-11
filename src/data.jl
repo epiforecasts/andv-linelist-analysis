@@ -44,12 +44,10 @@ function load_linelist(path = LINELIST_PATH)
     # Default onset_lower / onset_upper to onset_date if not present, allowing
     # the model to support multi-day onset uncertainty when the data has it.
     if !hasproperty(ll, :onset_lower)
-        ;
-        ll.onset_lower = copy(ll.onset_date);
+        ll.onset_lower = copy(ll.onset_date)
     end
     if !hasproperty(ll, :onset_upper)
-        ;
-        ll.onset_upper = copy(ll.onset_date);
+        ll.onset_upper = copy(ll.onset_date)
     end
     ll.onset_lower = Date.(ll.onset_lower)
     ll.onset_upper = Date.(ll.onset_upper)

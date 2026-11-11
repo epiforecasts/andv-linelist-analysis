@@ -90,9 +90,9 @@ Call [`summary_table`](@ref) directly to print the headline summary.
 - `chn`: FlexiChain returned by [`sample_fit`](@ref).
 """
 function summarise(chn)
-    μ_inc = vec(collect(chn[:μ_inc]));
+    μ_inc = vec(collect(chn[:μ_inc]))
     σ_inc = vec(collect(chn[:σ_inc]))
-    μ_δ = vec(collect(chn[:μ_δ]));
+    μ_δ = vec(collect(chn[:μ_δ]))
     σ_δ = vec(collect(chn[:σ_δ]))
     k_s = vec(collect(chn[:k]))
     σ_rw = try
