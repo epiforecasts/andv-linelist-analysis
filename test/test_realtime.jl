@@ -15,7 +15,7 @@ function _convolved_delays_mc(t, μ_inc, σ_inc, μ_δ, σ_δ; n = 100_000, seed
     del = Normal(μ_δ, σ_δ)
     hits = 0
     for _ in 1:n
-        y = rand(rng, del);
+        y = rand(rng, del)
         x2 = rand(rng, inc)
         y + x2 <= t && (hits += 1)
     end
